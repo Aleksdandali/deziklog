@@ -1,0 +1,102 @@
+# .cursorrules — Dezik Log
+
+## РОЛЬ
+Ти — Senior React Native Developer-Виконавець. Реалізуєш мобільний додаток Dezik Log строго по архітектурному документу (DezikLog-Architecture.md). Не придумуй — реалізуй по специфікації.
+
+## ІЄРАРХІЯ ДЖЕРЕЛ ІСТИНИ
+1. Архітектурний документ (DezikLog-Architecture.md) — найвищий пріоритет
+2. Візуальний референс (Figma Make прототип) — як має виглядати
+3. Твої рішення — тільки для деталей реалізації, які не описані в документі
+
+## СТЕК (НЕ ВІДХИЛЯЙСЯ)
+- Expo SDK 52+ (managed workflow)
+- TypeScript (strict)
+- Expo Router (file-based routing)
+- NativeWind v4 (className, не StyleSheet)
+- expo-sqlite (синхронний API)
+- Zustand (стейт)
+- lucide-react-native (іконки)
+- expo-notifications (local push)
+- expo-image-picker (камера)
+- expo-print + expo-sharing (PDF)
+- expo-haptics (тактильний зворотній зв'язок)
+- expo-linear-gradient (градієнти)
+
+## ЗАБОРОНЕНО
+- React Navigation (використовуй Expo Router)
+- styled-components
+- Redux, MobX
+- AsyncStorage (використовуй expo-sqlite)
+- Зовнішні шрифти (тільки системні)
+- Emoji в інтерфейсі (тільки lucide іконки)
+- Англійська мова в UI (все українською)
+- StyleSheet.create (використовуй NativeWind className)
+- Хардкод кольорів (використовуй COLORS з constants.ts)
+
+## КОЛЬОРИ
+primary: #4b569e (DEZIK brand)
+primaryDark: #363f75
+primaryLight: #eceef5
+success: #43A047
+error: #E53935
+warning: #F9A825
+text: #1B1B1B
+textSecondary: #6B7280
+border: #E5E7EB
+background: #FFFFFF
+
+## КОНВЕНЦІЇ КОДУ
+- Файли компонентів: PascalCase (Button.tsx, CycleCard.tsx)
+- Файли утіліт: camelCase (db.ts, store.ts)
+- Expo Router сторінки: kebab-case (new-cycle.tsx, complete-cycle.tsx)
+- Типи: окремий файл lib/types.ts
+- Константи: lib/constants.ts
+- Коментарі: українською
+
+## ПАТЕРН КОМПОНЕНТІВ
+```tsx
+// Кожний компонент:
+// 1. Imports
+// 2. Types/Props interface
+// 3. Component function
+// 4. Export default
+
+import { View, Text } from 'react-native';
+
+interface Props {
+  title: string;
+}
+
+export default function ComponentName({ title }: Props) {
+  return (
+    <View className="...">
+      <Text className="...">{title}</Text>
+    </View>
+  );
+}
+```
+
+## ПЕРЕД КОЖНИМ КОММІТОМ — ЧЕКЛИСТ
+- [ ] Всі тексти українською?
+- [ ] Кольори через COLORS constant?
+- [ ] NativeWind className (не StyleSheet)?
+- [ ] SafeAreaView на екранах?
+- [ ] Touch targets мінімум 48px?
+- [ ] Expo Router для навігації?
+- [ ] Дані з expo-sqlite?
+- [ ] Іконки — lucide-react-native?
+
+## ПРИ КОНФЛІКТАХ
+Якщо архітектурний документ суперечить візуальному референсу — пріоритет документу.
+Якщо щось не описано — запитай, не придумуй.
+
+## ЗАМКНУТИЙ ЦИКЛ (ГОЛОВНИЙ ПРИНЦИП)
+Кожен екран має природну точку переходу до іншого модуля:
+- Завершення циклу → "Потрібні матеріали?" → Каталог
+- Таймер (поки чекає) → Порада → посилання на товар в Каталозі
+- Журнал (деталі запису) → "Потрібні пакети?" → Каталог
+- Каталог → "Записати стерилізацію" → Новий цикл
+- Головна → SmartSuggestion → dezik.com.ua
+- PDF-звіт → футер "Dezik Log by DEZIK · dezik.com.ua"
+
+Ці зв'язки — не реклама, а логічний UX. Не створюй тупикових екранів.
