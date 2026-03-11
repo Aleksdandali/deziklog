@@ -1,171 +1,199 @@
 import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  SafeAreaView,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, SafeAreaView, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { Bell, ChevronRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Plus, ClipboardList, Droplets, Package, ChevronRight, CheckCircle, XCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-
-import { getProfile, getMonthlyStats, getRecentCycles, getSmartSuggestion } from '@/lib/db';
 import { COLORS } from '@/lib/constants';
-import { useAppStore } from '@/lib/store';
-import type { Cycle, UserProfile } from '@/lib/types';
+import { getCycles, getSolutions } from '@/lib/storage';
+import type { SterilizationCycle } from '@/lib/types';
 
-import { ActiveTimerWidget } from '@/components/ActiveTimerWidget';
-import { StatsBlock } from '@/components/StatsBlock';
-import { CycleCard } from '@/components/CycleCard';
-import { SmartSuggestion } from '@/components/SmartSuggestion';
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function formatDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('uk-UA', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  } catch { return ''; }
+}
 
 export default function HomeScreen() {
   const router = useRouter();
-  const activeTimer = useAppStore((s) => s.activeTimer);
+  const [cycles, setCycles] = useState<SterilizationCycle[]>([]);
+  const [solutionCount, setSolutionCount] = useState(0);
 
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [stats, setStats] = useState({ total: 0, passed: 0, failed: 0 });
-  const [recentCycles, setRecentCycles] = useState<Cycle[]>([]);
-  const [suggestion, setSuggestion] = useState<{ type: string; message: string; buyUrl: string } | null>(null);
-  const [dismissedSuggestion, setDismissedSuggestion] = useState(false);
+  useFocusEffect(useCallback(() => {
+    (async () => {
+      const c = await getCycles();
+      setCycles(c);
+      const s = await getSolutions();
+      setSolutionCount(s.length);
+    })();
+  }, []));
 
-  useFocusEffect(
-    useCallback(() => {
-      try {
-        const p = getProfile();
-        setProfile(p);
-
-        const now = new Date();
-        const s = getMonthlyStats(now.getFullYear(), now.getMonth() + 1);
-        setStats({
-          total: s?.total ?? 0,
-          passed: s?.passed ?? 0,
-          failed: s?.failed ?? 0,
-        });
-
-        setRecentCycles(getRecentCycles(3));
-        setSuggestion(getSmartSuggestion());
-        setDismissedSuggestion(false);
-      } catch (e) {
-        console.error('Home load error:', e);
-      }
-    }, [])
-  );
-
-  const handleNewCycle = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push('/new-cycle');
-  };
-
-  const now = new Date();
-  const month = now.toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' });
+  const totalInstruments = cycles.reduce((sum, c) => sum + c.instruments.length, 0);
 
   return (
-    <SafeAreaView className="flex-1 bg-surface">
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header */}
-        <View className="flex-row items-center justify-between mb-6">
-          <View>
-            <Text className="text-sm text-text-secondary font-medium">Dezik Log</Text>
-            <Text className="text-2xl font-bold text-[#1B1B1B] mt-0.5">
-              {profile?.name ? `Привіт, ${profile.name.split(' ')[0]}!` : 'Привіт!'}
-            </Text>
-          </View>
+    <View style={styles.container}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Hero */}
+        <LinearGradient colors={[COLORS.brand, COLORS.brandDark]} style={styles.hero}>
+          <SafeAreaView>
+            <View style={styles.heroContent}>
+              <Text style={styles.heroTitle}>Dezik Log</Text>
+              <Text style={styles.heroSubtitle}>Журнал стерилізації</Text>
+
+              <View style={styles.counters}>
+                <CounterBox icon={<ClipboardList size={18} color={COLORS.white} strokeWidth={1.8} />} value={cycles.length} label="Циклів" />
+                <CounterBox icon={<Package size={18} color={COLORS.white} strokeWidth={1.8} />} value={totalInstruments} label="Інструментів" />
+                <CounterBox icon={<Droplets size={18} color={COLORS.white} strokeWidth={1.8} />} value={solutionCount} label="Розчинів" />
+              </View>
+            </View>
+          </SafeAreaView>
+        </LinearGradient>
+
+        <View style={styles.body}>
+          {/* CTA */}
           <TouchableOpacity
-            className="w-10 h-10 rounded-full bg-white items-center justify-center shadow-sm"
-            activeOpacity={0.8}
+            activeOpacity={0.85}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              router.push('/cycle');
+            }}
           >
-            <Bell size={20} color={COLORS.textSecondary} />
+            <LinearGradient colors={[COLORS.brand, COLORS.brandDark]} style={styles.ctaButton} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+              <Plus size={22} color={COLORS.white} strokeWidth={2.5} />
+              <Text style={styles.ctaText}>Новий цикл стерилізації</Text>
+            </LinearGradient>
           </TouchableOpacity>
-        </View>
 
-        {/* CTA Button */}
-        <TouchableOpacity
-          onPress={handleNewCycle}
-          activeOpacity={0.85}
-          className="rounded-2xl overflow-hidden mb-4 shadow-sm"
-          style={{
-            shadowColor: COLORS.primary,
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.25,
-            shadowRadius: 8,
-            elevation: 5,
-          }}
-        >
-          <LinearGradient
-            colors={[COLORS.primary, COLORS.primaryDark]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            className="h-16 flex-row items-center justify-center gap-2 px-6"
-          >
-            <Text className="text-white text-lg font-bold">+ Новий цикл стерилізації</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-
-        {/* Active Timer Widget */}
-        {activeTimer && (
-          <View className="mb-4">
-            <ActiveTimerWidget />
-          </View>
-        )}
-
-        {/* Stats */}
-        <View className="mb-4">
-          <Text className="text-sm font-semibold text-text-secondary mb-2 capitalize">{month}</Text>
-          <StatsBlock
-            total={stats.total}
-            passed={stats.passed}
-            failed={stats.failed}
-          />
-        </View>
-
-        {/* Recent Cycles */}
-        <View className="mb-4">
-          <View className="flex-row items-center justify-between mb-3">
-            <Text className="text-base font-bold text-[#1B1B1B]">Останні записи</Text>
-            <TouchableOpacity
-              onPress={() => router.push('/(tabs)/journal')}
-              className="flex-row items-center gap-1"
-              activeOpacity={0.7}
-            >
-              <Text className="text-sm font-semibold text-primary">Всі</Text>
-              <ChevronRight size={14} color={COLORS.primary} />
-            </TouchableOpacity>
+          {/* Recent */}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Останні записи</Text>
+            {cycles.length > 0 && (
+              <TouchableOpacity onPress={() => router.push('/(tabs)/journal')} style={styles.seeAll}>
+                <Text style={styles.seeAllText}>Всі</Text>
+                <ChevronRight size={14} color={COLORS.brand} />
+              </TouchableOpacity>
+            )}
           </View>
 
-          {recentCycles.length === 0 ? (
-            <View className="bg-white rounded-2xl p-6 items-center">
-              <Text className="text-text-secondary text-sm text-center">
-                Немає записів. Розпочніть перший цикл стерилізації.
-              </Text>
+          {cycles.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <ClipboardList size={36} color={COLORS.textSecondary} strokeWidth={1.5} />
+              <Text style={styles.emptyTitle}>Записів поки немає</Text>
+              <Text style={styles.emptyText}>Розпочніть перший цикл стерилізації — натисніть кнопку вгорі</Text>
             </View>
           ) : (
-            recentCycles.map((cycle) => (
-              <CycleCard
-                key={cycle.id}
-                cycle={cycle}
-                onPress={() => router.push(`/journal/${cycle.id}`)}
-              />
+            cycles.slice(0, 5).map((cycle) => (
+              <View key={cycle.id} style={styles.cycleCard}>
+                <View style={styles.cycleCardLeft}>
+                  <View style={[styles.statusDot, { backgroundColor: cycle.status === 'passed' ? COLORS.success : COLORS.danger }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cycleInstruments} numberOfLines={1}>{cycle.instruments.join(', ')}</Text>
+                    <Text style={styles.cycleMeta}>{cycle.packType} · {cycle.sterilizer}</Text>
+                  </View>
+                </View>
+                <View style={styles.cycleCardRight}>
+                  <Text style={styles.cycleTime}>{formatTime(cycle.timerSeconds)}</Text>
+                  <Text style={styles.cycleDate}>{formatDate(cycle.date)}</Text>
+                </View>
+              </View>
             ))
           )}
         </View>
-
-        {/* Smart Suggestion */}
-        {suggestion && !dismissedSuggestion && (
-          <SmartSuggestion
-            message={suggestion.message}
-            buyUrl={suggestion.buyUrl}
-            onDismiss={() => setDismissedSuggestion(true)}
-          />
-        )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
+
+function CounterBox({ icon, value, label }: { icon: React.ReactNode; value: number; label: string }) {
+  return (
+    <View style={styles.counterBox}>
+      {icon}
+      <Text style={styles.counterValue}>{value}</Text>
+      <Text style={styles.counterLabel}>{label}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.bg },
+  hero: {
+    paddingBottom: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+  },
+  heroContent: { paddingHorizontal: 20, paddingTop: 16 },
+  heroTitle: { fontSize: 26, fontWeight: '800', color: COLORS.white },
+  heroSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.75)', marginTop: 2, fontWeight: '500' },
+  counters: { flexDirection: 'row', gap: 12, marginTop: 20 },
+  counterBox: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 14,
+    padding: 12,
+    alignItems: 'center',
+    gap: 4,
+  },
+  counterValue: { fontSize: 22, fontWeight: '700', color: COLORS.white },
+  counterLabel: { fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
+  body: { padding: 16, paddingBottom: 32 },
+  ctaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 56,
+    borderRadius: 14,
+    gap: 10,
+    shadowColor: COLORS.brand,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  ctaText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, marginBottom: 14 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
+  seeAll: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  seeAllText: { fontSize: 13, fontWeight: '600', color: COLORS.brand },
+  emptyCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 32,
+    alignItems: 'center',
+    gap: 8,
+  },
+  emptyTitle: { fontSize: 16, fontWeight: '600', color: COLORS.text, marginTop: 4 },
+  emptyText: { fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 19 },
+  cycleCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 14,
+    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  cycleCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginRight: 12 },
+  statusDot: { width: 10, height: 10, borderRadius: 5 },
+  cycleInstruments: { fontSize: 14, fontWeight: '600', color: COLORS.text },
+  cycleMeta: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  cycleCardRight: { alignItems: 'flex-end' },
+  cycleTime: { fontSize: 15, fontWeight: '700', color: COLORS.text, fontVariant: ['tabular-nums'] },
+  cycleDate: { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
+});

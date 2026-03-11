@@ -1,219 +1,189 @@
 import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  SafeAreaView,
-  Switch,
-  Alert,
-  Image,
-} from 'react-native';
+import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import * as ImagePicker from 'expo-image-picker';
-import { Camera, Trash2, ChevronRight } from 'lucide-react-native';
-
-import { getProfile, updateProfile, clearAllData } from '@/lib/db';
+import { User, ChevronRight, Thermometer, Scissors, Package, FlaskConical, Trash2 } from 'lucide-react-native';
 import { COLORS } from '@/lib/constants';
+import { getProfile, saveProfile, clearAllData } from '@/lib/storage';
 import type { UserProfile } from '@/lib/types';
 
-import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
-import { Button } from '@/components/ui/Button';
-
-const INTERVAL_OPTIONS = [
-  { value: '1', label: '1 година' },
-  { value: '2', label: '2 години' },
-  { value: '3', label: '3 години' },
-  { value: '4', label: '4 години' },
-  { value: '6', label: '6 годин' },
-  { value: '8', label: '8 годин' },
-];
+const MENU_ITEMS = [
+  { key: 'sterilizers', label: 'Стерилізатори', icon: Thermometer, route: '/cabinet/sterilizers' },
+  { key: 'instruments', label: 'Інструменти', icon: Scissors, route: '/cabinet/instruments' },
+  { key: 'packs', label: 'Пакети', icon: Package, route: '/cabinet/packs' },
+  { key: 'preparations', label: 'Препарати', icon: FlaskConical, route: '/cabinet/preparations' },
+] as const;
 
 export default function ProfileScreen() {
-  const [profile, setProfile] = useState<UserProfile>({
-    name: '',
-    language: 'uk',
-    reminderEnabled: true,
-    reminderIntervalHours: 2,
-  });
-  const [saved, setSaved] = useState(false);
+  const router = useRouter();
+  const [profile, setProfile] = useState<UserProfile>({ name: '', role: 'Майстер манікюру', sterilizers: [], instruments: [], packs: [], preparations: [] });
+  const [editing, setEditing] = useState(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      const p = getProfile();
-      setProfile(p);
-    }, [])
-  );
+  useFocusEffect(useCallback(() => {
+    (async () => setProfile(await getProfile()))();
+  }, []));
 
-  const handleSave = () => {
-    try {
-      updateProfile(profile);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (e) {
-      Alert.alert('Помилка', 'Не вдалося зберегти профіль');
-    }
+  const handleSave = async () => {
+    await saveProfile(profile);
+    setEditing(false);
   };
 
-  const handlePickLogo = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setProfile((p) => ({ ...p, salonLogoUri: result.assets[0].uri }));
-    }
+  const handleClear = () => {
+    Alert.alert('Видалити всі дані?', 'Журнал, розчини та налаштування будуть видалені.', [
+      { text: 'Скасувати', style: 'cancel' },
+      { text: 'Видалити', style: 'destructive', onPress: async () => {
+        await clearAllData();
+        setProfile({ name: '', role: 'Майстер манікюру', sterilizers: [], instruments: [], packs: [], preparations: [] });
+        Alert.alert('Готово', 'Всі дані видалено');
+      }},
+    ]);
   };
 
-  const handleClearData = () => {
-    Alert.alert(
-      'Видалити всі дані?',
-      'Ця дія незворотна. Всі записи журналу та стерилізатори будуть видалені.',
-      [
-        { text: 'Скасувати', style: 'cancel' },
-        {
-          text: 'Видалити',
-          style: 'destructive',
-          onPress: () => {
-            try {
-              clearAllData();
-              Alert.alert('Готово', 'Всі дані видалено');
-            } catch {
-              Alert.alert('Помилка', 'Не вдалося видалити дані');
-            }
-          },
-        },
-      ]
-    );
+  const getCount = (key: string): number => {
+    const arr = (profile as any)[key];
+    return Array.isArray(arr) ? arr.length : 0;
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-surface">
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text className="text-2xl font-bold text-[#1B1B1B] mb-6">Профіль</Text>
+    <SafeAreaView style={styles.container}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Кабінет</Text>
+        </View>
 
-        {/* Avatar / Logo */}
-        <View className="items-center mb-6">
-          <TouchableOpacity onPress={handlePickLogo} activeOpacity={0.8}>
-            {profile.salonLogoUri ? (
-              <Image
-                source={{ uri: profile.salonLogoUri }}
-                className="w-24 h-24 rounded-full"
-              />
-            ) : (
-              <View className="w-24 h-24 rounded-full bg-primary-light items-center justify-center">
-                <Camera size={32} color={COLORS.primary} />
+        {/* Profile card */}
+        <View style={styles.profileCard}>
+          <View style={styles.avatar}>
+            <User size={32} color={COLORS.brand} strokeWidth={1.8} />
+          </View>
+          <View style={{ flex: 1 }}>
+            {editing ? (
+              <View style={{ gap: 8 }}>
+                <TextInput
+                  style={styles.input}
+                  value={profile.name}
+                  onChangeText={(t) => setProfile((p) => ({ ...p, name: t }))}
+                  placeholder="Ваше ім'я"
+                  placeholderTextColor={COLORS.textSecondary}
+                />
+                <TextInput
+                  style={styles.input}
+                  value={profile.role}
+                  onChangeText={(t) => setProfile((p) => ({ ...p, role: t }))}
+                  placeholder="Роль"
+                  placeholderTextColor={COLORS.textSecondary}
+                />
+                <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.8}>
+                  <Text style={styles.saveBtnText}>Зберегти</Text>
+                </TouchableOpacity>
               </View>
+            ) : (
+              <TouchableOpacity onPress={() => setEditing(true)} activeOpacity={0.7}>
+                <Text style={styles.profileName}>{profile.name || 'Додати ім\'я'}</Text>
+                <Text style={styles.profileRole}>{profile.role}</Text>
+              </TouchableOpacity>
             )}
-            <View className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-primary items-center justify-center">
-              <Camera size={14} color={COLORS.white} />
-            </View>
-          </TouchableOpacity>
-          <Text className="text-xs text-text-secondary mt-2">Логотип салону</Text>
-        </View>
-
-        {/* Personal Info */}
-        <View className="bg-white rounded-2xl p-4 gap-4 mb-4">
-          <Text className="text-base font-semibold text-[#1B1B1B]">Особиста інформація</Text>
-          <Input
-            label="Ім'я"
-            value={profile.name}
-            onChangeText={(v) => setProfile((p) => ({ ...p, name: v }))}
-            placeholder="Ім'я та прізвище"
-          />
-          <Input
-            label="Телефон"
-            value={profile.phone ?? ''}
-            onChangeText={(v) => setProfile((p) => ({ ...p, phone: v }))}
-            placeholder="+380 XX XXX XX XX"
-            keyboardType="phone-pad"
-          />
-          <Input
-            label="Email"
-            value={profile.email ?? ''}
-            onChangeText={(v) => setProfile((p) => ({ ...p, email: v }))}
-            placeholder="email@example.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-        </View>
-
-        {/* Salon Info */}
-        <View className="bg-white rounded-2xl p-4 gap-4 mb-4">
-          <Text className="text-base font-semibold text-[#1B1B1B]">Інформація про салон</Text>
-          <Input
-            label="Назва салону"
-            value={profile.salonName ?? ''}
-            onChangeText={(v) => setProfile((p) => ({ ...p, salonName: v }))}
-            placeholder="Nail Studio..."
-          />
-          <Input
-            label="Адреса"
-            value={profile.salonAddress ?? ''}
-            onChangeText={(v) => setProfile((p) => ({ ...p, salonAddress: v }))}
-            placeholder="вул. Хрещатик, 1, Київ"
-          />
-        </View>
-
-        {/* Reminders */}
-        <View className="bg-white rounded-2xl p-4 gap-4 mb-4">
-          <Text className="text-base font-semibold text-[#1B1B1B]">Нагадування</Text>
-          <View className="flex-row items-center justify-between">
-            <Text className="text-base text-[#1B1B1B]">Нагадувати про стерилізацію</Text>
-            <Switch
-              value={profile.reminderEnabled}
-              onValueChange={(v) => setProfile((p) => ({ ...p, reminderEnabled: v }))}
-              trackColor={{ false: COLORS.border, true: COLORS.primary }}
-              thumbColor={COLORS.white}
-            />
           </View>
-          {profile.reminderEnabled && (
-            <Select
-              label="Інтервал"
-              value={String(profile.reminderIntervalHours)}
-              options={INTERVAL_OPTIONS}
-              onSelect={(v) => setProfile((p) => ({ ...p, reminderIntervalHours: Number(v) }))}
-            />
-          )}
         </View>
 
-        {/* Save Button */}
-        <Button
-          label={saved ? 'Збережено!' : 'Зберегти'}
-          onPress={handleSave}
-          haptic
-        />
-
-        {/* Language (stub) */}
-        <View className="bg-white rounded-2xl p-4 mt-4">
-          <TouchableOpacity className="flex-row items-center justify-between" activeOpacity={0.7}>
-            <Text className="text-base text-[#1B1B1B]">Мова</Text>
-            <View className="flex-row items-center gap-2">
-              <Text className="text-sm text-text-secondary">Українська</Text>
-              <ChevronRight size={16} color={COLORS.textSecondary} />
-            </View>
-          </TouchableOpacity>
+        {/* Menu */}
+        <View style={styles.menuSection}>
+          <Text style={styles.menuTitle}>Налаштування</Text>
+          {MENU_ITEMS.map((item) => {
+            const Icon = item.icon;
+            return (
+              <TouchableOpacity key={item.key} style={styles.menuItem} onPress={() => router.push(item.route as any)} activeOpacity={0.7}>
+                <View style={styles.menuIcon}>
+                  <Icon size={18} color={COLORS.brand} strokeWidth={1.8} />
+                </View>
+                <Text style={styles.menuLabel}>{item.label}</Text>
+                <View style={styles.menuRight}>
+                  <Text style={styles.menuCount}>{getCount(item.key)}</Text>
+                  <ChevronRight size={16} color={COLORS.textSecondary} />
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
-        {/* Danger Zone */}
-        <TouchableOpacity
-          onPress={handleClearData}
-          className="mt-6 items-center"
-          activeOpacity={0.7}
-        >
-          <View className="flex-row items-center gap-2">
-            <Trash2 size={14} color={COLORS.error} />
-            <Text className="text-sm text-error">Видалити всі дані</Text>
-          </View>
+        {/* Danger zone */}
+        <TouchableOpacity style={styles.dangerBtn} onPress={handleClear} activeOpacity={0.7}>
+          <Trash2 size={14} color={COLORS.danger} strokeWidth={2} />
+          <Text style={styles.dangerText}>Видалити всі дані</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.bg },
+  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
+  title: { fontSize: 26, fontWeight: '800', color: COLORS.text },
+  profileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginHorizontal: 16,
+    marginTop: 12,
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 16,
+  },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.cardBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileName: { fontSize: 17, fontWeight: '700', color: COLORS.text },
+  profileRole: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
+  input: {
+    height: 40,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: COLORS.text,
+    backgroundColor: COLORS.bg,
+  },
+  saveBtn: {
+    height: 36,
+    backgroundColor: COLORS.brand,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveBtnText: { fontSize: 13, fontWeight: '700', color: COLORS.white },
+  menuSection: { marginTop: 24, paddingHorizontal: 16 },
+  menuTitle: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 14,
+    marginBottom: 8,
+  },
+  menuIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: COLORS.cardBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  menuLabel: { fontSize: 15, fontWeight: '600', color: COLORS.text, flex: 1 },
+  menuRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  menuCount: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary, backgroundColor: COLORS.cardBg, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, overflow: 'hidden' },
+  dangerBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 32, padding: 12 },
+  dangerText: { fontSize: 13, color: COLORS.danger, fontWeight: '500' },
+});

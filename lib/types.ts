@@ -1,53 +1,62 @@
-export type SterilizationType = 'dry_heat' | 'autoclave';
-export type CycleStatus = 'running' | 'completed' | 'cancelled';
-export type IndicatorResult = 'passed' | 'failed';
-
-export interface Sterilizer {
+export interface SterilizationCycle {
   id: string;
-  name: string;
-  type: SterilizationType;
-  serialNumber?: string;
-  photoUri?: string;
-  maintenanceDate?: string;
-  createdAt: string;
+  date: string;
+  instruments: string[];
+  packType: 'Крафт' | 'Прозорий' | 'Білий';
+  sterilizer: string;
+  photoBefore: string;
+  photoAfter: string;
+  timerSeconds: number;
+  status: 'passed' | 'failed';
 }
 
-export interface Cycle {
+export interface SolutionRecord {
   id: string;
-  sterilizerId: string;
-  sterilizerName?: string;
-  sterilizationType: SterilizationType;
-  temperature: number;
-  durationMinutes: number;
-  instruments?: string;
-  note?: string;
-  indicatorPhotoUri?: string;
-  indicatorResult?: IndicatorResult;
-  startedAt: string;
-  completedAt?: string;
-  status: CycleStatus;
-  createdAt: string;
+  date: string;
+  preparation: string;
+  expiryDate: string;
+  concentration: number;
+  exposureMinutes: number;
+}
+
+export interface SterilizerItem {
+  id: string;
+  name: string;
+  model: string;
+}
+
+export interface InstrumentItem {
+  id: string;
+  name: string;
+}
+
+export interface PackItem {
+  id: string;
+  type: string;
+  size: string;
+}
+
+export interface PreparationItem {
+  id: string;
+  name: string;
+  defaultConcentration: number;
+  defaultExposure: number;
 }
 
 export interface UserProfile {
   name: string;
-  salonName?: string;
-  salonAddress?: string;
-  salonLogoUri?: string;
-  phone?: string;
-  email?: string;
-  language: 'uk' | 'ru';
-  reminderEnabled: boolean;
-  reminderIntervalHours: number;
+  role: string;
+  sterilizers: SterilizerItem[];
+  instruments: InstrumentItem[];
+  packs: PackItem[];
+  preparations: PreparationItem[];
 }
 
-export interface CatalogProduct {
-  id: string;
+export interface Product {
+  id: number;
+  name: string;
   category: string;
-  title: string;
-  description: string;
-  priceRange: string;
-  imageUri?: string;
-  buyUrl: string;
-  icon: string;
+  price: number;
+  imageUrl: string;
+  siteUrl: string;
 }
