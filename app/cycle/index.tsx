@@ -60,11 +60,12 @@ export default function CycleScreen() {
   const dotScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    if (!userId) return;
     (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) return;
       const [instrRes, sterRes] = await Promise.all([
-        supabase.from('instruments').select('*').eq('user_id', userId),
-        supabase.from('sterilizers').select('*').eq('user_id', userId),
+        supabase.from('instruments').select('*').eq('user_id', user.id),
+        supabase.from('sterilizers').select('*').eq('user_id', user.id),
       ]);
       if (instrRes.error) console.error('Load instruments error:', instrRes.error.message);
       if (sterRes.error) console.error('Load sterilizers error:', sterRes.error.message);
@@ -72,7 +73,7 @@ export default function CycleScreen() {
       setSterilizers(sterRes.data ?? []);
     })();
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [userId]);
+  }, []);
 
   useEffect(() => {
     if (step !== 3 || !timerStartedAt) return;
@@ -166,7 +167,8 @@ export default function CycleScreen() {
   };
 
   const finishCycle = async () => {
-    if (!userId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) {
       Alert.alert('Помилка', 'Сесія закінчилась. Перезайдіть у додаток.');
       return;
     }
