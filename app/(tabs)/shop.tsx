@@ -1,28 +1,60 @@
-import React, { useState } from 'react';
-import { View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity, Image, Linking, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity, Image, Linking, Dimensions, ActivityIndicator } from 'react-native';
 import { ShoppingCart } from 'lucide-react-native';
 import { COLORS } from '@/lib/constants';
-import { PRODUCTS, CATEGORIES, formatPrice } from '@/data/products';
-import type { Product } from '@/lib/types';
+import { getProducts, getCategories } from '@/lib/api';
+import type { Product, ProductCategory } from '@/lib/types';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_GAP = 10;
 const CARD_WIDTH = (SCREEN_WIDTH - 32 - CARD_GAP) / 2;
 
-function getCategoryCount(cat: string): number {
-  if (cat === 'Всі') return PRODUCTS.length;
-  return PRODUCTS.filter((p) => p.category === cat).length;
+function formatPrice(price: number): string {
+  return `${Math.round(price)} ₴`;
 }
 
 export default function ShopScreen() {
-  const [category, setCategory] = useState<string>('Всі');
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [selectedCat, setSelectedCat] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = category === 'Всі' ? PRODUCTS : PRODUCTS.filter((p) => p.category === category);
+  useEffect(() => {
+    (async () => {
+      try {
+        const [cats, prods] = await Promise.all([getCategories(), getProducts()]);
+        setCategories(cats);
+        setProducts(prods);
+      } catch (err) {
+        console.error('Shop load error:', err);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const filtered = selectedCat
+    ? products.filter((p) => p.category_id === selectedCat)
+    : products;
+
+  const allCats = [{ id: null as string | null, name: 'Всі', sort_order: 0 }, ...categories];
 
   const handleBuy = (product: Product) => {
-    const url = product.siteUrl || 'https://dezik.com.ua';
-    Linking.openURL(url);
+    Linking.openURL('https://dezik.com.ua');
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Товари</Text>
+        </View>
+        <View style={styles.loader}>
+          <ActivityIndicator size="large" color={COLORS.brand} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -31,42 +63,49 @@ export default function ShopScreen() {
         <Text style={styles.subtitle}>Продукція Dezik</Text>
       </View>
 
-      {/* Categories */}
       <FlatList
-        data={CATEGORIES as unknown as string[]}
+        data={allCats}
         horizontal
         showsHorizontalScrollIndicator={false}
-        keyExtractor={(item) => item}
+        keyExtractor={(item) => item.id ?? 'all'}
         contentContainerStyle={styles.catList}
         renderItem={({ item }) => {
-          const active = category === item;
+          const active = selectedCat === item.id;
+          const count = item.id
+            ? products.filter((p) => p.category_id === item.id).length
+            : products.length;
           return (
             <TouchableOpacity
               style={[styles.catPill, active && styles.catPillActive]}
-              onPress={() => setCategory(item)}
+              onPress={() => setSelectedCat(item.id)}
               activeOpacity={0.8}
             >
               <Text style={[styles.catPillText, active && styles.catPillTextActive]}>
-                {item} ({getCategoryCount(item)})
+                {item.name} ({count})
               </Text>
             </TouchableOpacity>
           );
         }}
       />
 
-      {/* Products grid */}
       <FlatList
         data={filtered}
         numColumns={2}
-        keyExtractor={(item) => String(item.id)}
+        keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
         columnWrapperStyle={{ gap: CARD_GAP }}
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32, gap: CARD_GAP }}
         renderItem={({ item }) => (
           <View style={styles.productCard}>
-            <Image source={{ uri: item.imageUrl }} style={styles.productImage} resizeMode="cover" />
+            <Image
+              source={{ uri: item.image_path ?? undefined }}
+              style={styles.productImage}
+              resizeMode="cover"
+            />
             <View style={styles.productInfo}>
-              <Text style={styles.productCategory}>{item.category}</Text>
+              <Text style={styles.productCategory}>
+                {item.category?.name ?? ''}
+              </Text>
               <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
               <View style={styles.productBottom}>
                 <Text style={styles.productPrice}>{formatPrice(item.price)}</Text>
@@ -87,6 +126,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
   title: { fontSize: 26, fontWeight: '800', color: COLORS.text },
   subtitle: { fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },
+  loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   catList: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
   catPill: {
     paddingHorizontal: 16,

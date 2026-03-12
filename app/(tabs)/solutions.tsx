@@ -1,18 +1,11 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Plus, Trash2 } from 'lucide-react-native';
 import { COLORS } from '@/lib/constants';
-import { getSolutions, deleteSolution } from '@/lib/storage';
-import type { SolutionRecord } from '@/lib/types';
-
-const DOT_COLORS: Record<string, string> = {
-  'Деланол': COLORS.brand,
-  'Instrum': COLORS.warning,
-  'Bionol': COLORS.success,
-  'Septonal': '#7BB8C9',
-};
+import { getSolutions, deleteSolution as apiDeleteSolution } from '@/lib/api';
+import type { Solution } from '@/lib/types';
 
 function formatDate(iso: string): string {
   try {
@@ -22,15 +15,34 @@ function formatDate(iso: string): string {
 
 export default function SolutionsScreen() {
   const router = useRouter();
-  const [solutions, setSolutions] = useState<SolutionRecord[]>([]);
+  const [solutions, setSolutions] = useState<Solution[]>([]);
 
   useFocusEffect(useCallback(() => {
-    (async () => setSolutions(await getSolutions()))();
+    (async () => {
+      try {
+        setSolutions(await getSolutions());
+      } catch (err) {
+        console.error('Solutions load error:', err);
+      }
+    })();
   }, []));
 
-  const handleDelete = async (id: string) => {
-    await deleteSolution(id);
-    setSolutions(await getSolutions());
+  const handleDelete = (id: string) => {
+    Alert.alert('Видалити розчин?', '', [
+      { text: 'Скасувати', style: 'cancel' },
+      {
+        text: 'Видалити',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await apiDeleteSolution(id);
+            setSolutions(await getSolutions());
+          } catch (err) {
+            console.error('Delete error:', err);
+          }
+        },
+      },
+    ]);
   };
 
   return (
@@ -57,26 +69,27 @@ export default function SolutionsScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
           renderItem={({ item }) => {
-            const dotColor = DOT_COLORS[item.preparation] || COLORS.brand;
-            const isExpired = new Date(item.expiryDate) < new Date();
+            const isExpired = new Date(item.expires_at) < new Date();
             return (
               <View style={[styles.card, isExpired && styles.cardExpired]}>
                 <View style={styles.cardRow}>
-                  <View style={[styles.dot, { backgroundColor: dotColor }]} />
+                  <View style={[styles.dot, { backgroundColor: COLORS.brand }]} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.cardName}>{item.preparation}</Text>
-                    <Text style={styles.cardMeta}>
-                      {item.concentration}% · {item.exposureMinutes} хв
-                    </Text>
+                    <Text style={styles.cardName}>{item.name}</Text>
+                    {item.status && (
+                      <Text style={styles.cardMeta}>{item.status}</Text>
+                    )}
                   </View>
                   <TouchableOpacity onPress={() => handleDelete(item.id)} hitSlop={12} style={styles.deleteBtn}>
                     <Trash2 size={16} color={COLORS.textSecondary} strokeWidth={1.8} />
                   </TouchableOpacity>
                 </View>
                 <View style={styles.dates}>
-                  <Text style={styles.dateLabel}>Приготовлено: <Text style={styles.dateValue}>{formatDate(item.date)}</Text></Text>
+                  <Text style={styles.dateLabel}>
+                    Приготовлено: <Text style={styles.dateValue}>{formatDate(item.opened_at)}</Text>
+                  </Text>
                   <Text style={[styles.dateLabel, isExpired && { color: COLORS.danger }]}>
-                    Термін: <Text style={[styles.dateValue, isExpired && { color: COLORS.danger }]}>{formatDate(item.expiryDate)}</Text>
+                    Термін: <Text style={[styles.dateValue, isExpired && { color: COLORS.danger }]}>{formatDate(item.expires_at)}</Text>
                     {isExpired ? ' (протерміновано)' : ''}
                   </Text>
                 </View>

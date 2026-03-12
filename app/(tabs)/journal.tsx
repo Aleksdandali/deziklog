@@ -3,13 +3,15 @@ import { View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity, Image
 import { useFocusEffect } from '@react-navigation/native';
 import { CheckCircle, XCircle, Camera } from 'lucide-react-native';
 import { COLORS } from '@/lib/constants';
-import { getCycles } from '@/lib/storage';
+import { getCycles, getPhotoUrl } from '@/lib/api';
 import type { SterilizationCycle } from '@/lib/types';
 
-function formatTime(s: number): string {
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+function formatDuration(minutes: number | null): string {
+  if (!minutes) return '—';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0) return `${h}г ${m}хв`;
+  return `${m} хв`;
 }
 
 function formatDateGroup(iso: string): string {
@@ -27,12 +29,12 @@ function formatTimeShort(iso: string): string {
 function groupByDate(cycles: SterilizationCycle[]): { date: string; data: SterilizationCycle[] }[] {
   const map = new Map<string, SterilizationCycle[]>();
   for (const c of cycles) {
-    const key = new Date(c.date).toDateString();
+    const key = new Date(c.created_at).toDateString();
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(c);
   }
   return Array.from(map.entries()).map(([_, data]) => ({
-    date: formatDateGroup(data[0].date),
+    date: formatDateGroup(data[0].created_at),
     data,
   }));
 }
@@ -42,7 +44,13 @@ export default function JournalScreen() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useFocusEffect(useCallback(() => {
-    (async () => setCycles(await getCycles()))();
+    (async () => {
+      try {
+        setCycles(await getCycles());
+      } catch (err) {
+        console.error('Journal load error:', err);
+      }
+    })();
   }, []));
 
   const groups = groupByDate(cycles);
@@ -69,45 +77,55 @@ export default function JournalScreen() {
               <Text style={styles.dateHeader}>{group.date}</Text>
               {group.data.map((cycle) => {
                 const expanded = expandedId === cycle.id;
+                const passed = cycle.result === 'passed';
+                const photos = cycle.photos ?? [];
+                const photoBefore = photos.find((p) => p.type === 'before');
+                const photoAfter = photos.find((p) => p.type === 'after');
+
                 return (
-                  <TouchableOpacity key={cycle.id} style={styles.card} activeOpacity={0.8} onPress={() => setExpandedId(expanded ? null : cycle.id)}>
+                  <TouchableOpacity
+                    key={cycle.id}
+                    style={styles.card}
+                    activeOpacity={0.8}
+                    onPress={() => setExpandedId(expanded ? null : cycle.id)}
+                  >
                     <View style={styles.cardRow}>
                       <View style={styles.cardLeft}>
-                        {cycle.status === 'passed' ? (
+                        {passed ? (
                           <CheckCircle size={20} color={COLORS.success} strokeWidth={2} />
                         ) : (
                           <XCircle size={20} color={COLORS.danger} strokeWidth={2} />
                         )}
                         <View style={{ flex: 1 }}>
                           <Text style={styles.cardInstruments} numberOfLines={expanded ? undefined : 1}>
-                            {cycle.instruments.join(', ')}
+                            {cycle.instrument_name}
                           </Text>
                           <Text style={styles.cardMeta}>
-                            {cycle.packType} · {cycle.sterilizer}
+                            {cycle.packet_type} · {cycle.sterilizer_name}
                           </Text>
                         </View>
                       </View>
                       <View style={styles.cardRight}>
-                        <Text style={styles.cardTime}>{formatTime(cycle.timerSeconds)}</Text>
-                        <Text style={styles.cardDate}>{formatTimeShort(cycle.date)}</Text>
+                        <Text style={styles.cardTime}>{formatDuration(cycle.duration_minutes)}</Text>
+                        <Text style={styles.cardDate}>{formatTimeShort(cycle.created_at)}</Text>
                       </View>
                     </View>
 
                     {expanded && (
                       <View style={styles.photos}>
-                        {cycle.photoBefore ? (
+                        {photoBefore ? (
                           <View style={styles.photoWrap}>
-                            <Image source={{ uri: cycle.photoBefore }} style={styles.photo} />
+                            <Image source={{ uri: getPhotoUrl(photoBefore.storage_path) }} style={styles.photo} />
                             <Text style={styles.photoLabel}>До</Text>
                           </View>
                         ) : null}
-                        {cycle.photoAfter ? (
+                        {photoAfter ? (
                           <View style={styles.photoWrap}>
-                            <Image source={{ uri: cycle.photoAfter }} style={styles.photo} />
+                            <Image source={{ uri: getPhotoUrl(photoAfter.storage_path) }} style={styles.photo} />
                             <Text style={styles.photoLabel}>Після</Text>
                           </View>
                         ) : null}
-                        {!cycle.photoBefore && !cycle.photoAfter && (
+                        {!photoBefore && !photoAfter && (
                           <View style={styles.noPhotos}>
                             <Camera size={18} color={COLORS.textSecondary} />
                             <Text style={styles.noPhotosText}>Фото відсутні</Text>

@@ -1,18 +1,20 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, SafeAreaView, Image } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Plus, ClipboardList, Droplets, Package, ChevronRight, CheckCircle, XCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { COLORS } from '@/lib/constants';
-import { getCycles, getSolutions } from '@/lib/storage';
+import { getCycles, getSolutions, getInstruments } from '@/lib/api';
 import type { SterilizationCycle } from '@/lib/types';
 
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+function formatDuration(minutes: number | null): string {
+  if (!minutes) return '—';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0) return `${h}г ${m}хв`;
+  return `${m} хв`;
 }
 
 function formatDate(iso: string): string {
@@ -26,22 +28,24 @@ export default function HomeScreen() {
   const router = useRouter();
   const [cycles, setCycles] = useState<SterilizationCycle[]>([]);
   const [solutionCount, setSolutionCount] = useState(0);
+  const [instrumentCount, setInstrumentCount] = useState(0);
 
   useFocusEffect(useCallback(() => {
     (async () => {
-      const c = await getCycles();
-      setCycles(c);
-      const s = await getSolutions();
-      setSolutionCount(s.length);
+      try {
+        const [c, s, i] = await Promise.all([getCycles(), getSolutions(), getInstruments()]);
+        setCycles(c);
+        setSolutionCount(s.length);
+        setInstrumentCount(i.length);
+      } catch (err) {
+        console.error('Home load error:', err);
+      }
     })();
   }, []));
-
-  const totalInstruments = cycles.reduce((sum, c) => sum + c.instruments.length, 0);
 
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Hero */}
         <LinearGradient colors={[COLORS.brand, COLORS.brandDark]} style={styles.hero}>
           <SafeAreaView>
             <View style={styles.heroContent}>
@@ -50,7 +54,7 @@ export default function HomeScreen() {
 
               <View style={styles.counters}>
                 <CounterBox icon={<ClipboardList size={18} color={COLORS.white} strokeWidth={1.8} />} value={cycles.length} label="Циклів" />
-                <CounterBox icon={<Package size={18} color={COLORS.white} strokeWidth={1.8} />} value={totalInstruments} label="Інструментів" />
+                <CounterBox icon={<Package size={18} color={COLORS.white} strokeWidth={1.8} />} value={instrumentCount} label="Інструментів" />
                 <CounterBox icon={<Droplets size={18} color={COLORS.white} strokeWidth={1.8} />} value={solutionCount} label="Розчинів" />
               </View>
             </View>
@@ -58,7 +62,6 @@ export default function HomeScreen() {
         </LinearGradient>
 
         <View style={styles.body}>
-          {/* CTA */}
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={() => {
@@ -72,7 +75,6 @@ export default function HomeScreen() {
             </LinearGradient>
           </TouchableOpacity>
 
-          {/* Recent */}
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Останні записи</Text>
             {cycles.length > 0 && (
@@ -90,21 +92,24 @@ export default function HomeScreen() {
               <Text style={styles.emptyText}>Розпочніть перший цикл стерилізації — натисніть кнопку вгорі</Text>
             </View>
           ) : (
-            cycles.slice(0, 5).map((cycle) => (
-              <View key={cycle.id} style={styles.cycleCard}>
-                <View style={styles.cycleCardLeft}>
-                  <View style={[styles.statusDot, { backgroundColor: cycle.status === 'passed' ? COLORS.success : COLORS.danger }]} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.cycleInstruments} numberOfLines={1}>{cycle.instruments.join(', ')}</Text>
-                    <Text style={styles.cycleMeta}>{cycle.packType} · {cycle.sterilizer}</Text>
+            cycles.slice(0, 5).map((cycle) => {
+              const passed = cycle.result === 'passed';
+              return (
+                <View key={cycle.id} style={styles.cycleCard}>
+                  <View style={styles.cycleCardLeft}>
+                    <View style={[styles.statusDot, { backgroundColor: passed ? COLORS.success : COLORS.danger }]} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.cycleInstruments} numberOfLines={1}>{cycle.instrument_name}</Text>
+                      <Text style={styles.cycleMeta}>{cycle.packet_type} · {cycle.sterilizer_name}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.cycleCardRight}>
+                    <Text style={styles.cycleTime}>{formatDuration(cycle.duration_minutes)}</Text>
+                    <Text style={styles.cycleDate}>{formatDate(cycle.created_at)}</Text>
                   </View>
                 </View>
-                <View style={styles.cycleCardRight}>
-                  <Text style={styles.cycleTime}>{formatTime(cycle.timerSeconds)}</Text>
-                  <Text style={styles.cycleDate}>{formatDate(cycle.date)}</Text>
-                </View>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
       </ScrollView>

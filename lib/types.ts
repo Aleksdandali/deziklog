@@ -1,62 +1,83 @@
-export interface SterilizationCycle {
+export interface Profile {
   id: string;
-  date: string;
-  instruments: string[];
-  packType: 'Крафт' | 'Прозорий' | 'Білий';
-  sterilizer: string;
-  photoBefore: string;
-  photoAfter: string;
-  timerSeconds: number;
-  status: 'passed' | 'failed';
+  name: string | null;
+  salon_name: string | null;
+  phone: string | null;
+  city: string | null;
+  avatar_url: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-export interface SolutionRecord {
-  id: string;
-  date: string;
-  preparation: string;
-  expiryDate: string;
-  concentration: number;
-  exposureMinutes: number;
-}
-
-export interface SterilizerItem {
+export interface ProductCategory {
   id: string;
   name: string;
-  model: string;
-}
-
-export interface InstrumentItem {
-  id: string;
-  name: string;
-}
-
-export interface PackItem {
-  id: string;
-  type: string;
-  size: string;
-}
-
-export interface PreparationItem {
-  id: string;
-  name: string;
-  defaultConcentration: number;
-  defaultExposure: number;
-}
-
-export interface UserProfile {
-  name: string;
-  role: string;
-  sterilizers: SterilizerItem[];
-  instruments: InstrumentItem[];
-  packs: PackItem[];
-  preparations: PreparationItem[];
+  sort_order: number;
 }
 
 export interface Product {
-  id: number;
+  id: string;
+  category_id: string;
   name: string;
-  category: string;
+  description: string | null;
   price: number;
-  imageUrl: string;
-  siteUrl: string;
+  volume: string | null;
+  image_path: string | null;
+  in_stock: boolean;
+  shelf_life_days: number | null;
+  sort_order: number;
+  created_at: string;
+  category?: ProductCategory;
+}
+
+export interface Instrument {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface Sterilizer {
+  id: string;
+  user_id: string;
+  name: string;
+  type: string | null;
+  brand: string | null;
+  created_at: string;
+}
+
+export interface SterilizationCycle {
+  id: string;
+  user_id: string;
+  instrument_id: string | null;
+  sterilizer_id: string | null;
+  instrument_name: string;
+  sterilizer_name: string;
+  packet_type: string;
+  temperature: number | null;
+  duration_minutes: number | null;
+  started_at: string;
+  result: string | null;
+  notes: string | null;
+  created_at: string;
+  photos?: CyclePhoto[];
+}
+
+export interface CyclePhoto {
+  id: string;
+  cycle_id: string;
+  type: 'before' | 'after';
+  storage_path: string;
+  created_at: string;
+}
+
+export interface Solution {
+  id: string;
+  user_id: string;
+  product_id: string | null;
+  name: string;
+  opened_at: string;
+  expires_at: string;
+  status: string | null;
+  created_at: string;
 }

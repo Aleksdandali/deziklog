@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView,
   TextInput, Alert, Image, Animated, Easing,
@@ -6,12 +6,11 @@ import {
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
-import { X, ChevronRight, Camera, Square, CheckCircle, Home as HomeIcon } from 'lucide-react-native';
+import { X, ChevronRight, Camera, CheckCircle, Home as HomeIcon } from 'lucide-react-native';
 import { COLORS } from '@/lib/constants';
-import { getProfile } from '@/lib/storage';
-import { addCycle } from '@/lib/storage';
+import { getInstruments, getSterilizers, addCycle, uploadCyclePhoto } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
-import type { UserProfile } from '@/lib/types';
+import type { Instrument, Sterilizer } from '@/lib/types';
 
 type PackType = 'Крафт' | 'Прозорий' | 'Білий';
 
@@ -19,32 +18,36 @@ export default function CycleScreen() {
   const router = useRouter();
   const { cycle, setCycleField, toggleInstrument, resetCycle } = useAppStore();
   const [step, setStep] = useState(1);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [instruments, setInstruments] = useState<Instrument[]>([]);
+  const [sterilizers, setSterilizers] = useState<Sterilizer[]>([]);
   const [elapsed, setElapsed] = useState(0);
+  const [saving, setSaving] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Pulsing animation for timer
   const pulse1 = useRef(new Animated.Value(0.6)).current;
   const pulse2 = useRef(new Animated.Value(0.6)).current;
   const pulse3 = useRef(new Animated.Value(0.6)).current;
   const digitScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    (async () => setProfile(await getProfile()))();
+    (async () => {
+      try {
+        const [instr, ster] = await Promise.all([getInstruments(), getSterilizers()]);
+        setInstruments(instr);
+        setSterilizers(ster);
+      } catch {}
+    })();
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, []);
 
   useEffect(() => {
     if (step === 3 && cycle.timerRunning) {
       timerRef.current = setInterval(() => {
-        setElapsed((_) => {
-          const now = Date.now();
-          const started = cycle.timerStartedAt || now;
-          return Math.floor((now - started) / 1000);
-        });
+        const now = Date.now();
+        const started = cycle.timerStartedAt || now;
+        setElapsed(Math.floor((now - started) / 1000));
       }, 1000);
 
-      // Pulse animations
       const createPulse = (anim: Animated.Value, delay: number) =>
         Animated.loop(Animated.sequence([
           Animated.delay(delay),
@@ -65,9 +68,8 @@ export default function CycleScreen() {
   }, [step, cycle.timerRunning]);
 
   const startTimer = () => {
-    const now = Date.now();
     setCycleField('timerRunning', true);
-    setCycleField('timerStartedAt', now);
+    setCycleField('timerStartedAt', Date.now());
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setStep(3);
   };
@@ -76,50 +78,49 @@ export default function CycleScreen() {
     if (timerRef.current) clearInterval(timerRef.current);
     setCycleField('timerRunning', false);
     setCycleField('timerSeconds', elapsed);
-    setStep(5);
-  };
-
-  const takePicture = async (field: 'photoBefore' | 'photoAfter') => {
-    const res = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.85,
-    });
-    if (!res.canceled) {
-      setCycleField(field, res.assets[0].uri);
-    }
-  };
-
-  const pickFromGallery = async (field: 'photoBefore' | 'photoAfter') => {
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.85,
-    });
-    if (!res.canceled) {
-      setCycleField(field, res.assets[0].uri);
-    }
   };
 
   const handlePhoto = (field: 'photoBefore' | 'photoAfter') => {
     Alert.alert('Фото індикатора', 'Оберіть джерело', [
-      { text: 'Камера', onPress: () => takePicture(field) },
-      { text: 'Галерея', onPress: () => pickFromGallery(field) },
+      { text: 'Камера', onPress: async () => {
+        const res = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
+        if (!res.canceled) setCycleField(field, res.assets[0].uri);
+      }},
+      { text: 'Галерея', onPress: async () => {
+        const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
+        if (!res.canceled) setCycleField(field, res.assets[0].uri);
+      }},
       { text: 'Скасувати', style: 'cancel' },
     ]);
   };
 
   const finishCycle = async () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await addCycle({
-      date: new Date().toISOString(),
-      instruments: cycle.instruments,
-      packType: cycle.packType!,
-      sterilizer: cycle.sterilizer || 'Невідомий',
-      photoBefore: cycle.photoBefore || '',
-      photoAfter: cycle.photoAfter || '',
-      timerSeconds: cycle.timerSeconds || elapsed,
-      status: 'passed',
-    });
-    resetCycle();
+    setSaving(true);
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const durationMinutes = Math.ceil((cycle.timerSeconds || elapsed) / 60);
+      const savedCycle = await addCycle({
+        instrument_name: cycle.instruments.join(', '),
+        sterilizer_name: cycle.sterilizer || 'Невідомий',
+        packet_type: cycle.packType || 'Крафт',
+        duration_minutes: durationMinutes,
+        started_at: new Date(cycle.timerStartedAt || Date.now()).toISOString(),
+        result: 'passed',
+      });
+
+      if (cycle.photoBefore) {
+        try { await uploadCyclePhoto(savedCycle.id, 'before', cycle.photoBefore); } catch {}
+      }
+      if (cycle.photoAfter) {
+        try { await uploadCyclePhoto(savedCycle.id, 'after', cycle.photoAfter); } catch {}
+      }
+
+      setStep(5);
+    } catch (err: any) {
+      Alert.alert('Помилка', err.message || 'Не вдалось зберегти');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const formatTimer = (s: number): string => {
@@ -130,13 +131,14 @@ export default function CycleScreen() {
     return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
   };
 
-  const instruments = profile?.instruments?.map((i) => i.name) || ['Кусачки', 'Пушер', 'Фрези', 'Ножиці', 'Пінцет'];
-  const sterilizers = profile?.sterilizers?.map((s) => s.name) || [];
+  const instrNames = instruments.length > 0
+    ? instruments.map((i) => i.name)
+    : ['Кусачки', 'Пушер', 'Фрези', 'Ножиці', 'Пінцет'];
+  const sterNames = sterilizers.map((s) => s.name);
   const canGoStep2 = cycle.instruments.length > 0 && cycle.packType !== null;
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Новий цикл</Text>
         <TouchableOpacity style={styles.closeBtn} onPress={() => { resetCycle(); router.back(); }}>
@@ -144,7 +146,6 @@ export default function CycleScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Progress dots */}
       {step < 5 && (
         <View style={styles.progress}>
           {[1, 2, 3, 4].map((s) => (
@@ -154,7 +155,6 @@ export default function CycleScreen() {
       )}
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        {/* Step 1: Instruments + Pack + Sterilizer */}
         {step === 1 && (
           <View>
             <Text style={styles.stepTitle}>Упаковка</Text>
@@ -162,15 +162,10 @@ export default function CycleScreen() {
 
             <Text style={styles.fieldLabel}>Інструменти</Text>
             <View style={styles.chips}>
-              {instruments.map((name) => {
+              {instrNames.map((name) => {
                 const active = cycle.instruments.includes(name);
                 return (
-                  <TouchableOpacity
-                    key={name}
-                    style={[styles.chip, active && styles.chipActive]}
-                    onPress={() => toggleInstrument(name)}
-                    activeOpacity={0.8}
-                  >
+                  <TouchableOpacity key={name} style={[styles.chip, active && styles.chipActive]} onPress={() => toggleInstrument(name)} activeOpacity={0.8}>
                     <Text style={[styles.chipText, active && styles.chipTextActive]}>{name}</Text>
                   </TouchableOpacity>
                 );
@@ -182,64 +177,42 @@ export default function CycleScreen() {
               {(['Крафт', 'Прозорий', 'Білий'] as PackType[]).map((type) => {
                 const active = cycle.packType === type;
                 return (
-                  <TouchableOpacity
-                    key={type}
-                    style={[styles.packBtn, active && styles.packBtnActive]}
-                    onPress={() => setCycleField('packType', type)}
-                    activeOpacity={0.8}
-                  >
+                  <TouchableOpacity key={type} style={[styles.packBtn, active && styles.packBtnActive]} onPress={() => setCycleField('packType', type)} activeOpacity={0.8}>
                     <Text style={[styles.packBtnText, active && styles.packBtnTextActive]}>{type}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
 
-            {sterilizers.length > 0 && (
-              <>
-                <Text style={styles.fieldLabel}>Стерилізатор</Text>
-                <View style={styles.chips}>
-                  {sterilizers.map((name) => {
-                    const active = cycle.sterilizer === name;
-                    return (
-                      <TouchableOpacity
-                        key={name}
-                        style={[styles.chip, active && styles.chipActive]}
-                        onPress={() => setCycleField('sterilizer', name)}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{name}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </>
-            )}
-            {sterilizers.length === 0 && (
-              <>
-                <Text style={styles.fieldLabel}>Стерилізатор</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Назва стерилізатора"
-                  placeholderTextColor={COLORS.textSecondary}
-                  value={cycle.sterilizer || ''}
-                  onChangeText={(t) => setCycleField('sterilizer', t)}
-                />
-              </>
+            <Text style={styles.fieldLabel}>Стерилізатор</Text>
+            {sterNames.length > 0 ? (
+              <View style={styles.chips}>
+                {sterNames.map((name) => {
+                  const active = cycle.sterilizer === name;
+                  return (
+                    <TouchableOpacity key={name} style={[styles.chip, active && styles.chipActive]} onPress={() => setCycleField('sterilizer', name)} activeOpacity={0.8}>
+                      <Text style={[styles.chipText, active && styles.chipTextActive]}>{name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : (
+              <TextInput
+                style={styles.input}
+                placeholder="Назва стерилізатора"
+                placeholderTextColor={COLORS.textSecondary}
+                value={cycle.sterilizer || ''}
+                onChangeText={(t) => setCycleField('sterilizer', t)}
+              />
             )}
 
-            <TouchableOpacity
-              style={[styles.nextBtn, !canGoStep2 && styles.nextBtnDisabled]}
-              disabled={!canGoStep2}
-              onPress={() => setStep(2)}
-              activeOpacity={0.85}
-            >
+            <TouchableOpacity style={[styles.nextBtn, !canGoStep2 && styles.nextBtnDisabled]} disabled={!canGoStep2} onPress={() => setStep(2)} activeOpacity={0.85}>
               <Text style={styles.nextBtnText}>Далі</Text>
               <ChevronRight size={18} color={COLORS.white} strokeWidth={2.5} />
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Step 2: Photo BEFORE + Start */}
         {step === 2 && (
           <View>
             <Text style={styles.stepTitle}>Фото ДО</Text>
@@ -270,12 +243,10 @@ export default function CycleScreen() {
           </View>
         )}
 
-        {/* Step 3: Timer */}
         {step === 3 && (
           <View style={styles.timerContainer}>
             <Text style={styles.stepTitle}>Стерилізація</Text>
 
-            {/* Pulsing rings */}
             <View style={styles.timerRings}>
               <Animated.View style={[styles.ring, styles.ring3, { opacity: pulse3, transform: [{ scale: pulse3.interpolate({ inputRange: [0.6, 1], outputRange: [0.9, 1.15] }) }] }]} />
               <Animated.View style={[styles.ring, styles.ring2, { opacity: pulse2, transform: [{ scale: pulse2.interpolate({ inputRange: [0.6, 1], outputRange: [0.92, 1.1] }) }] }]} />
@@ -289,12 +260,10 @@ export default function CycleScreen() {
               </View>
             </View>
 
-            {/* Temperature badge */}
             <View style={styles.tempBadge}>
               <Text style={styles.tempText}>180°C · сухожар</Text>
             </View>
 
-            {/* Instruments tags */}
             <View style={styles.instrTags}>
               {cycle.instruments.map((name) => (
                 <View key={name} style={styles.instrTag}>
@@ -303,14 +272,13 @@ export default function CycleScreen() {
               ))}
             </View>
 
-            <TouchableOpacity style={styles.photoAfterBtn} onPress={() => { handlePhoto('photoAfter'); setStep(4); }} activeOpacity={0.85}>
+            <TouchableOpacity style={styles.photoAfterBtn} onPress={() => { stopTimer(); setStep(4); }} activeOpacity={0.85}>
               <Camera size={18} color={COLORS.white} strokeWidth={2} />
-              <Text style={styles.photoAfterBtnText}>Зробити фото ПІСЛЯ</Text>
+              <Text style={styles.photoAfterBtnText}>Зупинити і зробити фото ПІСЛЯ</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Step 4: Photo AFTER + Finish */}
         {step === 4 && (
           <View>
             <Text style={styles.stepTitle}>Фото ПІСЛЯ</Text>
@@ -335,14 +303,13 @@ export default function CycleScreen() {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.finishBtn} onPress={() => { stopTimer(); finishCycle(); }} activeOpacity={0.85}>
+            <TouchableOpacity style={[styles.finishBtn, saving && { opacity: 0.6 }]} onPress={finishCycle} disabled={saving} activeOpacity={0.85}>
               <CheckCircle size={20} color={COLORS.white} strokeWidth={2} />
-              <Text style={styles.finishBtnText}>Завершити цикл</Text>
+              <Text style={styles.finishBtnText}>{saving ? 'Збереження...' : 'Завершити цикл'}</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Step 5: Result */}
         {step === 5 && (
           <View style={styles.resultContainer}>
             <View style={styles.resultCheck}>
@@ -359,11 +326,7 @@ export default function CycleScreen() {
               <ResultRow label="Індикатор" value="✓ Пройшов" color={COLORS.success} />
             </View>
 
-            <TouchableOpacity
-              style={styles.homeBtn}
-              onPress={() => { resetCycle(); router.replace('/'); }}
-              activeOpacity={0.85}
-            >
+            <TouchableOpacity style={styles.homeBtn} onPress={() => { resetCycle(); router.replace('/'); }} activeOpacity={0.85}>
               <HomeIcon size={18} color={COLORS.white} strokeWidth={2} />
               <Text style={styles.homeBtnText}>На головну</Text>
             </TouchableOpacity>
@@ -397,94 +360,29 @@ const styles = StyleSheet.create({
   stepSubtitle: { fontSize: 14, color: COLORS.textSecondary, marginTop: 4, marginBottom: 20 },
   fieldLabel: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 20, marginBottom: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 40,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.white,
-  },
+  chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 40, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white },
   chipActive: { borderColor: COLORS.brand, backgroundColor: COLORS.brand },
   chipText: { fontSize: 14, fontWeight: '600', color: COLORS.text },
   chipTextActive: { color: COLORS.white },
   packRow: { flexDirection: 'row', gap: 10 },
-  packBtn: {
-    flex: 1,
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  packBtn: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
   packBtnActive: { borderColor: COLORS.brand, borderWidth: 2 },
   packBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.text },
   packBtnTextActive: { color: COLORS.brand, fontWeight: '700' },
-  input: {
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: 14,
-    fontSize: 14,
-    color: COLORS.text,
-    backgroundColor: COLORS.bg,
-  },
-  nextBtn: {
-    flexDirection: 'row',
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: COLORS.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 28,
-    shadowColor: COLORS.brand,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
-  },
+  input: { height: 48, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, fontSize: 14, color: COLORS.text, backgroundColor: COLORS.bg },
+  nextBtn: { flexDirection: 'row', height: 56, borderRadius: 14, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 28, shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   nextBtnDisabled: { opacity: 0.4 },
   nextBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
-  packInfo: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 12,
-    padding: 14,
-    gap: 8,
-    marginBottom: 20,
-  },
+  packInfo: { backgroundColor: COLORS.cardBg, borderRadius: 12, padding: 14, gap: 8, marginBottom: 20 },
   packInfoText: { fontSize: 14, color: COLORS.text },
   indicatorRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   indicatorDot: { width: 8, height: 8, borderRadius: 4 },
   indicatorText: { fontSize: 13, color: COLORS.textSecondary },
   photoBtn: { borderRadius: 16, overflow: 'hidden', marginBottom: 20 },
   photoPreview: { width: '100%', height: 200, borderRadius: 16 },
-  photoPlaceholder: {
-    height: 180,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
+  photoPlaceholder: { height: 180, borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: COLORS.border, backgroundColor: COLORS.bg, alignItems: 'center', justifyContent: 'center', gap: 8 },
   photoPlaceholderText: { fontSize: 14, color: COLORS.textSecondary },
-  startBtn: {
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: COLORS.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: COLORS.brand,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
-  },
+  startBtn: { height: 56, borderRadius: 14, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   startBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
   timerContainer: { alignItems: 'center' },
   timerRings: { width: 240, height: 240, alignItems: 'center', justifyContent: 'center', marginTop: 20, marginBottom: 24 },
@@ -496,85 +394,23 @@ const styles = StyleSheet.create({
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.success, marginBottom: 6 },
   timerDigits: { fontSize: 48, fontWeight: '700', color: COLORS.text, fontVariant: ['tabular-nums'], letterSpacing: 2 },
   timerLabel: { fontSize: 12, fontWeight: '600', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 1 },
-  tempBadge: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 40,
-    marginBottom: 16,
-  },
+  tempBadge: { backgroundColor: '#FEF3C7', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 40, marginBottom: 16 },
   tempText: { fontSize: 13, fontWeight: '600', color: '#92400E' },
   instrTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginBottom: 28 },
-  instrTag: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 40,
-    backgroundColor: COLORS.cardBg,
-  },
+  instrTag: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 40, backgroundColor: COLORS.cardBg },
   instrTagText: { fontSize: 12, fontWeight: '500', color: COLORS.textSecondary },
-  photoAfterBtn: {
-    flexDirection: 'row',
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: COLORS.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    alignSelf: 'stretch',
-    shadowColor: COLORS.brand,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
-  },
+  photoAfterBtn: { flexDirection: 'row', height: 56, borderRadius: 14, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', gap: 8, alignSelf: 'stretch', shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   photoAfterBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
-  finishBtn: {
-    flexDirection: 'row',
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: COLORS.success,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    shadowColor: COLORS.success,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
-  },
+  finishBtn: { flexDirection: 'row', height: 56, borderRadius: 14, backgroundColor: COLORS.success, alignItems: 'center', justifyContent: 'center', gap: 8, shadowColor: COLORS.success, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   finishBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
   resultContainer: { alignItems: 'center', paddingTop: 20 },
   resultCheck: { marginBottom: 16 },
   resultTitle: { fontSize: 24, fontWeight: '800', color: COLORS.text },
   resultSubtitle: { fontSize: 14, color: COLORS.textSecondary, marginTop: 4, marginBottom: 24 },
-  resultCard: {
-    width: '100%',
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 16,
-    gap: 12,
-    marginBottom: 24,
-  },
+  resultCard: { width: '100%', backgroundColor: COLORS.white, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, padding: 16, gap: 12, marginBottom: 24 },
   resultRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   resultRowLabel: { fontSize: 13, color: COLORS.textSecondary },
   resultRowValue: { fontSize: 14, fontWeight: '600', color: COLORS.text, textAlign: 'right', flex: 1, marginLeft: 12 },
-  homeBtn: {
-    flexDirection: 'row',
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: COLORS.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    alignSelf: 'stretch',
-    width: '100%',
-    shadowColor: COLORS.brand,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
-  },
+  homeBtn: { flexDirection: 'row', height: 56, borderRadius: 14, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', gap: 8, alignSelf: 'stretch', width: '100%', shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   homeBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
 });

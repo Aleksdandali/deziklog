@@ -1,59 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { X, Check } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { COLORS } from '@/lib/constants';
-import { addSolution, getProfile } from '@/lib/storage';
-import type { PreparationItem } from '@/lib/types';
+import { addSolution } from '@/lib/api';
 
-const DEFAULT_PREPS: PreparationItem[] = [
-  { id: '1', name: 'Деланол', defaultConcentration: 2, defaultExposure: 30 },
-  { id: '2', name: 'Bionol', defaultConcentration: 2, defaultExposure: 30 },
-  { id: '3', name: 'Instrum', defaultConcentration: 0, defaultExposure: 15 },
-  { id: '4', name: 'Septonal', defaultConcentration: 0, defaultExposure: 0 },
-];
+const PREP_NAMES = ['Деланол', 'Bionol', 'Instrum', 'Septonal'];
 
 export default function AddSolutionScreen() {
   const router = useRouter();
-  const [preps, setPreps] = useState<PreparationItem[]>(DEFAULT_PREPS);
-  const [selectedPrep, setSelectedPrep] = useState<string>('');
+  const [selectedPrep, setSelectedPrep] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [expiryDate, setExpiryDate] = useState('');
-  const [concentration, setConcentration] = useState('');
-  const [exposure, setExposure] = useState('');
-
-  useEffect(() => {
-    (async () => {
-      const profile = await getProfile();
-      if (profile.preparations.length > 0) {
-        setPreps(profile.preparations);
-      }
-    })();
-  }, []);
-
-  const handleSelectPrep = (name: string) => {
-    setSelectedPrep(name);
-    const prep = preps.find((p) => p.name === name);
-    if (prep) {
-      if (prep.defaultConcentration) setConcentration(String(prep.defaultConcentration));
-      if (prep.defaultExposure) setExposure(String(prep.defaultExposure));
-    }
-  };
+  const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
     if (!selectedPrep) { Alert.alert('Оберіть препарат'); return; }
     if (!expiryDate) { Alert.alert('Введіть термін придатності'); return; }
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await addSolution({
-      date,
-      preparation: selectedPrep,
-      expiryDate,
-      concentration: parseFloat(concentration) || 0,
-      exposureMinutes: parseInt(exposure, 10) || 0,
-    });
-    router.back();
+    setSaving(true);
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await addSolution({
+        name: selectedPrep,
+        opened_at: new Date(date).toISOString(),
+        expires_at: new Date(expiryDate).toISOString(),
+      });
+      router.back();
+    } catch (err: any) {
+      Alert.alert('Помилка', err.message || 'Не вдалось зберегти');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -68,31 +47,25 @@ export default function AddSolutionScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <Text style={styles.label}>Препарат</Text>
         <View style={styles.chips}>
-          {preps.map((p) => {
-            const active = selectedPrep === p.name;
+          {PREP_NAMES.map((name) => {
+            const active = selectedPrep === name;
             return (
-              <TouchableOpacity key={p.id} style={[styles.chip, active && styles.chipActive]} onPress={() => handleSelectPrep(p.name)} activeOpacity={0.8}>
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{p.name}</Text>
+              <TouchableOpacity key={name} style={[styles.chip, active && styles.chipActive]} onPress={() => setSelectedPrep(name)} activeOpacity={0.8}>
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{name}</Text>
               </TouchableOpacity>
             );
           })}
         </View>
 
-        <Text style={styles.label}>Дата приготування</Text>
-        <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="2026-03-11" placeholderTextColor={COLORS.textSecondary} />
+        <Text style={styles.label}>Дата приготування (РРРР-ММ-ДД)</Text>
+        <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="2026-03-12" placeholderTextColor={COLORS.textSecondary} />
 
-        <Text style={styles.label}>Термін придатності</Text>
-        <TextInput style={styles.input} value={expiryDate} onChangeText={setExpiryDate} placeholder="2026-03-25" placeholderTextColor={COLORS.textSecondary} />
+        <Text style={styles.label}>Термін придатності (РРРР-ММ-ДД)</Text>
+        <TextInput style={styles.input} value={expiryDate} onChangeText={setExpiryDate} placeholder="2026-03-26" placeholderTextColor={COLORS.textSecondary} />
 
-        <Text style={styles.label}>Концентрація (%)</Text>
-        <TextInput style={styles.input} value={concentration} onChangeText={setConcentration} placeholder="2" keyboardType="numeric" placeholderTextColor={COLORS.textSecondary} />
-
-        <Text style={styles.label}>Час експозиції (хв)</Text>
-        <TextInput style={styles.input} value={exposure} onChangeText={setExposure} placeholder="30" keyboardType="numeric" placeholderTextColor={COLORS.textSecondary} />
-
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.85}>
+        <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving} activeOpacity={0.85}>
           <Check size={18} color={COLORS.white} strokeWidth={2.5} />
-          <Text style={styles.saveBtnText}>Зберегти</Text>
+          <Text style={styles.saveBtnText}>{saving ? 'Збереження...' : 'Зберегти'}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
