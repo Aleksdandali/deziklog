@@ -61,8 +61,9 @@ export default function CycleScreen() {
 
   useEffect(() => {
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.id) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) return;
+      const user = session.user;
       const [instrRes, sterRes] = await Promise.all([
         supabase.from('instruments').select('*').eq('user_id', user.id),
         supabase.from('sterilizers').select('*').eq('user_id', user.id),

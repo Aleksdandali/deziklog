@@ -43,8 +43,9 @@ export function onAuthStateChange(callback: (session: any) => void) {
 // ── Profile ───────────────────────────────────────────────
 
 export async function getProfile(): Promise<Profile | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) return null;
+  const user = session.user;
   const { data, error } = await supabase
     .from('profiles')
     .select('*')
@@ -55,8 +56,9 @@ export async function getProfile(): Promise<Profile | null> {
 }
 
 export async function upsertProfile(profile: Partial<Profile>) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error('Not authenticated');
+  const user = session.user;
   const { data, error } = await supabase
     .from('profiles')
     .upsert({ id: user.id, ...profile, updated_at: new Date().toISOString() })
@@ -102,8 +104,9 @@ export async function getInstruments(): Promise<Instrument[]> {
 }
 
 export async function addInstrument(name: string): Promise<Instrument> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error('Not authenticated');
+  const user = session.user;
   const { data, error } = await supabase
     .from('instruments')
     .insert({ user_id: user.id, name })
@@ -130,8 +133,9 @@ export async function getSterilizers(): Promise<Sterilizer[]> {
 }
 
 export async function addSterilizer(name: string, type?: string, brand?: string): Promise<Sterilizer> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error('Not authenticated');
+  const user = session.user;
   const { data, error } = await supabase
     .from('sterilizers')
     .insert({ user_id: user.id, name, type: type ?? null, brand: brand ?? null })
@@ -169,8 +173,9 @@ export async function addCycle(cycle: {
   instrument_id?: string;
   sterilizer_id?: string;
 }): Promise<SterilizationCycle> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error('Not authenticated');
+  const user = session.user;
   const { data, error } = await supabase
     .from('sterilization_cycles')
     .insert({ user_id: user.id, ...cycle })
@@ -187,8 +192,9 @@ export async function uploadCyclePhoto(
   type: 'before' | 'after',
   uri: string,
 ): Promise<CyclePhoto> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error('Not authenticated');
+  const user = session.user;
 
   const ext = uri.split('.').pop() || 'jpg';
   const fileName = `${user.id}/${cycleId}/${type}_${Date.now()}.${ext}`;
@@ -237,8 +243,9 @@ export async function addSolution(sol: {
   product_id?: string;
   status?: string;
 }): Promise<Solution> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error('Not authenticated');
+  const user = session.user;
   const { data, error } = await supabase
     .from('solutions')
     .insert({ user_id: user.id, ...sol })
