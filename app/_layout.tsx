@@ -1,9 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, createContext, useContext } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { CartProvider } from '../lib/cart-context';
+
+type AuthContextType = { session: Session | null };
+export const AuthContext = createContext<AuthContextType>({ session: null });
+export const useAuth = () => useContext(AuthContext);
 
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
@@ -15,9 +20,11 @@ export default function RootLayout() {
       setLoading(false);
     });
 
-    supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   if (loading) {
@@ -29,22 +36,25 @@ export default function RootLayout() {
   }
 
   return (
-    <>
-      <StatusBar style="dark" />
-      <Stack screenOptions={{ headerShown: false }}>
-        {session ? (
-          <>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="cycle/index" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="solution/add" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="cabinet/sterilizers" options={{ presentation: 'modal' }} />
-            <Stack.Screen name="cabinet/instruments" options={{ presentation: 'modal' }} />
-          </>
-        ) : (
-          <Stack.Screen name="auth" />
-        )}
-      </Stack>
-    </>
+    <AuthContext.Provider value={{ session }}>
+      <CartProvider>
+        <StatusBar style="dark" />
+        <Stack screenOptions={{ headerShown: false }}>
+          {session ? (
+            <>
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="cycle/index" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="solution/add" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="cabinet/sterilizers" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="cabinet/instruments" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="cart" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+            </>
+          ) : (
+            <Stack.Screen name="auth" />
+          )}
+        </Stack>
+      </CartProvider>
+    </AuthContext.Provider>
   );
 }
 

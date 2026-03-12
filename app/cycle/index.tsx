@@ -7,8 +7,9 @@ import { useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
-import { X, ChevronRight, Camera as CameraIcon, CheckCircle, Home as HomeIcon, RotateCcw, ImageIcon } from 'lucide-react-native';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../_layout';
 
 const BRAND = '#4b569e';
 const COLORS = {
@@ -22,6 +23,8 @@ interface SterilizerRow { id: string; name: string; type: string | null; }
 
 export default function CycleScreen() {
   const router = useRouter();
+  const { session } = useAuth();
+  const userId = session?.user?.id;
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
 
@@ -48,19 +51,19 @@ export default function CycleScreen() {
   const digitScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    if (!userId) return;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const uid = session.user.id;
       const [instrRes, sterRes] = await Promise.all([
-        supabase.from('instruments').select('*').eq('user_id', uid),
-        supabase.from('sterilizers').select('*').eq('user_id', uid),
+        supabase.from('instruments').select('*').eq('user_id', userId),
+        supabase.from('sterilizers').select('*').eq('user_id', userId),
       ]);
+      if (instrRes.error) console.error('Load instruments error:', instrRes.error.message);
+      if (sterRes.error) console.error('Load sterilizers error:', sterRes.error.message);
       setInstruments(instrRes.data ?? []);
       setSterilizers(sterRes.data ?? []);
     })();
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     if (step === 3 && timerStartedAt) {
@@ -143,19 +146,16 @@ export default function CycleScreen() {
   };
 
   const finishCycle = async () => {
+    if (!userId) { Alert.alert('Помилка', 'Сесія закінчилась, перезайдіть'); return; }
     setSaving(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Не авторизовано');
-      const uid = session.user.id;
-
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       const durationMinutes = Math.ceil((savedDuration || elapsed) / 60);
 
       const { data: cycle, error } = await supabase
         .from('sterilization_cycles')
         .insert({
-          user_id: uid,
+          user_id: userId,
           instrument_name: selectedInstruments.join(', '),
           sterilizer_name: sterilizerName || 'Невідомий',
           packet_type: packType || 'Крафт',
@@ -168,10 +168,10 @@ export default function CycleScreen() {
       if (error) throw error;
 
       if (photoBefore) {
-        try { await uploadPhoto(cycle.id, 'before', photoBefore, uid); } catch {}
+        try { await uploadPhoto(cycle.id, 'before', photoBefore, userId); } catch (e: any) { console.error('Upload before error:', e.message); }
       }
       if (photoAfter) {
-        try { await uploadPhoto(cycle.id, 'after', photoAfter, uid); } catch {}
+        try { await uploadPhoto(cycle.id, 'after', photoAfter, userId); } catch (e: any) { console.error('Upload after error:', e.message); }
       }
       setStep(5);
     } catch (err: any) {

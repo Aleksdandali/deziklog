@@ -3,9 +3,10 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, SafeAreaView } fr
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, ClipboardList, Droplets, Package, ChevronRight } from 'lucide-react-native';
+import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../_layout';
 
 const BRAND = '#4b569e';
 const BRAND_DARK = '#363f75';
@@ -25,7 +26,7 @@ interface CycleRow {
 }
 
 function formatDuration(minutes: number | null): string {
-  if (!minutes) return '—';
+  if (!minutes) return '--';
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   if (h > 0) return `${h}г ${m}хв`;
@@ -40,38 +41,42 @@ function formatDate(iso: string): string {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { session } = useAuth();
+  const userId = session?.user?.id;
+
   const [cycles, setCycles] = useState<CycleRow[]>([]);
   const [solutionCount, setSolutionCount] = useState(0);
   const [instrumentCount, setInstrumentCount] = useState(0);
 
   useFocusEffect(useCallback(() => {
+    if (!userId) return;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const uid = session.user.id;
-
       const [cycleRes, solRes, instrRes] = await Promise.all([
         supabase
           .from('sterilization_cycles')
           .select('*')
-          .eq('user_id', uid)
+          .eq('user_id', userId)
           .order('created_at', { ascending: false })
           .limit(3),
         supabase
           .from('solutions')
           .select('id', { count: 'exact', head: true })
-          .eq('user_id', uid),
+          .eq('user_id', userId),
         supabase
           .from('instruments')
           .select('id', { count: 'exact', head: true })
-          .eq('user_id', uid),
+          .eq('user_id', userId),
       ]);
+
+      if (cycleRes.error) console.error('Cycles error:', cycleRes.error.message);
+      if (solRes.error) console.error('Solutions error:', solRes.error.message);
+      if (instrRes.error) console.error('Instruments error:', instrRes.error.message);
 
       setCycles(cycleRes.data ?? []);
       setSolutionCount(solRes.count ?? 0);
       setInstrumentCount(instrRes.count ?? 0);
     })();
-  }, []));
+  }, [userId]));
 
   const totalCycles = cycles.length;
 
@@ -85,9 +90,9 @@ export default function HomeScreen() {
               <Text style={styles.heroSubtitle}>Журнал стерилізації</Text>
 
               <View style={styles.counters}>
-                <CounterBox icon={<ClipboardList size={18} color={COLORS.white} strokeWidth={1.8} />} value={totalCycles} label="Циклів" />
-                <CounterBox icon={<Package size={18} color={COLORS.white} strokeWidth={1.8} />} value={instrumentCount} label="Інструментів" />
-                <CounterBox icon={<Droplets size={18} color={COLORS.white} strokeWidth={1.8} />} value={solutionCount} label="Розчинів" />
+                <CounterBox icon={<Feather name="clipboard" size={18} color={COLORS.white} />} value={totalCycles} label="Циклів" />
+                <CounterBox icon={<MaterialCommunityIcons name="scissors-cutting" size={18} color={COLORS.white} />} value={instrumentCount} label="Інструментів" />
+                <CounterBox icon={<Ionicons name="water-outline" size={18} color={COLORS.white} />} value={solutionCount} label="Розчинів" />
               </View>
             </View>
           </SafeAreaView>
@@ -102,7 +107,7 @@ export default function HomeScreen() {
             }}
           >
             <LinearGradient colors={[BRAND, BRAND_DARK]} style={styles.ctaButton} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-              <Plus size={22} color={COLORS.white} strokeWidth={2.5} />
+              <Feather name="plus" size={22} color={COLORS.white} />
               <Text style={styles.ctaText}>Новий цикл стерилізації</Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -112,16 +117,16 @@ export default function HomeScreen() {
             {cycles.length > 0 && (
               <TouchableOpacity onPress={() => router.push('/(tabs)/journal')} style={styles.seeAll}>
                 <Text style={styles.seeAllText}>Всі</Text>
-                <ChevronRight size={14} color={COLORS.brand} />
+                <Feather name="chevron-right" size={14} color={COLORS.brand} />
               </TouchableOpacity>
             )}
           </View>
 
           {cycles.length === 0 ? (
             <View style={styles.emptyCard}>
-              <ClipboardList size={36} color={COLORS.textSecondary} strokeWidth={1.5} />
+              <Feather name="clipboard" size={36} color={COLORS.textSecondary} />
               <Text style={styles.emptyTitle}>Записів поки немає</Text>
-              <Text style={styles.emptyText}>Розпочніть перший цикл стерилізації — натисніть кнопку вгорі</Text>
+              <Text style={styles.emptyText}>Розпочніть перший цикл стерилізації</Text>
             </View>
           ) : (
             cycles.map((cycle) => {

@@ -2,8 +2,9 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { Plus, Trash2, AlertTriangle } from 'lucide-react-native';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../_layout';
 
 const BRAND = '#4b569e';
 const COLORS = {
@@ -62,20 +63,21 @@ function formatDate(iso: string): string {
 
 export default function SolutionsScreen() {
   const router = useRouter();
+  const { session } = useAuth();
+  const userId = session?.user?.id;
   const [solutions, setSolutions] = useState<SolutionRow[]>([]);
 
   const loadSolutions = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
-    const { data } = await supabase
+    if (!userId) return;
+    const { data, error } = await supabase
       .from('solutions')
       .select('*, products(name, image_path)')
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .order('opened_at', { ascending: false });
 
+    if (error) console.error('Solutions error:', error.message);
     setSolutions(data ?? []);
-  }, []);
+  }, [userId]);
 
   useFocusEffect(useCallback(() => { loadSolutions(); }, [loadSolutions]));
 
@@ -86,7 +88,8 @@ export default function SolutionsScreen() {
         text: 'Видалити',
         style: 'destructive',
         onPress: async () => {
-          await supabase.from('solutions').delete().eq('id', id);
+          const { error } = await supabase.from('solutions').delete().eq('id', id);
+          if (error) console.error('Delete solution error:', error.message);
           loadSolutions();
         },
       },
@@ -101,7 +104,7 @@ export default function SolutionsScreen() {
           <Text style={styles.subtitle}>Контроль дезінфікуючих розчинів</Text>
         </View>
         <TouchableOpacity style={styles.addBtn} onPress={() => router.push('/solution/add')} activeOpacity={0.8}>
-          <Plus size={20} color={COLORS.white} strokeWidth={2.5} />
+          <Feather name="plus" size={20} color={COLORS.white} />
         </TouchableOpacity>
       </View>
 
@@ -130,18 +133,17 @@ export default function SolutionsScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cardName}>{displayName}</Text>
                     <View style={styles.statusRow}>
-                      {isExpired && <AlertTriangle size={12} color={COLORS.danger} strokeWidth={2.5} />}
+                      {isExpired && <Ionicons name="alert-circle" size={13} color={COLORS.danger} />}
                       <Text style={[styles.statusText, { color: statusColor }]}>
                         {getStatusLabel(status, daysLeft)}
                       </Text>
                     </View>
                   </View>
                   <TouchableOpacity onPress={() => handleDelete(item.id)} hitSlop={12} style={styles.deleteBtn}>
-                    <Trash2 size={16} color={COLORS.textSecondary} strokeWidth={1.8} />
+                    <Feather name="trash-2" size={16} color={COLORS.textSecondary} />
                   </TouchableOpacity>
                 </View>
 
-                {/* Progress bar */}
                 <View style={styles.progressBarBg}>
                   <View style={[
                     styles.progressBarFill,

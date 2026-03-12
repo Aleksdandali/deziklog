@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { X, Check } from 'lucide-react-native';
+import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../_layout';
 
 const BRAND = '#4b569e';
 const COLORS = {
@@ -32,6 +33,8 @@ function addDays(dateStr: string, days: number): string {
 
 export default function AddSolutionScreen() {
   const router = useRouter();
+  const { session } = useAuth();
+  const userId = session?.user?.id;
   const [selectedPrep, setSelectedPrep] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [expiryDate, setExpiryDate] = useState('');
@@ -53,15 +56,13 @@ export default function AddSolutionScreen() {
       return;
     }
 
+    if (!userId) { Alert.alert('Помилка', 'Сесія закінчилась, перезайдіть'); return; }
     setSaving(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Не авторизовано');
-
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
       const { error } = await supabase.from('solutions').insert({
-        user_id: session.user.id,
+        user_id: userId,
         product_id: null,
         name: selectedPrep,
         opened_at: new Date(date).toISOString(),
@@ -87,7 +88,7 @@ export default function AddSolutionScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Новий розчин</Text>
         <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
-          <X size={20} color={COLORS.textSecondary} strokeWidth={2} />
+          <Feather name="x" size={20} color={COLORS.textSecondary} />
         </TouchableOpacity>
       </View>
 
@@ -145,7 +146,7 @@ export default function AddSolutionScreen() {
           disabled={saving}
           activeOpacity={0.85}
         >
-          <Check size={18} color={COLORS.white} strokeWidth={2.5} />
+          <Feather name="check" size={18} color={COLORS.white} />
           <Text style={styles.saveBtnText}>
             {saving ? 'Збереження...' : 'Відкрити розчин'}
           </Text>

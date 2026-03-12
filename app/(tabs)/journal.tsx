@@ -1,20 +1,16 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity, Image } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { CheckCircle, XCircle, Camera } from 'lucide-react-native';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../_layout';
 
 const COLORS = {
   bg: '#f5f6fa', white: '#FFFFFF', text: '#1B1B1B', textSecondary: '#6B7280',
   success: '#43A047', danger: '#E53935', border: '#e2e4ed', cardBg: '#eceef5',
 };
 
-interface CyclePhoto {
-  id: string;
-  type: string;
-  storage_path: string;
-}
-
+interface CyclePhoto { id: string; type: string; storage_path: string; }
 interface CycleRow {
   id: string;
   instrument_name: string;
@@ -32,7 +28,7 @@ function getPhotoUrl(storagePath: string): string {
 }
 
 function formatDuration(minutes: number | null): string {
-  if (!minutes) return '—';
+  if (!minutes) return '--';
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   if (h > 0) return `${h}г ${m}хв`;
@@ -65,23 +61,24 @@ function groupByDate(cycles: CycleRow[]): { date: string; data: CycleRow[] }[] {
 }
 
 export default function JournalScreen() {
+  const { session } = useAuth();
+  const userId = session?.user?.id;
   const [cycles, setCycles] = useState<CycleRow[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useFocusEffect(useCallback(() => {
+    if (!userId) return;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('sterilization_cycles')
         .select('*, cycle_photos(*)')
-        .eq('user_id', session.user.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
+      if (error) console.error('Journal error:', error.message);
       setCycles(data ?? []);
     })();
-  }, []));
+  }, [userId]));
 
   const groups = groupByDate(cycles);
 
@@ -121,11 +118,11 @@ export default function JournalScreen() {
                   >
                     <View style={styles.cardRow}>
                       <View style={styles.cardLeft}>
-                        {passed ? (
-                          <CheckCircle size={20} color={COLORS.success} strokeWidth={2} />
-                        ) : (
-                          <XCircle size={20} color={COLORS.danger} strokeWidth={2} />
-                        )}
+                        <Ionicons
+                          name={passed ? 'checkmark-circle' : 'close-circle'}
+                          size={22}
+                          color={passed ? COLORS.success : COLORS.danger}
+                        />
                         <View style={{ flex: 1 }}>
                           <Text style={styles.cardInstruments} numberOfLines={expanded ? undefined : 1}>
                             {cycle.instrument_name}
@@ -157,7 +154,7 @@ export default function JournalScreen() {
                         ) : null}
                         {!photoBefore && !photoAfter && (
                           <View style={styles.noPhotos}>
-                            <Camera size={18} color={COLORS.textSecondary} />
+                            <Feather name="camera-off" size={18} color={COLORS.textSecondary} />
                             <Text style={styles.noPhotosText}>Фото відсутні</Text>
                           </View>
                         )}
