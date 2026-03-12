@@ -7,23 +7,39 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { X, ChevronRight, Camera, CheckCircle, Home as HomeIcon } from 'lucide-react-native';
-import { COLORS } from '@/lib/constants';
-import { getInstruments, getSterilizers, addCycle, uploadCyclePhoto } from '@/lib/api';
-import { useAppStore } from '@/lib/store';
-import type { Instrument, Sterilizer } from '@/lib/types';
+import { supabase } from '../../lib/supabase';
+
+const BRAND = '#4b569e';
+const COLORS = {
+  bg: '#f5f6fa', white: '#FFFFFF', text: '#1B1B1B', textSecondary: '#6B7280',
+  success: '#43A047', border: '#e2e4ed', cardBg: '#eceef5', brand: BRAND,
+};
 
 type PackType = 'Крафт' | 'Прозорий' | 'Білий';
 
+interface InstrumentRow { id: string; name: string; }
+interface SterilizerRow { id: string; name: string; type: string | null; }
+
 export default function CycleScreen() {
   const router = useRouter();
-  const { cycle, setCycleField, toggleInstrument, resetCycle } = useAppStore();
   const [step, setStep] = useState(1);
-  const [instruments, setInstruments] = useState<Instrument[]>([]);
-  const [sterilizers, setSterilizers] = useState<Sterilizer[]>([]);
+
+  // wizard local state
+  const [selectedInstruments, setSelectedInstruments] = useState<string[]>([]);
+  const [packType, setPackType] = useState<PackType | null>(null);
+  const [sterilizerName, setSterilizerName] = useState('');
+  const [photoBefore, setPhotoBefore] = useState<string | null>(null);
+  const [photoAfter, setPhotoAfter] = useState<string | null>(null);
+  const [timerStartedAt, setTimerStartedAt] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [saving, setSaving] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [savedDuration, setSavedDuration] = useState(0);
 
+  // data from Supabase
+  const [instruments, setInstruments] = useState<InstrumentRow[]>([]);
+  const [sterilizers, setSterilizers] = useState<SterilizerRow[]>([]);
+
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulse1 = useRef(new Animated.Value(0.6)).current;
   const pulse2 = useRef(new Animated.Value(0.6)).current;
   const pulse3 = useRef(new Animated.Value(0.6)).current;
@@ -31,21 +47,24 @@ export default function CycleScreen() {
 
   useEffect(() => {
     (async () => {
-      try {
-        const [instr, ster] = await Promise.all([getInstruments(), getSterilizers()]);
-        setInstruments(instr);
-        setSterilizers(ster);
-      } catch {}
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const uid = session.user.id;
+      const [instrRes, sterRes] = await Promise.all([
+        supabase.from('instruments').select('*').eq('user_id', uid),
+        supabase.from('sterilizers').select('*').eq('user_id', uid),
+      ]);
+      setInstruments(instrRes.data ?? []);
+      setSterilizers(sterRes.data ?? []);
     })();
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, []);
 
+  // Timer animation
   useEffect(() => {
-    if (step === 3 && cycle.timerRunning) {
+    if (step === 3 && timerStartedAt) {
       timerRef.current = setInterval(() => {
-        const now = Date.now();
-        const started = cycle.timerStartedAt || now;
-        setElapsed(Math.floor((now - started) / 1000));
+        setElapsed(Math.floor((Date.now() - timerStartedAt) / 1000));
       }, 1000);
 
       const createPulse = (anim: Animated.Value, delay: number) =>
@@ -57,7 +76,6 @@ export default function CycleScreen() {
       createPulse(pulse1, 0).start();
       createPulse(pulse2, 500).start();
       createPulse(pulse3, 1000).start();
-
       Animated.loop(Animated.sequence([
         Animated.timing(digitScale, { toValue: 1.02, duration: 1000, useNativeDriver: true }),
         Animated.timing(digitScale, { toValue: 1, duration: 1000, useNativeDriver: true }),
@@ -65,54 +83,86 @@ export default function CycleScreen() {
 
       return () => { if (timerRef.current) clearInterval(timerRef.current); };
     }
-  }, [step, cycle.timerRunning]);
+  }, [step, timerStartedAt]);
+
+  const toggleInstrument = (name: string) => {
+    setSelectedInstruments((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
+    );
+  };
 
   const startTimer = () => {
-    setCycleField('timerRunning', true);
-    setCycleField('timerStartedAt', Date.now());
+    setTimerStartedAt(Date.now());
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setStep(3);
   };
 
   const stopTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
-    setCycleField('timerRunning', false);
-    setCycleField('timerSeconds', elapsed);
+    setSavedDuration(elapsed);
   };
 
-  const handlePhoto = (field: 'photoBefore' | 'photoAfter') => {
+  const handlePhoto = (setter: (uri: string) => void) => {
     Alert.alert('Фото індикатора', 'Оберіть джерело', [
       { text: 'Камера', onPress: async () => {
         const res = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
-        if (!res.canceled) setCycleField(field, res.assets[0].uri);
+        if (!res.canceled) setter(res.assets[0].uri);
       }},
       { text: 'Галерея', onPress: async () => {
         const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
-        if (!res.canceled) setCycleField(field, res.assets[0].uri);
+        if (!res.canceled) setter(res.assets[0].uri);
       }},
       { text: 'Скасувати', style: 'cancel' },
     ]);
   };
 
+  const uploadPhoto = async (cycleId: string, type: 'before' | 'after', uri: string, userId: string) => {
+    const ext = uri.split('.').pop() || 'jpg';
+    const fileName = `${userId}/${cycleId}/${type}_${Date.now()}.${ext}`;
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const arrayBuffer = await new Response(blob).arrayBuffer();
+
+    await supabase.storage
+      .from('cycle-photos')
+      .upload(fileName, arrayBuffer, { contentType: `image/${ext === 'png' ? 'png' : 'jpeg'}`, upsert: true });
+
+    await supabase
+      .from('cycle_photos')
+      .insert({ cycle_id: cycleId, type, storage_path: fileName });
+  };
+
   const finishCycle = async () => {
     setSaving(true);
     try {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      const durationMinutes = Math.ceil((cycle.timerSeconds || elapsed) / 60);
-      const savedCycle = await addCycle({
-        instrument_name: cycle.instruments.join(', '),
-        sterilizer_name: cycle.sterilizer || 'Невідомий',
-        packet_type: cycle.packType || 'Крафт',
-        duration_minutes: durationMinutes,
-        started_at: new Date(cycle.timerStartedAt || Date.now()).toISOString(),
-        result: 'passed',
-      });
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Не авторизовано');
+      const uid = session.user.id;
 
-      if (cycle.photoBefore) {
-        try { await uploadCyclePhoto(savedCycle.id, 'before', cycle.photoBefore); } catch {}
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const durationMinutes = Math.ceil((savedDuration || elapsed) / 60);
+
+      const { data: cycle, error } = await supabase
+        .from('sterilization_cycles')
+        .insert({
+          user_id: uid,
+          instrument_name: selectedInstruments.join(', '),
+          sterilizer_name: sterilizerName || 'Невідомий',
+          packet_type: packType || 'Крафт',
+          duration_minutes: durationMinutes,
+          started_at: new Date(timerStartedAt || Date.now()).toISOString(),
+          result: 'passed',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (photoBefore) {
+        try { await uploadPhoto(cycle.id, 'before', photoBefore, uid); } catch {}
       }
-      if (cycle.photoAfter) {
-        try { await uploadCyclePhoto(savedCycle.id, 'after', cycle.photoAfter); } catch {}
+      if (photoAfter) {
+        try { await uploadPhoto(cycle.id, 'after', photoAfter, uid); } catch {}
       }
 
       setStep(5);
@@ -135,13 +185,13 @@ export default function CycleScreen() {
     ? instruments.map((i) => i.name)
     : ['Кусачки', 'Пушер', 'Фрези', 'Ножиці', 'Пінцет'];
   const sterNames = sterilizers.map((s) => s.name);
-  const canGoStep2 = cycle.instruments.length > 0 && cycle.packType !== null;
+  const canGoStep2 = selectedInstruments.length > 0 && packType !== null;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Новий цикл</Text>
-        <TouchableOpacity style={styles.closeBtn} onPress={() => { resetCycle(); router.back(); }}>
+        <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
           <X size={20} color={COLORS.textSecondary} strokeWidth={2} />
         </TouchableOpacity>
       </View>
@@ -155,6 +205,7 @@ export default function CycleScreen() {
       )}
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        {/* Step 1: Instruments + Pack + Sterilizer */}
         {step === 1 && (
           <View>
             <Text style={styles.stepTitle}>Упаковка</Text>
@@ -163,7 +214,7 @@ export default function CycleScreen() {
             <Text style={styles.fieldLabel}>Інструменти</Text>
             <View style={styles.chips}>
               {instrNames.map((name) => {
-                const active = cycle.instruments.includes(name);
+                const active = selectedInstruments.includes(name);
                 return (
                   <TouchableOpacity key={name} style={[styles.chip, active && styles.chipActive]} onPress={() => toggleInstrument(name)} activeOpacity={0.8}>
                     <Text style={[styles.chipText, active && styles.chipTextActive]}>{name}</Text>
@@ -175,9 +226,9 @@ export default function CycleScreen() {
             <Text style={styles.fieldLabel}>Тип пакета</Text>
             <View style={styles.packRow}>
               {(['Крафт', 'Прозорий', 'Білий'] as PackType[]).map((type) => {
-                const active = cycle.packType === type;
+                const active = packType === type;
                 return (
-                  <TouchableOpacity key={type} style={[styles.packBtn, active && styles.packBtnActive]} onPress={() => setCycleField('packType', type)} activeOpacity={0.8}>
+                  <TouchableOpacity key={type} style={[styles.packBtn, active && styles.packBtnActive]} onPress={() => setPackType(type)} activeOpacity={0.8}>
                     <Text style={[styles.packBtnText, active && styles.packBtnTextActive]}>{type}</Text>
                   </TouchableOpacity>
                 );
@@ -188,22 +239,16 @@ export default function CycleScreen() {
             {sterNames.length > 0 ? (
               <View style={styles.chips}>
                 {sterNames.map((name) => {
-                  const active = cycle.sterilizer === name;
+                  const active = sterilizerName === name;
                   return (
-                    <TouchableOpacity key={name} style={[styles.chip, active && styles.chipActive]} onPress={() => setCycleField('sterilizer', name)} activeOpacity={0.8}>
+                    <TouchableOpacity key={name} style={[styles.chip, active && styles.chipActive]} onPress={() => setSterilizerName(name)} activeOpacity={0.8}>
                       <Text style={[styles.chipText, active && styles.chipTextActive]}>{name}</Text>
                     </TouchableOpacity>
                   );
                 })}
               </View>
             ) : (
-              <TextInput
-                style={styles.input}
-                placeholder="Назва стерилізатора"
-                placeholderTextColor={COLORS.textSecondary}
-                value={cycle.sterilizer || ''}
-                onChangeText={(t) => setCycleField('sterilizer', t)}
-              />
+              <TextInput style={styles.input} placeholder="Назва стерилізатора" placeholderTextColor={COLORS.textSecondary} value={sterilizerName} onChangeText={setSterilizerName} />
             )}
 
             <TouchableOpacity style={[styles.nextBtn, !canGoStep2 && styles.nextBtnDisabled]} disabled={!canGoStep2} onPress={() => setStep(2)} activeOpacity={0.85}>
@@ -213,22 +258,23 @@ export default function CycleScreen() {
           </View>
         )}
 
+        {/* Step 2: Photo BEFORE */}
         {step === 2 && (
           <View>
             <Text style={styles.stepTitle}>Фото ДО</Text>
             <Text style={styles.stepSubtitle}>Сфотографуйте індикатор на пакеті</Text>
 
             <View style={styles.packInfo}>
-              <Text style={styles.packInfoText}>Пакет: <Text style={{ fontWeight: '700' }}>{cycle.packType}</Text></Text>
+              <Text style={styles.packInfoText}>Пакет: <Text style={{ fontWeight: '700' }}>{packType}</Text></Text>
               <View style={styles.indicatorRow}>
                 <View style={[styles.indicatorDot, { backgroundColor: COLORS.textSecondary }]} />
                 <Text style={styles.indicatorText}>Індикатор не змінений</Text>
               </View>
             </View>
 
-            <TouchableOpacity style={styles.photoBtn} onPress={() => handlePhoto('photoBefore')} activeOpacity={0.8}>
-              {cycle.photoBefore ? (
-                <Image source={{ uri: cycle.photoBefore }} style={styles.photoPreview} />
+            <TouchableOpacity style={styles.photoBtn} onPress={() => handlePhoto(setPhotoBefore)} activeOpacity={0.8}>
+              {photoBefore ? (
+                <Image source={{ uri: photoBefore }} style={styles.photoPreview} />
               ) : (
                 <View style={styles.photoPlaceholder}>
                   <Camera size={32} color={COLORS.brand} strokeWidth={1.5} />
@@ -243,6 +289,7 @@ export default function CycleScreen() {
           </View>
         )}
 
+        {/* Step 3: Timer */}
         {step === 3 && (
           <View style={styles.timerContainer}>
             <Text style={styles.stepTitle}>Стерилізація</Text>
@@ -265,7 +312,7 @@ export default function CycleScreen() {
             </View>
 
             <View style={styles.instrTags}>
-              {cycle.instruments.map((name) => (
+              {selectedInstruments.map((name) => (
                 <View key={name} style={styles.instrTag}>
                   <Text style={styles.instrTagText}>{name}</Text>
                 </View>
@@ -279,22 +326,23 @@ export default function CycleScreen() {
           </View>
         )}
 
+        {/* Step 4: Photo AFTER */}
         {step === 4 && (
           <View>
             <Text style={styles.stepTitle}>Фото ПІСЛЯ</Text>
             <Text style={styles.stepSubtitle}>Сфотографуйте зміну кольору індикатора</Text>
 
             <View style={styles.packInfo}>
-              <Text style={styles.packInfoText}>Пакет: <Text style={{ fontWeight: '700' }}>{cycle.packType}</Text></Text>
+              <Text style={styles.packInfoText}>Пакет: <Text style={{ fontWeight: '700' }}>{packType}</Text></Text>
               <View style={styles.indicatorRow}>
                 <View style={[styles.indicatorDot, { backgroundColor: COLORS.success }]} />
                 <Text style={styles.indicatorText}>Індикатор має змінитись</Text>
               </View>
             </View>
 
-            <TouchableOpacity style={styles.photoBtn} onPress={() => handlePhoto('photoAfter')} activeOpacity={0.8}>
-              {cycle.photoAfter ? (
-                <Image source={{ uri: cycle.photoAfter }} style={styles.photoPreview} />
+            <TouchableOpacity style={styles.photoBtn} onPress={() => handlePhoto(setPhotoAfter)} activeOpacity={0.8}>
+              {photoAfter ? (
+                <Image source={{ uri: photoAfter }} style={styles.photoPreview} />
               ) : (
                 <View style={styles.photoPlaceholder}>
                   <Camera size={32} color={COLORS.brand} strokeWidth={1.5} />
@@ -310,6 +358,7 @@ export default function CycleScreen() {
           </View>
         )}
 
+        {/* Step 5: Result (read-only) */}
         {step === 5 && (
           <View style={styles.resultContainer}>
             <View style={styles.resultCheck}>
@@ -319,14 +368,14 @@ export default function CycleScreen() {
             <Text style={styles.resultSubtitle}>Запис додано до журналу</Text>
 
             <View style={styles.resultCard}>
-              <ResultRow label="Час стерилізації" value={formatTimer(cycle.timerSeconds || elapsed)} mono />
-              <ResultRow label="Інструменти" value={cycle.instruments.join(', ')} />
-              <ResultRow label="Пакет" value={cycle.packType || ''} />
-              <ResultRow label="Стерилізатор" value={cycle.sterilizer || ''} />
+              <ResultRow label="Час стерилізації" value={formatTimer(savedDuration || elapsed)} mono />
+              <ResultRow label="Інструменти" value={selectedInstruments.join(', ')} />
+              <ResultRow label="Пакет" value={packType || ''} />
+              <ResultRow label="Стерилізатор" value={sterilizerName || ''} />
               <ResultRow label="Індикатор" value="✓ Пройшов" color={COLORS.success} />
             </View>
 
-            <TouchableOpacity style={styles.homeBtn} onPress={() => { resetCycle(); router.replace('/'); }} activeOpacity={0.85}>
+            <TouchableOpacity style={styles.homeBtn} onPress={() => router.replace('/')} activeOpacity={0.85}>
               <HomeIcon size={18} color={COLORS.white} strokeWidth={2} />
               <Text style={styles.homeBtnText}>На головну</Text>
             </TouchableOpacity>
@@ -370,7 +419,7 @@ const styles = StyleSheet.create({
   packBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.text },
   packBtnTextActive: { color: COLORS.brand, fontWeight: '700' },
   input: { height: 48, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, fontSize: 14, color: COLORS.text, backgroundColor: COLORS.bg },
-  nextBtn: { flexDirection: 'row', height: 56, borderRadius: 14, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 28, shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+  nextBtn: { flexDirection: 'row', height: 56, borderRadius: 14, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 28, shadowColor: BRAND, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   nextBtnDisabled: { opacity: 0.4 },
   nextBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
   packInfo: { backgroundColor: COLORS.cardBg, borderRadius: 12, padding: 14, gap: 8, marginBottom: 20 },
@@ -382,7 +431,7 @@ const styles = StyleSheet.create({
   photoPreview: { width: '100%', height: 200, borderRadius: 16 },
   photoPlaceholder: { height: 180, borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: COLORS.border, backgroundColor: COLORS.bg, alignItems: 'center', justifyContent: 'center', gap: 8 },
   photoPlaceholderText: { fontSize: 14, color: COLORS.textSecondary },
-  startBtn: { height: 56, borderRadius: 14, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+  startBtn: { height: 56, borderRadius: 14, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', shadowColor: BRAND, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   startBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
   timerContainer: { alignItems: 'center' },
   timerRings: { width: 240, height: 240, alignItems: 'center', justifyContent: 'center', marginTop: 20, marginBottom: 24 },
@@ -399,7 +448,7 @@ const styles = StyleSheet.create({
   instrTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginBottom: 28 },
   instrTag: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 40, backgroundColor: COLORS.cardBg },
   instrTagText: { fontSize: 12, fontWeight: '500', color: COLORS.textSecondary },
-  photoAfterBtn: { flexDirection: 'row', height: 56, borderRadius: 14, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', gap: 8, alignSelf: 'stretch', shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+  photoAfterBtn: { flexDirection: 'row', height: 56, borderRadius: 14, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', gap: 8, alignSelf: 'stretch', shadowColor: BRAND, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   photoAfterBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
   finishBtn: { flexDirection: 'row', height: 56, borderRadius: 14, backgroundColor: COLORS.success, alignItems: 'center', justifyContent: 'center', gap: 8, shadowColor: COLORS.success, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   finishBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
@@ -411,6 +460,6 @@ const styles = StyleSheet.create({
   resultRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   resultRowLabel: { fontSize: 13, color: COLORS.textSecondary },
   resultRowValue: { fontSize: 14, fontWeight: '600', color: COLORS.text, textAlign: 'right', flex: 1, marginLeft: 12 },
-  homeBtn: { flexDirection: 'row', height: 56, borderRadius: 14, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', gap: 8, alignSelf: 'stretch', width: '100%', shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+  homeBtn: { flexDirection: 'row', height: 56, borderRadius: 14, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', gap: 8, alignSelf: 'stretch', width: '100%', shadowColor: BRAND, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   homeBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
 });

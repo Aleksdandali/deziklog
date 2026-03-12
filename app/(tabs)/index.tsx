@@ -3,11 +3,26 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, SafeAreaView } fr
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, ClipboardList, Droplets, Package, ChevronRight, CheckCircle, XCircle } from 'lucide-react-native';
+import { Plus, ClipboardList, Droplets, Package, ChevronRight } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import { COLORS } from '@/lib/constants';
-import { getCycles, getSolutions, getInstruments } from '@/lib/api';
-import type { SterilizationCycle } from '@/lib/types';
+import { supabase } from '../../lib/supabase';
+
+const BRAND = '#4b569e';
+const BRAND_DARK = '#363f75';
+const COLORS = {
+  bg: '#f5f6fa', white: '#FFFFFF', text: '#1B1B1B', textSecondary: '#6B7280',
+  success: '#43A047', danger: '#E53935', border: '#e2e4ed', brand: BRAND,
+};
+
+interface CycleRow {
+  id: string;
+  instrument_name: string;
+  sterilizer_name: string;
+  packet_type: string;
+  duration_minutes: number | null;
+  result: string | null;
+  created_at: string;
+}
 
 function formatDuration(minutes: number | null): string {
   if (!minutes) return '—';
@@ -19,41 +34,58 @@ function formatDuration(minutes: number | null): string {
 
 function formatDate(iso: string): string {
   try {
-    const d = new Date(iso);
-    return d.toLocaleDateString('uk-UA', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return new Date(iso).toLocaleDateString('uk-UA', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
   } catch { return ''; }
 }
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [cycles, setCycles] = useState<SterilizationCycle[]>([]);
+  const [cycles, setCycles] = useState<CycleRow[]>([]);
   const [solutionCount, setSolutionCount] = useState(0);
   const [instrumentCount, setInstrumentCount] = useState(0);
 
   useFocusEffect(useCallback(() => {
     (async () => {
-      try {
-        const [c, s, i] = await Promise.all([getCycles(), getSolutions(), getInstruments()]);
-        setCycles(c);
-        setSolutionCount(s.length);
-        setInstrumentCount(i.length);
-      } catch (err) {
-        console.error('Home load error:', err);
-      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const uid = session.user.id;
+
+      const [cycleRes, solRes, instrRes] = await Promise.all([
+        supabase
+          .from('sterilization_cycles')
+          .select('*')
+          .eq('user_id', uid)
+          .order('created_at', { ascending: false })
+          .limit(3),
+        supabase
+          .from('solutions')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', uid),
+        supabase
+          .from('instruments')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', uid),
+      ]);
+
+      setCycles(cycleRes.data ?? []);
+      setSolutionCount(solRes.count ?? 0);
+      setInstrumentCount(instrRes.count ?? 0);
     })();
   }, []));
+
+  const totalCycles = cycles.length;
 
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        <LinearGradient colors={[COLORS.brand, COLORS.brandDark]} style={styles.hero}>
+        <LinearGradient colors={[BRAND, BRAND_DARK]} style={styles.hero}>
           <SafeAreaView>
             <View style={styles.heroContent}>
               <Text style={styles.heroTitle}>Dezik Log</Text>
               <Text style={styles.heroSubtitle}>Журнал стерилізації</Text>
 
               <View style={styles.counters}>
-                <CounterBox icon={<ClipboardList size={18} color={COLORS.white} strokeWidth={1.8} />} value={cycles.length} label="Циклів" />
+                <CounterBox icon={<ClipboardList size={18} color={COLORS.white} strokeWidth={1.8} />} value={totalCycles} label="Циклів" />
                 <CounterBox icon={<Package size={18} color={COLORS.white} strokeWidth={1.8} />} value={instrumentCount} label="Інструментів" />
                 <CounterBox icon={<Droplets size={18} color={COLORS.white} strokeWidth={1.8} />} value={solutionCount} label="Розчинів" />
               </View>
@@ -69,7 +101,7 @@ export default function HomeScreen() {
               router.push('/cycle');
             }}
           >
-            <LinearGradient colors={[COLORS.brand, COLORS.brandDark]} style={styles.ctaButton} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+            <LinearGradient colors={[BRAND, BRAND_DARK]} style={styles.ctaButton} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
               <Plus size={22} color={COLORS.white} strokeWidth={2.5} />
               <Text style={styles.ctaText}>Новий цикл стерилізації</Text>
             </LinearGradient>
@@ -92,7 +124,7 @@ export default function HomeScreen() {
               <Text style={styles.emptyText}>Розпочніть перший цикл стерилізації — натисніть кнопку вгорі</Text>
             </View>
           ) : (
-            cycles.slice(0, 5).map((cycle) => {
+            cycles.map((cycle) => {
               const passed = cycle.result === 'passed';
               return (
                 <View key={cycle.id} style={styles.cycleCard}>
@@ -129,71 +161,25 @@ function CounterBox({ icon, value, label }: { icon: React.ReactNode; value: numb
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  hero: {
-    paddingBottom: 28,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-  },
+  hero: { paddingBottom: 28, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
   heroContent: { paddingHorizontal: 20, paddingTop: 16 },
   heroTitle: { fontSize: 26, fontWeight: '800', color: COLORS.white },
   heroSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.75)', marginTop: 2, fontWeight: '500' },
   counters: { flexDirection: 'row', gap: 12, marginTop: 20 },
-  counterBox: {
-    flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 14,
-    padding: 12,
-    alignItems: 'center',
-    gap: 4,
-  },
+  counterBox: { flex: 1, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 14, padding: 12, alignItems: 'center', gap: 4 },
   counterValue: { fontSize: 22, fontWeight: '700', color: COLORS.white },
   counterLabel: { fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
   body: { padding: 16, paddingBottom: 32 },
-  ctaButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 56,
-    borderRadius: 14,
-    gap: 10,
-    shadowColor: COLORS.brand,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
-  },
+  ctaButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 56, borderRadius: 14, gap: 10, shadowColor: BRAND, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 8 },
   ctaText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, marginBottom: 14 },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
   seeAll: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   seeAllText: { fontSize: 13, fontWeight: '600', color: COLORS.brand },
-  emptyCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 32,
-    alignItems: 'center',
-    gap: 8,
-  },
+  emptyCard: { backgroundColor: COLORS.white, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, padding: 32, alignItems: 'center', gap: 8 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: COLORS.text, marginTop: 4 },
   emptyText: { fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 19 },
-  cycleCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 14,
-    marginBottom: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
-  },
+  cycleCard: { backgroundColor: COLORS.white, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, padding: 14, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   cycleCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginRight: 12 },
   statusDot: { width: 10, height: 10, borderRadius: 5 },
   cycleInstruments: { fontSize: 14, fontWeight: '600', color: COLORS.text },

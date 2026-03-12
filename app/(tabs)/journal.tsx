@@ -2,9 +2,34 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity, Image } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { CheckCircle, XCircle, Camera } from 'lucide-react-native';
-import { COLORS } from '@/lib/constants';
-import { getCycles, getPhotoUrl } from '@/lib/api';
-import type { SterilizationCycle } from '@/lib/types';
+import { supabase } from '../../lib/supabase';
+
+const COLORS = {
+  bg: '#f5f6fa', white: '#FFFFFF', text: '#1B1B1B', textSecondary: '#6B7280',
+  success: '#43A047', danger: '#E53935', border: '#e2e4ed', cardBg: '#eceef5',
+};
+
+interface CyclePhoto {
+  id: string;
+  type: string;
+  storage_path: string;
+}
+
+interface CycleRow {
+  id: string;
+  instrument_name: string;
+  sterilizer_name: string;
+  packet_type: string;
+  duration_minutes: number | null;
+  result: string | null;
+  created_at: string;
+  cycle_photos: CyclePhoto[];
+}
+
+function getPhotoUrl(storagePath: string): string {
+  const { data } = supabase.storage.from('cycle-photos').getPublicUrl(storagePath);
+  return data.publicUrl;
+}
 
 function formatDuration(minutes: number | null): string {
   if (!minutes) return '—';
@@ -26,8 +51,8 @@ function formatTimeShort(iso: string): string {
   } catch { return ''; }
 }
 
-function groupByDate(cycles: SterilizationCycle[]): { date: string; data: SterilizationCycle[] }[] {
-  const map = new Map<string, SterilizationCycle[]>();
+function groupByDate(cycles: CycleRow[]): { date: string; data: CycleRow[] }[] {
+  const map = new Map<string, CycleRow[]>();
   for (const c of cycles) {
     const key = new Date(c.created_at).toDateString();
     if (!map.has(key)) map.set(key, []);
@@ -40,16 +65,21 @@ function groupByDate(cycles: SterilizationCycle[]): { date: string; data: Steril
 }
 
 export default function JournalScreen() {
-  const [cycles, setCycles] = useState<SterilizationCycle[]>([]);
+  const [cycles, setCycles] = useState<CycleRow[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useFocusEffect(useCallback(() => {
     (async () => {
-      try {
-        setCycles(await getCycles());
-      } catch (err) {
-        console.error('Journal load error:', err);
-      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data } = await supabase
+        .from('sterilization_cycles')
+        .select('*, cycle_photos(*)')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false });
+
+      setCycles(data ?? []);
     })();
   }, []));
 
@@ -78,7 +108,7 @@ export default function JournalScreen() {
               {group.data.map((cycle) => {
                 const expanded = expandedId === cycle.id;
                 const passed = cycle.result === 'passed';
-                const photos = cycle.photos ?? [];
+                const photos = cycle.cycle_photos ?? [];
                 const photoBefore = photos.find((p) => p.type === 'before');
                 const photoAfter = photos.find((p) => p.type === 'after');
 
@@ -152,19 +182,7 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
   emptyText: { fontSize: 15, color: COLORS.textSecondary },
   dateHeader: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 20, marginBottom: 10 },
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 14,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
-  },
+  card: { backgroundColor: COLORS.white, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, padding: 14, marginBottom: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   cardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginRight: 12 },
   cardInstruments: { fontSize: 14, fontWeight: '600', color: COLORS.text },
