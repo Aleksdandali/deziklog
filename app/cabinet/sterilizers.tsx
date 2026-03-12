@@ -5,11 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../_layout';
-
-const COLORS = {
-  bg: '#f5f6fa', white: '#FFFFFF', text: '#1B1B1B', textSecondary: '#6B7280',
-  border: '#e2e4ed', brand: '#4b569e', cardBg: '#eceef5',
-};
+import { COLORS } from '../../lib/constants';
 
 const TYPE_OPTIONS = [
   { value: 'dry_heat', label: 'Сухожар', color: '#E65100', bg: '#FFF3E0' },
@@ -147,12 +143,12 @@ export default function SterilizersScreen() {
           ListHeaderComponent={items.length > 0 ? <Text style={styles.listTitle}>{items.length} {items.length === 1 ? 'стерилізатор' : items.length < 5 ? 'стерилізатори' : 'стерилізаторів'}</Text> : null}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <View style={styles.emptyIcon}><MaterialCommunityIcons name="radiator" size={36} color={COLORS.textSecondary} /></View>
-              <Text style={styles.emptyTitle}>Немає стерилізаторів</Text>
-              <Text style={styles.emptyText}>Додайте обладнання, яке використовуєте для стерилізації</Text>
+              <View style={styles.emptyIcon}><MaterialCommunityIcons name="radiator" size={48} color={COLORS.textSecondary} /></View>
+              <Text style={styles.emptyTitle}>Стерилізаторів поки немає</Text>
+              <Text style={styles.emptyText}>Додайте свій стерилізатор (сухожар, автоклав)</Text>
               {!showForm && (
-                <TouchableOpacity style={styles.emptyAddBtn} onPress={() => setShowForm(true)} activeOpacity={0.7}>
-                  <Feather name="plus" size={16} color={COLORS.brand} /><Text style={styles.emptyAddText}>Додати перший стерилізатор</Text>
+                <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowForm(true)} activeOpacity={0.7}>
+                  <Feather name="plus" size={16} color={COLORS.brand} /><Text style={styles.emptyBtnText}>Додати стерилізатор</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -190,10 +186,10 @@ const styles = StyleSheet.create({
   tag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   tagText: { fontSize: 11, fontWeight: '600' },
   deleteBtn: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  emptyState: { alignItems: 'center', paddingTop: 48, paddingHorizontal: 32 },
-  emptyIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#FFF3E0', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text, marginBottom: 6 },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, paddingTop: 60 },
+  emptyIcon: { width: 88, height: 88, borderRadius: 44, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginBottom: 6 },
   emptyText: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 20 },
-  emptyAddBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1.5, borderColor: COLORS.brand, borderStyle: 'dashed', borderRadius: 12, paddingHorizontal: 20, paddingVertical: 12 },
-  emptyAddText: { fontSize: 14, fontWeight: '600', color: COLORS.brand },
+  emptyBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1.5, borderColor: COLORS.brand, borderRadius: 12, paddingHorizontal: 20, paddingVertical: 12 },
+  emptyBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.brand },
 });

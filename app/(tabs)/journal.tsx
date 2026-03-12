@@ -1,14 +1,13 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity, Image, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import * as Sharing from 'expo-sharing';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../_layout';
-
-const COLORS = {
-  bg: '#f5f6fa', white: '#FFFFFF', text: '#1B1B1B', textSecondary: '#6B7280',
-  success: '#43A047', danger: '#E53935', border: '#e2e4ed', cardBg: '#eceef5',
-};
+import { COLORS } from '../../lib/constants';
+import { generateJournalPDF } from '../../lib/pdf-export';
+import { getProfile } from '../../lib/api';
 
 interface CyclePhoto { id: string; type: string; storage_path: string; }
 interface CycleRow {
@@ -65,6 +64,30 @@ export default function JournalScreen() {
   const userId = session?.user?.id;
   const [cycles, setCycles] = useState<CycleRow[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'passed' | 'failed'>('all');
+
+  const handleExportPDF = async () => {
+    if (cycles.length === 0) {
+      Alert.alert('Немає записів', 'Додайте хоча б один цикл стерилізації.');
+      return;
+    }
+    setExporting(true);
+    try {
+      const profile = await getProfile();
+      const uri = await generateJournalPDF(cycles, profile?.salon_name ?? undefined);
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Журнал стерилізації',
+        UTI: 'com.adobe.pdf',
+      });
+    } catch (err: any) {
+      Alert.alert('Помилка', 'Не вдалось створити PDF');
+      console.error('PDF export error:', err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useFocusEffect(useCallback(() => {
     if (!userId) return;
@@ -80,14 +103,50 @@ export default function JournalScreen() {
     })();
   }, [userId]));
 
-  const groups = groupByDate(cycles);
+  const filteredCycles = filter === 'all'
+    ? cycles
+    : cycles.filter(c => c.result === filter);
+  const groups = groupByDate(filteredCycles);
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Журнал</Text>
-        <Text style={styles.subtitle}>Контроль стерилізації</Text>
+        <View>
+          <Text style={styles.title}>Журнал</Text>
+          <Text style={styles.subtitle}>Контроль стерилізації</Text>
+        </View>
+        {cycles.length > 0 && (
+          <TouchableOpacity
+            style={styles.exportBtn}
+            onPress={handleExportPDF}
+            disabled={exporting}
+            activeOpacity={0.7}
+          >
+            <Feather name="download" size={18} color={exporting ? COLORS.textSecondary : COLORS.brand} />
+          </TouchableOpacity>
+        )}
       </View>
+
+      {cycles.length > 0 && (
+        <View style={styles.filterRow}>
+          {[
+            { key: 'all', label: 'Всі' },
+            { key: 'passed', label: 'Пройдено' },
+            { key: 'failed', label: 'Не пройдено' },
+          ].map(({ key, label }) => (
+            <TouchableOpacity
+              key={key}
+              style={[styles.filterChip, filter === key && styles.filterChipActive]}
+              onPress={() => setFilter(key as any)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.filterChipText, filter === key && styles.filterChipTextActive]}>
+                {label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {groups.length === 0 ? (
         <View style={styles.empty}>
@@ -173,7 +232,15 @@ export default function JournalScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
+  header: { 
+    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, 
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' 
+  },
+  exportBtn: { 
+    width: 40, height: 40, borderRadius: 12, 
+    backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.border, 
+    alignItems: 'center', justifyContent: 'center' 
+  },
   title: { fontSize: 26, fontWeight: '800', color: COLORS.text },
   subtitle: { fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
@@ -193,4 +260,9 @@ const styles = StyleSheet.create({
   photoLabel: { fontSize: 11, fontWeight: '600', color: COLORS.textSecondary },
   noPhotos: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   noPhotosText: { fontSize: 12, color: COLORS.textSecondary },
+  filterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 12 },
+  filterChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 40, backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.border },
+  filterChipActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  filterChipText: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
+  filterChipTextActive: { color: COLORS.white },
 });

@@ -6,12 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../_layout';
-
-const COLORS = {
-  bg: '#f5f6fa', white: '#FFFFFF', text: '#1B1B1B', textSecondary: '#6B7280',
-  danger: '#E53935', border: '#e2e4ed', cardBg: '#eceef5',
-  brand: '#4b569e', brandDark: '#363f75',
-};
+import { COLORS } from '../../lib/constants';
 
 interface ProfileRow {
   id: string;
@@ -33,6 +28,7 @@ export default function ProfileScreen() {
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState('');
   const [counts, setCounts] = useState({ sterilizers: 0, instruments: 0 });
+  const [orders, setOrders] = useState<any[]>([]);
 
   useFocusEffect(useCallback(() => {
     if (!userId) return;
@@ -53,6 +49,14 @@ export default function ProfileScreen() {
         setCity(p.city || '');
       }
       setCounts({ instruments: instrRes.count ?? 0, sterilizers: sterRes.count ?? 0 });
+
+      const orderRes = await supabase
+        .from('orders')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      if (orderRes.data) setOrders(orderRes.data);
     })();
   }, [userId]));
 
@@ -154,6 +158,41 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
+        <View style={styles.ordersSection}>
+          <Text style={styles.ordersTitle}>Мої замовлення</Text>
+          {orders.length === 0 ? (
+            <Text style={styles.ordersEmpty}>Замовлень поки немає</Text>
+          ) : (
+            orders.map((order) => (
+              <View key={order.id} style={styles.orderCard}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.orderDate}>
+                    {new Date(order.created_at).toLocaleDateString('uk-UA', {
+                      day: 'numeric', month: 'short', year: 'numeric',
+                    })}
+                  </Text>
+                  <Text style={styles.orderStatus}>
+                    {order.status === 'pending' ? 'Очікує' : order.status === 'confirmed' ? 'Підтверджено' : order.status}
+                  </Text>
+                </View>
+                <Text style={styles.orderTotal}>{Math.round(order.total_amount)} ₴</Text>
+              </View>
+            ))
+          )}
+        </View>
+
+        <View style={{ paddingHorizontal: 16 }}>
+          <TouchableOpacity
+            style={styles.privacyLink}
+            onPress={() => router.push('/legal/privacy' as any)}
+            activeOpacity={0.7}
+          >
+            <Feather name="shield" size={16} color={COLORS.textSecondary} />
+            <Text style={styles.privacyLinkText}>Політика конфіденційності</Text>
+            <Feather name="chevron-right" size={14} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
         <TouchableOpacity style={styles.logoutBtn} onPress={handleSignOut} activeOpacity={0.7}>
           <Feather name="log-out" size={16} color={COLORS.danger} />
           <Text style={styles.logoutText}>Вийти з акаунту</Text>
@@ -197,6 +236,15 @@ const styles = StyleSheet.create({
   menuRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   countBadge: { backgroundColor: COLORS.cardBg, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 8 },
   countText: { fontSize: 13, fontWeight: '700', color: COLORS.brand },
-  logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 32, marginHorizontal: 16, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#FFCDD2', backgroundColor: '#FFF5F5' },
+  ordersSection: { marginTop: 24, paddingHorizontal: 16, marginBottom: 16 },
+  ordersTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text, marginBottom: 12 },
+  ordersEmpty: { fontSize: 14, color: COLORS.textSecondary },
+  orderCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.white, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, padding: 14, marginBottom: 8 },
+  orderDate: { fontSize: 14, fontWeight: '600', color: COLORS.text },
+  orderStatus: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  orderTotal: { fontSize: 16, fontWeight: '700', color: COLORS.brand },
+  privacyLink: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14, marginBottom: 8 },
+  privacyLinkText: { fontSize: 14, color: COLORS.textSecondary, flex: 1 },
+  logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16, marginHorizontal: 16, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#FFCDD2', backgroundColor: '#FFF5F5' },
   logoutText: { fontSize: 14, color: COLORS.danger, fontWeight: '600' },
 });

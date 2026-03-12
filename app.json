@@ -12,11 +12,15 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "description": "Цифровий журнал стерилізації для б'юті-майстрів",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.shineshopb2b.deziklog",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Dezik Log потребує доступ до камери для фотографування індикаторів стерилізації",
+        "NSPhotoLibraryUsageDescription": "Dezik Log потребує доступ до фото для вибору фото індикаторів стерилізації",
+        "NSPhotoLibraryAddUsageDescription": "Dezik Log потребує доступ для збереження фото індикаторів"
       }
     },
     "android": {

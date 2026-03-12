@@ -5,13 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../_layout';
-
-const BRAND = '#4b569e';
-const COLORS = {
-  bg: '#f5f6fa', white: '#FFFFFF', text: '#1B1B1B', textSecondary: '#6B7280',
-  success: '#43A047', danger: '#E53935', warning: '#F9A825',
-  border: '#e2e4ed', brand: BRAND,
-};
+import { COLORS } from '../../lib/constants';
 
 interface SolutionRow {
   id: string;
@@ -109,9 +103,20 @@ export default function SolutionsScreen() {
       </View>
 
       {solutions.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyText}>Розчинів поки немає</Text>
-          <Text style={styles.emptyHint}>Натисніть + щоб додати</Text>
+        <View style={styles.emptyState}>
+          <View style={styles.emptyIcon}>
+            <Ionicons name="water-outline" size={48} color={COLORS.textSecondary} />
+          </View>
+          <Text style={styles.emptyTitle}>Розчинів поки немає</Text>
+          <Text style={styles.emptyText}>Додайте перший розчин для відстеження терміну придатності</Text>
+          <TouchableOpacity
+            style={styles.emptyBtn}
+            onPress={() => router.push('/solution/add')}
+            activeOpacity={0.8}
+          >
+            <Feather name="plus" size={16} color={COLORS.brand} />
+            <Text style={styles.emptyBtnText}>Додати розчин</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -174,9 +179,12 @@ const styles = StyleSheet.create({
   title: { fontSize: 26, fontWeight: '800', color: COLORS.text },
   subtitle: { fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },
   addBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
-  emptyText: { fontSize: 15, color: COLORS.textSecondary, fontWeight: '500' },
-  emptyHint: { fontSize: 13, color: COLORS.textSecondary, marginTop: 4 },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, paddingTop: 60 },
+  emptyIcon: { width: 88, height: 88, borderRadius: 44, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginBottom: 6 },
+  emptyText: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 20 },
+  emptyBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1.5, borderColor: COLORS.brand, borderRadius: 12, paddingHorizontal: 20, paddingVertical: 12 },
+  emptyBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.brand },
   card: { backgroundColor: COLORS.white, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, padding: 14, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   cardExpired: { borderColor: COLORS.danger + '40' },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },

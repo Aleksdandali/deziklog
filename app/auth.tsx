@@ -5,9 +5,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
-
-const BRAND = '#4b569e';
-const BRAND_DARK = '#363f75';
+import { COLORS } from '../lib/constants';
 
 export default function AuthScreen() {
   const [isRegister, setIsRegister] = useState(false);
@@ -71,7 +69,7 @@ export default function AuthScreen() {
           {/* Logo */}
           <View style={styles.logoBlock}>
             <LinearGradient
-              colors={[BRAND, BRAND_DARK]}
+              colors={[COLORS.brand, COLORS.brandDark]}
               style={styles.logoCircle}
             >
               <Text style={styles.logoLetter}>D</Text>
@@ -121,7 +119,7 @@ export default function AuthScreen() {
               activeOpacity={0.85}
             >
               <LinearGradient
-                colors={[BRAND, BRAND_DARK]}
+                colors={[COLORS.brand, COLORS.brandDark]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.submitGradient}
@@ -168,7 +166,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,
-    shadowColor: BRAND,
+    shadowColor: COLORS.brand,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.35,
     shadowRadius: 20,
@@ -237,7 +235,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: BRAND,
+    shadowColor: COLORS.brand,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.35,
     shadowRadius: 16,
@@ -251,5 +249,5 @@ const styles = StyleSheet.create({
 
   toggleBtn: { alignItems: 'center', marginTop: 20 },
   toggleText: { fontSize: 14, color: '#6B7280' },
-  toggleLink: { color: BRAND, fontWeight: '600' },
+  toggleLink: { color: COLORS.brand, fontWeight: '600' },
 });

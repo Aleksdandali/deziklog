@@ -8,12 +8,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { useCart, CartItem } from '../lib/cart-context';
 import { useAuth } from './_layout';
-
-const COLORS = {
-  bg: '#f5f6fa', white: '#FFFFFF', text: '#1B1B1B', textSecondary: '#6B7280',
-  border: '#e2e4ed', brand: '#4b569e', brandDark: '#363f75',
-  danger: '#E53935', cardBg: '#eceef5', success: '#43A047',
-};
+import { COLORS } from '../lib/constants';
 
 function formatPrice(price: number): string {
   return `${Math.round(price)} ₴`;
@@ -29,6 +24,7 @@ export default function CartScreen() {
   const [phone, setPhone] = useState('');
   const [ordering, setOrdering] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
+  const [orderSuccess, setOrderSuccess] = useState(false);
 
   const handleOrder = async () => {
     if (!userId) { Alert.alert('Помилка', 'Сесія закінчилась, перезайдіть'); return; }
@@ -62,9 +58,7 @@ export default function CartScreen() {
         if (itemsError) console.error('Order items error:', itemsError.message);
 
         clearCart();
-        Alert.alert("Замовлення прийнято", "Ми зв'яжемось з вами для підтвердження", [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
+        setOrderSuccess(true);
       }
     } catch (err: any) {
       console.error('Order error:', err.message);
@@ -103,6 +97,41 @@ export default function CartScreen() {
       </View>
     </View>
   );
+
+  if (orderSuccess) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.successState}>
+          <View style={styles.successIcon}>
+            <Feather name="check-circle" size={56} color={COLORS.success} />
+          </View>
+          <Text style={styles.successTitle}>Замовлення оформлено!</Text>
+          <Text style={styles.successText}>
+            Ми зв'яжемось з вами для підтвердження доставки
+          </Text>
+          <Text style={styles.successTotal}>Сума: {formatPrice(total || 0)}</Text>
+
+          <TouchableOpacity
+            style={styles.successBtn}
+            onPress={() => router.replace('/(tabs)/shop')}
+            activeOpacity={0.85}
+          >
+            <Feather name="shopping-bag" size={18} color={COLORS.white} />
+            <Text style={styles.successBtnText}>До магазину</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.successSecondaryBtn}
+            onPress={() => router.replace('/(tabs)')}
+            activeOpacity={0.85}
+          >
+            <Feather name="home" size={16} color={COLORS.textSecondary} />
+            <Text style={styles.successSecondaryText}>На головну</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (items.length === 0 && !showCheckout) {
     return (
@@ -229,4 +258,14 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', marginBottom: 20 },
   emptyBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1.5, borderColor: COLORS.brand, borderRadius: 12, paddingHorizontal: 20, paddingVertical: 12 },
   emptyBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.brand },
+
+  successState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  successIcon: { marginBottom: 20 },
+  successTitle: { fontSize: 22, fontWeight: '800', color: COLORS.text, marginBottom: 8 },
+  successText: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 12 },
+  successTotal: { fontSize: 18, fontWeight: '700', color: COLORS.brand, marginBottom: 32 },
+  successBtn: { flexDirection: 'row', width: '100%', height: 52, borderRadius: 14, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  successBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
+  successSecondaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12, paddingVertical: 14 },
+  successSecondaryText: { fontSize: 14, fontWeight: '600', color: COLORS.textSecondary },
 });

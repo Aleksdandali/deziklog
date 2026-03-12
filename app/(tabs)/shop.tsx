@@ -1,19 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, FlatList, StyleSheet, SafeAreaView,
-  TouchableOpacity, Image, Dimensions, ActivityIndicator,
+  TouchableOpacity, Image, Dimensions, ActivityIndicator, TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useCart } from '../../lib/cart-context';
 import * as Haptics from 'expo-haptics';
-
-const BRAND = '#4b569e';
-const COLORS = {
-  bg: '#f5f6fa', white: '#FFFFFF', text: '#1B1B1B',
-  textSecondary: '#6B7280', border: '#e2e4ed', cardBg: '#eceef5', brand: BRAND,
-};
+import { COLORS } from '../../lib/constants';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_GAP = 10;
@@ -43,6 +38,7 @@ export default function ShopScreen() {
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -63,7 +59,12 @@ export default function ShopScreen() {
     })();
   }, []);
 
-  const filtered = selectedCat ? products.filter((p) => p.category_id === selectedCat) : products;
+  const filtered = products.filter((p) => {
+    const matchesCat = !selectedCat || p.category_id === selectedCat;
+    const matchesSearch = !searchQuery.trim() ||
+      p.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
+    return matchesCat && matchesSearch;
+  });
   const allCats: { id: string | null; name: string }[] = [{ id: null, name: 'Всі' }, ...categories];
 
   const handleAddToCart = (product: Product) => {
@@ -106,6 +107,25 @@ export default function ShopScreen() {
         </TouchableOpacity>
       </View>
 
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Feather name="search" size={18} color={COLORS.textSecondary} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Пошук товарів..."
+            placeholderTextColor={COLORS.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Feather name="x" size={16} color={COLORS.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
       <FlatList
         data={allCats}
         horizontal
@@ -131,7 +151,11 @@ export default function ShopScreen() {
         columnWrapperStyle={{ gap: CARD_GAP }}
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32, gap: CARD_GAP }}
         renderItem={({ item }) => (
-          <View style={styles.productCard}>
+          <TouchableOpacity
+            style={styles.productCard}
+            activeOpacity={0.85}
+            onPress={() => router.push(`/product/${item.id}`)}
+          >
             {item.image_path ? (
               <Image source={{ uri: item.image_path }} style={styles.productImage} resizeMode="cover" />
             ) : (
@@ -139,17 +163,27 @@ export default function ShopScreen() {
                 <Ionicons name="cube-outline" size={32} color={COLORS.textSecondary} />
               </View>
             )}
+            {!item.in_stock && (
+              <View style={styles.outOfStockBadge}>
+                <Text style={styles.outOfStockBadgeText}>Немає в наявності</Text>
+              </View>
+            )}
             <View style={styles.productInfo}>
               <Text style={styles.productCategory}>{item.product_categories?.name ?? ''}</Text>
               <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
               <View style={styles.productBottom}>
                 <Text style={styles.productPrice}>{formatPrice(item.price)}</Text>
-                <TouchableOpacity style={styles.cartBtn} onPress={() => handleAddToCart(item)} activeOpacity={0.8}>
+                <TouchableOpacity
+                  style={[styles.cartBtn, !item.in_stock && { opacity: 0.3 }]}
+                  onPress={() => handleAddToCart(item)}
+                  disabled={!item.in_stock}
+                  activeOpacity={0.8}
+                >
                   <Ionicons name="cart" size={16} color={COLORS.white} />
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
+          </TouchableOpacity>
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -163,6 +197,9 @@ export default function ShopScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
+  searchContainer: { paddingHorizontal: 16, paddingBottom: 8 },
+  searchBar: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 44, borderRadius: 12, backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14 },
+  searchInput: { flex: 1, fontSize: 14, color: COLORS.text },
   header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   title: { fontSize: 26, fontWeight: '800', color: COLORS.text },
   subtitle: { fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },
@@ -184,6 +221,8 @@ const styles = StyleSheet.create({
   productBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
   productPrice: { fontSize: 14, fontWeight: '700', color: COLORS.brand },
   cartBtn: { width: 32, height: 32, borderRadius: 10, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center' },
+  outOfStockBadge: { position: 'absolute', top: 8, left: 8, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, zIndex: 1 },
+  outOfStockBadgeText: { fontSize: 10, fontWeight: '600', color: COLORS.white },
   empty: { alignItems: 'center', paddingTop: 40 },
   emptyText: { fontSize: 15, color: COLORS.textSecondary },
 });

@@ -5,6 +5,7 @@ import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { CartProvider } from '../lib/cart-context';
+import { requestNotificationPermissions } from '../lib/notifications';
 
 type AuthContextType = { session: Session | null };
 export const AuthContext = createContext<AuthContextType>({ session: null });
@@ -19,6 +20,8 @@ export default function RootLayout() {
       setSession(session);
       setLoading(false);
     });
+
+    requestNotificationPermissions();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
@@ -47,6 +50,7 @@ export default function RootLayout() {
               <Stack.Screen name="solution/add" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
               <Stack.Screen name="cabinet/sterilizers" options={{ presentation: 'modal' }} />
               <Stack.Screen name="cabinet/instruments" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="product/[id]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
               <Stack.Screen name="cart" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
             </>
           ) : (

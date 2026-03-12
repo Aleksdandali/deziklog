@@ -5,16 +5,8 @@ import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../_layout';
-
-const BRAND = '#4b569e';
-const COLORS = {
-  bg: '#f5f6fa',
-  white: '#FFFFFF',
-  text: '#1B1B1B',
-  textSecondary: '#6B7280',
-  border: '#e2e4ed',
-  brand: BRAND,
-};
+import { COLORS } from '../../lib/constants';
+import { scheduleSolutionReminder } from '../../lib/notifications';
 
 const PREP_NAMES = ['Деланол', 'Bionol', 'Instrum', 'Septonal'];
 
@@ -71,6 +63,7 @@ export default function AddSolutionScreen() {
       });
 
       if (error) throw error;
+      scheduleSolutionReminder(selectedPrep, new Date(expiryDate).toISOString());
       router.back();
     } catch (err: any) {
       Alert.alert('Помилка', err.message || 'Не вдалось зберегти');
@@ -222,7 +215,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     marginTop: 28,
-    shadowColor: BRAND,
+    shadowColor: COLORS.brand,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 12,

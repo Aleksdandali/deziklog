@@ -5,11 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../_layout';
-
-const COLORS = {
-  bg: '#f5f6fa', white: '#FFFFFF', text: '#1B1B1B', textSecondary: '#6B7280',
-  border: '#e2e4ed', brand: '#4b569e', cardBg: '#eceef5',
-};
+import { COLORS } from '../../lib/constants';
 
 interface InstrumentRow { id: string; name: string; created_at: string; }
 
@@ -102,9 +98,9 @@ export default function InstrumentsScreen() {
           ListHeaderComponent={items.length > 0 ? <Text style={styles.listTitle}>{items.length} {items.length === 1 ? 'інструмент' : items.length < 5 ? 'інструменти' : 'інструментів'}</Text> : null}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <View style={styles.emptyIcon}><MaterialCommunityIcons name="scissors-cutting" size={36} color={COLORS.textSecondary} /></View>
-              <Text style={styles.emptyTitle}>Немає інструментів</Text>
-              <Text style={styles.emptyText}>Додайте інструменти, які ви використовуєте для стерилізації</Text>
+              <View style={styles.emptyIcon}><Feather name="scissors" size={48} color={COLORS.textSecondary} /></View>
+              <Text style={styles.emptyTitle}>Інструментів поки немає</Text>
+              <Text style={styles.emptyText}>Додайте інструменти, які ви стерилізуєте</Text>
             </View>
           }
         />
@@ -130,8 +126,8 @@ const styles = StyleSheet.create({
   cardIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#E8EAF6', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   cardName: { fontSize: 15, fontWeight: '600', color: COLORS.text, flex: 1 },
   deleteBtn: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  emptyState: { alignItems: 'center', paddingTop: 48, paddingHorizontal: 32 },
-  emptyIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text, marginBottom: 6 },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, paddingTop: 60 },
+  emptyIcon: { width: 88, height: 88, borderRadius: 44, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginBottom: 6 },
   emptyText: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20 },
 });

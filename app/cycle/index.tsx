@@ -10,15 +10,11 @@ import * as Haptics from 'expo-haptics';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Circle as SvgCircle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
+import ReAnimated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { supabase } from '../../lib/supabase';
+import { addCycle, uploadCyclePhoto } from '../../lib/api';
 import { useAuth } from '../_layout';
-
-const BRAND = '#4b569e';
-const BRAND_DARK = '#363f75';
-const COLORS = {
-  bg: '#f5f6fa', white: '#FFFFFF', text: '#1B1B1B', textSecondary: '#6B7280',
-  success: '#43A047', border: '#e2e4ed', cardBg: '#eceef5', brand: BRAND,
-};
+import { COLORS } from '../../lib/constants';
 
 const RING_SIZE = 280;
 const RING_CX = RING_SIZE / 2;
@@ -26,8 +22,8 @@ const RING_CY = RING_SIZE / 2;
 const RING_R = 100;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_R;
 const WAVE_BASE = RING_R * 2;
-const WAVE_DURATION = 2800;
-const WAVE_CYCLE = 4600;
+const WAVE_DURATION = 3500;
+const WAVE_CYCLE = 5000;
 
 type PackType = 'Крафт' | 'Прозорий' | 'Білий';
 interface InstrumentRow { id: string; name: string; }
@@ -60,8 +56,6 @@ export default function CycleScreen() {
   const wave1Opacity = useRef(new Animated.Value(0.18)).current;
   const wave2Scale = useRef(new Animated.Value(1)).current;
   const wave2Opacity = useRef(new Animated.Value(0.14)).current;
-  const wave3Scale = useRef(new Animated.Value(1)).current;
-  const wave3Opacity = useRef(new Animated.Value(0.10)).current;
   const colonOpacity = useRef(new Animated.Value(1)).current;
   const dotScale = useRef(new Animated.Value(1)).current;
 
@@ -84,7 +78,12 @@ export default function CycleScreen() {
     if (step !== 3 || !timerStartedAt) return;
 
     timerRef.current = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - timerStartedAt) / 1000));
+      const newElapsed = Math.floor((Date.now() - timerStartedAt) / 1000);
+      setElapsed(newElapsed);
+
+      if (newElapsed > 0 && newElapsed % 60 === 0) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
     }, 1000);
 
     const createWave = (
@@ -98,18 +97,17 @@ export default function CycleScreen() {
           Animated.timing(opacityAnim, { toValue: startOpacity, duration: 0, useNativeDriver: true }),
           Animated.delay(delay),
           Animated.parallel([
-            Animated.timing(scaleAnim, { toValue: targetScale, duration: WAVE_DURATION, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-            Animated.timing(opacityAnim, { toValue: 0, duration: WAVE_DURATION, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+            Animated.timing(scaleAnim, { toValue: targetScale, duration: WAVE_DURATION, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+            Animated.timing(opacityAnim, { toValue: 0, duration: WAVE_DURATION, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
           ]),
           ...(postWait > 0 ? [Animated.delay(postWait)] : []),
         ]),
       );
     };
 
-    const w1 = createWave(wave1Scale, wave1Opacity, 1.5, 0.18, 0);
-    const w2 = createWave(wave2Scale, wave2Opacity, 1.65, 0.14, 900);
-    const w3 = createWave(wave3Scale, wave3Opacity, 1.8, 0.10, 1800);
-    w1.start(); w2.start(); w3.start();
+    const w1 = createWave(wave1Scale, wave1Opacity, 1.45, 0.15, 0);
+    const w2 = createWave(wave2Scale, wave2Opacity, 1.6, 0.10, 1000);
+    w1.start(); w2.start();
 
     const colonAnim = Animated.loop(
       Animated.sequence([
@@ -167,40 +165,75 @@ export default function CycleScreen() {
     }
   };
 
-  const uploadPhoto = async (cycleId: string, type: 'before' | 'after', uri: string, uid: string) => {
-    const filePath = `${uid}/${cycleId}/${type}.jpg`;
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const { error: uploadErr } = await supabase.storage.from('cycle-photos').upload(filePath, blob, { contentType: 'image/jpeg', upsert: true });
-    if (uploadErr) throw uploadErr;
-    await supabase.from('cycle_photos').insert({ cycle_id: cycleId, type, storage_path: filePath });
-  };
-
   const finishCycle = async () => {
-    if (!userId) { Alert.alert('Помилка', 'Сесія закінчилась, перезайдіть'); return; }
+    if (!userId) {
+      Alert.alert('Помилка', 'Сесія закінчилась. Перезайдіть у додаток.');
+      return;
+    }
+    if (selectedInstruments.length === 0) {
+      Alert.alert('Помилка', 'Оберіть хоча б один інструмент.');
+      return;
+    }
+    if (!packType) {
+      Alert.alert('Помилка', 'Оберіть тип пакета.');
+      return;
+    }
+    if (!sterilizerName.trim()) {
+      Alert.alert('Помилка', 'Вкажіть назву стерилізатора.');
+      return;
+    }
+    if (!timerStartedAt || savedDuration <= 0) {
+      Alert.alert('Помилка', 'Таймер не було запущено.');
+      return;
+    }
+
     setSaving(true);
+
     try {
+      const durationMinutes = Math.ceil(savedDuration / 60);
+
+      const cycle = await addCycle({
+        instrument_name: selectedInstruments.join(', '),
+        sterilizer_name: sterilizerName.trim(),
+        packet_type: packType,
+        temperature: 180,
+        duration_minutes: durationMinutes,
+        started_at: new Date(timerStartedAt).toISOString(),
+        result: 'passed',
+      });
+
+      const photoErrors: string[] = [];
+
+      if (photoBefore) {
+        try {
+          await uploadCyclePhoto(cycle.id, 'before', photoBefore);
+        } catch (e: any) {
+          photoErrors.push('Фото ДО не завантажено');
+          console.error('Upload before error:', e.message);
+        }
+      }
+
+      if (photoAfter) {
+        try {
+          await uploadCyclePhoto(cycle.id, 'after', photoAfter);
+        } catch (e: any) {
+          photoErrors.push('Фото ПІСЛЯ не завантажено');
+          console.error('Upload after error:', e.message);
+        }
+      }
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      const durationMinutes = Math.ceil((savedDuration || elapsed) / 60);
-      const { data: cycle, error } = await supabase
-        .from('sterilization_cycles')
-        .insert({
-          user_id: userId,
-          instrument_name: selectedInstruments.join(', '),
-          sterilizer_name: sterilizerName || 'Невідомий',
-          packet_type: packType || 'Крафт',
-          duration_minutes: durationMinutes,
-          started_at: new Date(timerStartedAt || Date.now()).toISOString(),
-          result: 'passed',
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      if (photoBefore) { try { await uploadPhoto(cycle.id, 'before', photoBefore, userId); } catch (e: any) { console.error('Upload before error:', e.message); } }
-      if (photoAfter) { try { await uploadPhoto(cycle.id, 'after', photoAfter, userId); } catch (e: any) { console.error('Upload after error:', e.message); } }
+
+      if (photoErrors.length > 0) {
+        Alert.alert(
+          'Цикл збережено',
+          `${photoErrors.join(', ')}. Запис циклу збережено в журналі без цих фото.`,
+        );
+      }
+
       setStep(5);
     } catch (err: any) {
-      Alert.alert('Помилка', err.message || 'Не вдалось зберегти');
+      Alert.alert('Не вдалось зберегти', err.message || 'Спробуйте ще раз.');
     } finally {
       setSaving(false);
     }
@@ -217,7 +250,7 @@ export default function CycleScreen() {
 
   const instrNames = instruments.length > 0 ? instruments.map((i) => i.name) : ['Кусачки', 'Пушер', 'Фрези', 'Ножиці', 'Пінцет'];
   const sterNames = sterilizers.map((s) => s.name);
-  const canGoStep2 = selectedInstruments.length > 0 && packType !== null;
+  const canGoStep2 = selectedInstruments.length > 0 && packType !== null && sterilizerName.trim() !== '';
 
   // ── Camera fullscreen ──────────────────────────────────────
   if (cameraMode) {
@@ -268,7 +301,7 @@ export default function CycleScreen() {
     title: string, subtitle: string, indicatorColor: string, indicatorText: string,
     photo: string | null, target: 'before' | 'after', actionButton: React.ReactNode,
   ) => (
-    <View>
+    <ReAnimated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(150)}>
       <Text style={styles.stepTitle}>{title}</Text>
       <Text style={styles.stepSubtitle}>{subtitle}</Text>
       <View style={styles.packInfo}>
@@ -300,7 +333,7 @@ export default function CycleScreen() {
         </TouchableOpacity>
       )}
       {actionButton}
-    </View>
+    </ReAnimated.View>
   );
 
   // ── Ripple wave component ──────────────────────────────────
@@ -324,9 +357,15 @@ export default function CycleScreen() {
       </View>
 
       {step < 5 && (
-        <View style={styles.progress}>
+        <View style={styles.progressBar}>
           {[1, 2, 3, 4].map((s) => (
-            <View key={s} style={[styles.progressDot, s === step && styles.progressDotActive, s < step && styles.progressDotDone]} />
+            <View
+              key={s}
+              style={[
+                styles.progressSegment,
+                (s <= step) && styles.progressSegmentActive,
+              ]}
+            />
           ))}
         </View>
       )}
@@ -334,9 +373,9 @@ export default function CycleScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {/* ── Step 1: Packaging ── */}
         {step === 1 && (
-          <View>
-            <Text style={styles.stepTitle}>Упаковка</Text>
-            <Text style={styles.stepSubtitle}>Оберіть інструменти, пакет і стерилізатор</Text>
+          <ReAnimated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(150)}>
+            <Text style={styles.stepTitle}>Що стерилізуємо</Text>
+            <Text style={styles.stepSubtitle}>Оберіть інструменти, тип пакета і стерилізатор</Text>
 
             <Text style={styles.fieldLabel}>Інструменти</Text>
             <View style={styles.chips}>
@@ -382,15 +421,16 @@ export default function CycleScreen() {
               <Text style={styles.nextBtnText}>Далі</Text>
               <Feather name="chevron-right" size={18} color={COLORS.white} />
             </TouchableOpacity>
-          </View>
+          </ReAnimated.View>
         )}
 
         {/* ── Step 2: Photo before ── */}
         {step === 2 && renderPhotoStep(
-          'Фото ДО', 'Сфотографуйте індикатор на пакеті',
-          COLORS.textSecondary, 'Індикатор не змінений', photoBefore, 'before',
+          'Фото ДО стерилізації',
+          'Сфотографуйте індикатор на пакеті. Це необовʼязково, але допомагає при перевірках.',
+          COLORS.textSecondary, 'Індикатор ще не змінений', photoBefore, 'before',
           <TouchableOpacity activeOpacity={0.85} onPress={startTimer}>
-            <LinearGradient colors={[BRAND_DARK, BRAND]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientBtn}>
+            <LinearGradient colors={[COLORS.brandDark, COLORS.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientBtn}>
               <Feather name="play" size={18} color={COLORS.white} />
               <Text style={styles.gradientBtnText}>Почати стерилізацію</Text>
             </LinearGradient>
@@ -399,11 +439,10 @@ export default function CycleScreen() {
 
         {/* ── Step 3: Timer with water ripples ── */}
         {step === 3 && (
-          <View style={styles.timerSection}>
+          <ReAnimated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(150)} style={styles.timerSection}>
             <View style={styles.ringContainer}>
               {renderWave(wave1Scale, wave1Opacity)}
               {renderWave(wave2Scale, wave2Opacity)}
-              {renderWave(wave3Scale, wave3Opacity)}
 
               <Svg width={RING_SIZE} height={RING_SIZE} style={styles.ringSvg}>
                 <SvgCircle cx={RING_CX} cy={RING_CY} r={RING_R} stroke={COLORS.cardBg} strokeWidth={4} fill="none" />
@@ -461,44 +500,98 @@ export default function CycleScreen() {
             </View>
 
             <TouchableOpacity activeOpacity={0.85} onPress={() => { stopTimer(); setStep(4); }}>
-              <LinearGradient colors={[BRAND_DARK, BRAND]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientBtn}>
+              <LinearGradient colors={[COLORS.brandDark, COLORS.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientBtn}>
                 <Feather name="camera" size={18} color={COLORS.white} />
                 <Text style={styles.gradientBtnText}>Зупинити і зробити фото ПІСЛЯ</Text>
               </LinearGradient>
             </TouchableOpacity>
-          </View>
+          </ReAnimated.View>
         )}
 
         {/* ── Step 4: Photo after ── */}
         {step === 4 && renderPhotoStep(
-          'Фото ПІСЛЯ', 'Сфотографуйте зміну кольору індикатора',
+          'Фото ПІСЛЯ стерилізації',
+          'Сфотографуйте зміну кольору індикатора — це ключовий доказ стерилізації.',
           COLORS.success, 'Індикатор має змінитись', photoAfter, 'after',
-          <TouchableOpacity style={[styles.finishBtn, saving && { opacity: 0.6 }]} onPress={finishCycle} disabled={saving} activeOpacity={0.85}>
-            <Feather name="check-circle" size={20} color={COLORS.white} />
-            <Text style={styles.finishBtnText}>{saving ? 'Збереження...' : 'Завершити цикл'}</Text>
-          </TouchableOpacity>,
+          <View>
+            <TouchableOpacity
+              style={[styles.finishBtn, saving && { opacity: 0.6 }]}
+              onPress={finishCycle}
+              disabled={saving}
+              activeOpacity={0.85}
+            >
+              <Feather name="check-circle" size={20} color={COLORS.white} />
+              <Text style={styles.finishBtnText}>
+                {saving ? 'Збереження...' : 'Завершити цикл'}
+              </Text>
+            </TouchableOpacity>
+
+            {!photoAfter && (
+              <TouchableOpacity
+                style={styles.skipPhotoBtn}
+                onPress={finishCycle}
+                disabled={saving}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.skipPhotoBtnText}>
+                  Без фото — зберегти тільки запис
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>,
         )}
 
         {/* ── Step 5: Result ── */}
         {step === 5 && (
-          <View style={styles.resultContainer}>
-            <View style={styles.resultCheck}><Feather name="check-circle" size={56} color={COLORS.success} /></View>
-            <Text style={styles.resultTitle}>Цикл завершено!</Text>
-            <Text style={styles.resultSubtitle}>Запис додано до журналу</Text>
+          <ReAnimated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(150)} style={styles.resultContainer}>
+            <View style={styles.resultCheck}>
+              <Feather name="check-circle" size={56} color={COLORS.success} />
+            </View>
+            <Text style={styles.resultTitle}>Цикл збережено!</Text>
+            <Text style={styles.resultSubtitle}>Запис додано до журналу стерилізації</Text>
+
             <View style={styles.resultCard}>
-              <ResultRow label="Час стерилізації" value={`${String(Math.floor((savedDuration || elapsed) / 60)).padStart(2, '0')}:${String((savedDuration || elapsed) % 60).padStart(2, '0')}`} mono />
+              <ResultRow
+                label="Дата і час"
+                value={timerStartedAt
+                  ? new Date(timerStartedAt).toLocaleString('uk-UA', {
+                      day: 'numeric', month: 'short', year: 'numeric',
+                      hour: '2-digit', minute: '2-digit',
+                    })
+                  : '--'}
+              />
+              <ResultRow label="Стерилізатор" value={sterilizerName} />
+              <ResultRow
+                label="Час стерилізації"
+                value={`${String(Math.floor(savedDuration / 60)).padStart(2, '0')}:${String(savedDuration % 60).padStart(2, '0')}`}
+                mono
+              />
               <ResultRow label="Інструменти" value={selectedInstruments.join(', ')} />
               <ResultRow label="Пакет" value={packType || ''} />
-              <ResultRow label="Стерилізатор" value={sterilizerName || ''} />
-              <ResultRow label="Індикатор" value="Пройшов" color={COLORS.success} />
+              <ResultRow label="Результат" value="Пройдено" color={COLORS.success} />
             </View>
-            <TouchableOpacity activeOpacity={0.85} onPress={() => router.replace('/')}>
-              <LinearGradient colors={[BRAND_DARK, BRAND]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientBtn}>
-                <Feather name="home" size={18} color={COLORS.white} />
-                <Text style={styles.gradientBtnText}>На головну</Text>
+
+            <TouchableOpacity activeOpacity={0.85} onPress={() => router.replace('/(tabs)/journal')}>
+              <LinearGradient
+                colors={[COLORS.brandDark, COLORS.brand]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.gradientBtn}
+              >
+                <Feather name="book-open" size={18} color={COLORS.white} />
+                <Text style={styles.gradientBtnText}>До журналу</Text>
               </LinearGradient>
             </TouchableOpacity>
-          </View>
+
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              activeOpacity={0.85}
+              onPress={() => router.replace('/(tabs)')}
+            >
+              <Feather name="home" size={16} color={COLORS.textSecondary} />
+              <Text style={styles.secondaryBtnText}>На головну</Text>
+            </TouchableOpacity>
+          </ReAnimated.View>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -519,10 +612,9 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
   headerTitle: { fontSize: 20, fontWeight: '700', color: COLORS.text },
   closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.bg, alignItems: 'center', justifyContent: 'center' },
-  progress: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingVertical: 12 },
-  progressDot: { flex: 1, height: 4, borderRadius: 2, backgroundColor: COLORS.border },
-  progressDotActive: { backgroundColor: COLORS.brand },
-  progressDotDone: { backgroundColor: COLORS.brand },
+  progressBar: { flexDirection: 'row', gap: 6, paddingHorizontal: 20, paddingVertical: 12 },
+  progressSegment: { flex: 1, height: 4, borderRadius: 2, backgroundColor: COLORS.border },
+  progressSegmentActive: { backgroundColor: COLORS.brand },
   body: { padding: 20, paddingBottom: 40 },
   stepTitle: { fontSize: 22, fontWeight: '800', color: COLORS.text },
   stepSubtitle: { fontSize: 14, color: COLORS.textSecondary, marginTop: 4, marginBottom: 20 },
@@ -538,7 +630,7 @@ const styles = StyleSheet.create({
   packBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.text },
   packBtnTextActive: { color: COLORS.brand, fontWeight: '700' },
   input: { height: 48, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, fontSize: 14, color: COLORS.text, backgroundColor: COLORS.bg },
-  nextBtn: { flexDirection: 'row', height: 56, borderRadius: 14, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 28, shadowColor: BRAND, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+  nextBtn: { flexDirection: 'row', height: 56, borderRadius: 14, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 28, shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   nextBtnDisabled: { opacity: 0.4 },
   nextBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
   packInfo: { backgroundColor: COLORS.cardBg, borderRadius: 12, padding: 14, gap: 8, marginBottom: 20 },
@@ -670,7 +762,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    shadowColor: BRAND,
+    shadowColor: COLORS.brand,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
@@ -688,4 +780,27 @@ const styles = StyleSheet.create({
   resultRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   resultRowLabel: { fontSize: 13, color: COLORS.textSecondary },
   resultRowValue: { fontSize: 14, fontWeight: '600', color: COLORS.text, textAlign: 'right', flex: 1, marginLeft: 12 },
+  secondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 12,
+    paddingVertical: 14,
+  },
+  secondaryBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  skipPhotoBtn: {
+    alignItems: 'center',
+    paddingVertical: 14,
+    marginTop: 8,
+  },
+  skipPhotoBtnText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textDecorationLine: 'underline',
+  },
 });
