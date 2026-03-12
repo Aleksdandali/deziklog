@@ -52,6 +52,7 @@ export default function RootLayout() {
               <Stack.Screen name="cabinet/instruments" options={{ presentation: 'modal' }} />
               <Stack.Screen name="product/[id]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
               <Stack.Screen name="cart" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="legal/privacy" />
             </>
           ) : (
             <Stack.Screen name="auth" />

@@ -127,7 +127,7 @@ export default function CycleScreen() {
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      w1.stop(); w2.stop(); w3.stop(); colonAnim.stop(); dotAnim.stop();
+      w1.stop(); w2.stop(); colonAnim.stop(); dotAnim.stop();
     };
   }, [step, timerStartedAt]);
 
