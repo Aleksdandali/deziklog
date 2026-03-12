@@ -1,32 +1,29 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
-import { useAuthStore } from '@/lib/auth-store';
-import { supabase } from '@/lib/supabase';
-import { COLORS } from '@/lib/constants';
+import { Session } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 
 export default function RootLayout() {
-  const { session, loading, setSession } = useAuthStore();
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-      },
-    );
-
-    return () => subscription.unsubscribe();
+    supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
   }, []);
 
   if (loading) {
     return (
       <View style={styles.loader}>
-        <ActivityIndicator size="large" color={COLORS.brand} />
+        <ActivityIndicator size="large" color="#4b569e" />
       </View>
     );
   }
@@ -42,10 +39,9 @@ export default function RootLayout() {
             <Stack.Screen name="solution/add" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
             <Stack.Screen name="cabinet/sterilizers" options={{ presentation: 'modal' }} />
             <Stack.Screen name="cabinet/instruments" options={{ presentation: 'modal' }} />
-            <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
           </>
         ) : (
-          <Stack.Screen name="(auth)/login" />
+          <Stack.Screen name="auth" />
         )}
       </Stack>
     </>
@@ -57,6 +53,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.bg,
+    backgroundColor: '#FFFFFF',
   },
 });
