@@ -1,13 +1,43 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity, Image, Linking, Dimensions, ActivityIndicator } from 'react-native';
-import { ShoppingCart } from 'lucide-react-native';
-import { COLORS } from '@/lib/constants';
-import { getProducts, getCategories } from '@/lib/api';
-import type { Product, ProductCategory } from '@/lib/types';
+import {
+  View, Text, FlatList, StyleSheet, SafeAreaView,
+  TouchableOpacity, Image, Linking, Dimensions, ActivityIndicator,
+} from 'react-native';
+import { ShoppingCart, Package } from 'lucide-react-native';
+import { supabase } from '../../lib/supabase';
+
+const BRAND = '#4b569e';
+const BRAND_DARK = '#363f75';
+const COLORS = {
+  bg: '#f5f6fa',
+  white: '#FFFFFF',
+  text: '#1B1B1B',
+  textSecondary: '#6B7280',
+  border: '#e2e4ed',
+  cardBg: '#eceef5',
+  brand: BRAND,
+};
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_GAP = 10;
 const CARD_WIDTH = (SCREEN_WIDTH - 32 - CARD_GAP) / 2;
+
+interface ProductCategory {
+  id: string;
+  name: string;
+  sort_order: number;
+}
+
+interface Product {
+  id: string;
+  category_id: string;
+  name: string;
+  price: number;
+  image_path: string | null;
+  in_stock: boolean;
+  sort_order: number;
+  product_categories: { name: string } | null;
+}
 
 function formatPrice(price: number): string {
   return `${Math.round(price)} ₴`;
@@ -22,9 +52,20 @@ export default function ShopScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const [cats, prods] = await Promise.all([getCategories(), getProducts()]);
-        setCategories(cats);
-        setProducts(prods);
+        const [catRes, prodRes] = await Promise.all([
+          supabase
+            .from('product_categories')
+            .select('*')
+            .order('sort_order'),
+          supabase
+            .from('products')
+            .select('*, product_categories(name)')
+            .eq('in_stock', true)
+            .order('sort_order'),
+        ]);
+
+        if (catRes.data) setCategories(catRes.data);
+        if (prodRes.data) setProducts(prodRes.data);
       } catch (err) {
         console.error('Shop load error:', err);
       } finally {
@@ -37,11 +78,10 @@ export default function ShopScreen() {
     ? products.filter((p) => p.category_id === selectedCat)
     : products;
 
-  const allCats = [{ id: null as string | null, name: 'Всі', sort_order: 0 }, ...categories];
-
-  const handleBuy = (product: Product) => {
-    Linking.openURL('https://dezik.com.ua');
-  };
+  const allCats: { id: string | null; name: string }[] = [
+    { id: null, name: 'Всі' },
+    ...categories,
+  ];
 
   if (loading) {
     return (
@@ -63,6 +103,7 @@ export default function ShopScreen() {
         <Text style={styles.subtitle}>Продукція Dezik</Text>
       </View>
 
+      {/* Category chips */}
       <FlatList
         data={allCats}
         horizontal
@@ -88,6 +129,7 @@ export default function ShopScreen() {
         }}
       />
 
+      {/* Products grid */}
       <FlatList
         data={filtered}
         numColumns={2}
@@ -97,25 +139,40 @@ export default function ShopScreen() {
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32, gap: CARD_GAP }}
         renderItem={({ item }) => (
           <View style={styles.productCard}>
-            <Image
-              source={{ uri: item.image_path ?? undefined }}
-              style={styles.productImage}
-              resizeMode="cover"
-            />
+            {item.image_path ? (
+              <Image
+                source={{ uri: item.image_path }}
+                style={styles.productImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.productImage, styles.placeholder]}>
+                <Package size={32} color={COLORS.textSecondary} strokeWidth={1.5} />
+              </View>
+            )}
             <View style={styles.productInfo}>
               <Text style={styles.productCategory}>
-                {item.category?.name ?? ''}
+                {item.product_categories?.name ?? ''}
               </Text>
               <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
               <View style={styles.productBottom}>
                 <Text style={styles.productPrice}>{formatPrice(item.price)}</Text>
-                <TouchableOpacity style={styles.cartBtn} onPress={() => handleBuy(item)} activeOpacity={0.8}>
+                <TouchableOpacity
+                  style={styles.cartBtn}
+                  onPress={() => Linking.openURL('https://dezik.com.ua')}
+                  activeOpacity={0.8}
+                >
                   <ShoppingCart size={16} color={COLORS.white} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
             </View>
           </View>
         )}
+        ListEmptyComponent={
+          <View style={styles.empty}>
+            <Text style={styles.emptyText}>Товарів не знайдено</Text>
+          </View>
+        }
       />
     </SafeAreaView>
   );
@@ -160,10 +217,25 @@ const styles = StyleSheet.create({
     height: CARD_WIDTH * 0.85,
     backgroundColor: COLORS.cardBg,
   },
+  placeholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   productInfo: { padding: 10, flex: 1, justifyContent: 'space-between' },
-  productCategory: { fontSize: 10, fontWeight: '600', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.4 },
+  productCategory: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
   productName: { fontSize: 13, fontWeight: '600', color: COLORS.text, marginTop: 4, lineHeight: 17 },
-  productBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
+  productBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
   productPrice: { fontSize: 14, fontWeight: '700', color: COLORS.brand },
   cartBtn: {
     width: 32,
@@ -173,4 +245,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  empty: { alignItems: 'center', paddingTop: 40 },
+  emptyText: { fontSize: 15, color: COLORS.textSecondary },
 });
