@@ -167,11 +167,6 @@ export default function CycleScreen() {
   };
 
   const finishCycle = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user?.id) {
-      Alert.alert('Помилка', 'Сесія закінчилась. Перезайдіть у додаток.');
-      return;
-    }
     if (selectedInstruments.length === 0) {
       Alert.alert('Помилка', 'Оберіть хоча б один інструмент.');
       return;
