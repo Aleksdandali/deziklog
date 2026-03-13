@@ -138,48 +138,78 @@ export async function deleteSterilizer(id: string) {
   if (error) throw error;
 }
 
-// ── Sterilization Cycles ──────────────────────────────────
+// ── Sterilization Sessions ────────────────────────────────
 
-export async function getCycles(): Promise<SterilizationCycle[]> {
-  const { data, error } = await supabase
-    .from('sterilization_cycles')
-    .select('*, photos:cycle_photos(*)')
+export interface SterilizationSession {
+  id: string;
+  user_id: string;
+  salon_name: string | null;
+  sterilizer_id: string | null;
+  sterilizer_name: string;
+  instrument_names: string;
+  packet_type: string;
+  temperature: number | null;
+  duration_minutes: number | null;
+  started_at: string | null;
+  ended_at: string | null;
+  photo_before_path: string | null;
+  photo_after_path: string | null;
+  result: 'success' | 'fail' | null;
+  status: 'draft' | 'in_progress' | 'completed' | 'failed' | 'canceled';
+  created_at: string;
+}
+
+export async function getSessions(status?: string): Promise<SterilizationSession[]> {
+  let query = supabase
+    .from('sterilization_sessions')
+    .select('*')
     .order('created_at', { ascending: false });
+  if (status) query = query.eq('status', status);
+  const { data, error } = await query;
   if (error) throw error;
   return data ?? [];
 }
 
-export async function addCycle(userId: string, cycle: {
-  instrument_name: string;
-  sterilizer_name: string;
-  packet_type: string;
-  temperature?: number;
-  duration_minutes?: number;
-  started_at: string;
-  result?: string;
-  notes?: string;
-  instrument_id?: string;
+export async function createSession(userId: string, session: {
+  salon_name?: string;
   sterilizer_id?: string;
-}): Promise<SterilizationCycle> {
+  sterilizer_name: string;
+  instrument_names: string;
+  packet_type: string;
+  temperature: number;
+  duration_minutes: number;
+}): Promise<SterilizationSession> {
   const { data, error } = await supabase
-    .from('sterilization_cycles')
-    .insert({ user_id: userId, ...cycle })
+    .from('sterilization_sessions')
+    .insert({ user_id: userId, status: 'draft', ...session })
     .select()
     .single();
   if (error) throw error;
   return data;
 }
 
-// ── Cycle Photos ──────────────────────────────────────────
+export async function updateSession(
+  sessionId: string,
+  updates: Partial<Pick<SterilizationSession, 'status' | 'started_at' | 'ended_at' | 'photo_before_path' | 'photo_after_path' | 'result'>>,
+): Promise<SterilizationSession> {
+  const { data, error } = await supabase
+    .from('sterilization_sessions')
+    .update(updates)
+    .eq('id', sessionId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
 
-export async function uploadCyclePhoto(
+export async function uploadSessionPhoto(
   userId: string,
-  cycleId: string,
+  sessionId: string,
   type: 'before' | 'after',
   uri: string,
-): Promise<CyclePhoto> {
-  const ext = uri.split('.').pop() || 'jpg';
-  const fileName = `${userId}/${cycleId}/${type}_${Date.now()}.${ext}`;
+): Promise<string> {
+  const ext = uri.split('.').pop()?.split('?')[0] || 'jpg';
+  const fileName = `${userId}/${sessionId}/${type}.${ext}`;
 
   const response = await fetch(uri);
   const blob = await response.blob();
@@ -192,14 +222,7 @@ export async function uploadCyclePhoto(
       upsert: true,
     });
   if (uploadError) throw uploadError;
-
-  const { data: photoRow, error: insertError } = await supabase
-    .from('cycle_photos')
-    .insert({ cycle_id: cycleId, type, storage_path: fileName })
-    .select()
-    .single();
-  if (insertError) throw insertError;
-  return photoRow;
+  return fileName;
 }
 
 export function getPhotoUrl(storagePath: string): string {

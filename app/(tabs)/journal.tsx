@@ -7,24 +7,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../_layout';
 import { COLORS } from '../../lib/constants';
 import { generateJournalPDF } from '../../lib/pdf-export';
-import { getProfile } from '../../lib/api';
-
-interface CyclePhoto { id: string; type: string; storage_path: string; }
-interface CycleRow {
-  id: string;
-  instrument_name: string;
-  sterilizer_name: string;
-  packet_type: string;
-  duration_minutes: number | null;
-  result: string | null;
-  created_at: string;
-  cycle_photos: CyclePhoto[];
-}
-
-function getPhotoUrl(storagePath: string): string {
-  const { data } = supabase.storage.from('cycle-photos').getPublicUrl(storagePath);
-  return data.publicUrl;
-}
+import { getProfile, getPhotoUrl, type SterilizationSession } from '../../lib/api';
 
 function formatDuration(minutes: number | null): string {
   if (!minutes) return '--';
@@ -46,12 +29,12 @@ function formatTimeShort(iso: string): string {
   } catch { return ''; }
 }
 
-function groupByDate(cycles: CycleRow[]): { date: string; data: CycleRow[] }[] {
-  const map = new Map<string, CycleRow[]>();
-  for (const c of cycles) {
-    const key = new Date(c.created_at).toDateString();
+function groupByDate(sessions: SterilizationSession[]): { date: string; data: SterilizationSession[] }[] {
+  const map = new Map<string, SterilizationSession[]>();
+  for (const s of sessions) {
+    const key = new Date(s.created_at).toDateString();
     if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(c);
+    map.get(key)!.push(s);
   }
   return Array.from(map.entries()).map(([_, data]) => ({
     date: formatDateGroup(data[0].created_at),
@@ -62,20 +45,30 @@ function groupByDate(cycles: CycleRow[]): { date: string; data: CycleRow[] }[] {
 export default function JournalScreen() {
   const { session } = useAuth();
   const userId = session?.user?.id;
-  const [cycles, setCycles] = useState<CycleRow[]>([]);
+  const [sessions, setSessions] = useState<SterilizationSession[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'passed' | 'failed'>('all');
+  const [filter, setFilter] = useState<'all' | 'success' | 'fail'>('all');
 
   const handleExportPDF = async () => {
-    if (cycles.length === 0) {
+    if (sessions.length === 0) {
       Alert.alert('Немає записів', 'Додайте хоча б один цикл стерилізації.');
       return;
     }
     setExporting(true);
     try {
       const profile = userId ? await getProfile(userId) : null;
-      const uri = await generateJournalPDF(cycles, profile?.salon_name ?? undefined);
+      const pdfData = sessions.map((s) => ({
+        id: s.id,
+        instrument_name: s.instrument_names,
+        sterilizer_name: s.sterilizer_name,
+        packet_type: s.packet_type,
+        duration_minutes: s.duration_minutes,
+        result: s.result === 'success' ? 'passed' : 'failed',
+        created_at: s.created_at,
+        cycle_photos: [],
+      }));
+      const uri = await generateJournalPDF(pdfData, profile?.salon_name ?? undefined);
       await Sharing.shareAsync(uri, {
         mimeType: 'application/pdf',
         dialogTitle: 'Журнал стерилізації',
@@ -93,20 +86,21 @@ export default function JournalScreen() {
     if (!userId) return;
     (async () => {
       const { data, error } = await supabase
-        .from('sterilization_cycles')
-        .select('*, cycle_photos(*)')
+        .from('sterilization_sessions')
+        .select('*')
         .eq('user_id', userId)
+        .in('status', ['completed', 'failed'])
         .order('created_at', { ascending: false });
 
       if (error) console.error('Journal error:', error.message);
-      setCycles(data ?? []);
+      setSessions(data ?? []);
     })();
   }, [userId]));
 
-  const filteredCycles = filter === 'all'
-    ? cycles
-    : cycles.filter(c => c.result === filter);
-  const groups = groupByDate(filteredCycles);
+  const filteredSessions = filter === 'all'
+    ? sessions
+    : sessions.filter((s) => s.result === filter);
+  const groups = groupByDate(filteredSessions);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -115,7 +109,7 @@ export default function JournalScreen() {
           <Text style={styles.title}>Журнал</Text>
           <Text style={styles.subtitle}>Контроль стерилізації</Text>
         </View>
-        {cycles.length > 0 && (
+        {sessions.length > 0 && (
           <TouchableOpacity
             style={styles.exportBtn}
             onPress={handleExportPDF}
@@ -127,17 +121,17 @@ export default function JournalScreen() {
         )}
       </View>
 
-      {cycles.length > 0 && (
+      {sessions.length > 0 && (
         <View style={styles.filterRow}>
-          {[
+          {([
             { key: 'all', label: 'Всі' },
-            { key: 'passed', label: 'Пройдено' },
-            { key: 'failed', label: 'Не пройдено' },
-          ].map(({ key, label }) => (
+            { key: 'success', label: 'Пройдено' },
+            { key: 'fail', label: 'Не пройдено' },
+          ] as const).map(({ key, label }) => (
             <TouchableOpacity
               key={key}
               style={[styles.filterChip, filter === key && styles.filterChipActive]}
-              onPress={() => setFilter(key as any)}
+              onPress={() => setFilter(key)}
               activeOpacity={0.8}
             >
               <Text style={[styles.filterChipText, filter === key && styles.filterChipTextActive]}>
@@ -161,19 +155,16 @@ export default function JournalScreen() {
           renderItem={({ item: group }) => (
             <View>
               <Text style={styles.dateHeader}>{group.date}</Text>
-              {group.data.map((cycle) => {
-                const expanded = expandedId === cycle.id;
-                const passed = cycle.result === 'passed';
-                const photos = cycle.cycle_photos ?? [];
-                const photoBefore = photos.find((p) => p.type === 'before');
-                const photoAfter = photos.find((p) => p.type === 'after');
+              {group.data.map((sess) => {
+                const expanded = expandedId === sess.id;
+                const passed = sess.result === 'success';
 
                 return (
                   <TouchableOpacity
-                    key={cycle.id}
+                    key={sess.id}
                     style={styles.card}
                     activeOpacity={0.8}
-                    onPress={() => setExpandedId(expanded ? null : cycle.id)}
+                    onPress={() => setExpandedId(expanded ? null : sess.id)}
                   >
                     <View style={styles.cardRow}>
                       <View style={styles.cardLeft}>
@@ -184,34 +175,35 @@ export default function JournalScreen() {
                         />
                         <View style={{ flex: 1 }}>
                           <Text style={styles.cardInstruments} numberOfLines={expanded ? undefined : 1}>
-                            {cycle.instrument_name}
+                            {sess.instrument_names}
                           </Text>
                           <Text style={styles.cardMeta}>
-                            {cycle.packet_type} · {cycle.sterilizer_name}
+                            {sess.packet_type} · {sess.sterilizer_name}
+                            {sess.temperature ? ` · ${sess.temperature}°C` : ''}
                           </Text>
                         </View>
                       </View>
                       <View style={styles.cardRight}>
-                        <Text style={styles.cardTime}>{formatDuration(cycle.duration_minutes)}</Text>
-                        <Text style={styles.cardDate}>{formatTimeShort(cycle.created_at)}</Text>
+                        <Text style={styles.cardTime}>{formatDuration(sess.duration_minutes)}</Text>
+                        <Text style={styles.cardDate}>{formatTimeShort(sess.created_at)}</Text>
                       </View>
                     </View>
 
                     {expanded && (
                       <View style={styles.photos}>
-                        {photoBefore ? (
+                        {sess.photo_before_path ? (
                           <View style={styles.photoWrap}>
-                            <Image source={{ uri: getPhotoUrl(photoBefore.storage_path) }} style={styles.photo} />
+                            <Image source={{ uri: getPhotoUrl(sess.photo_before_path) }} style={styles.photo} />
                             <Text style={styles.photoLabel}>До</Text>
                           </View>
                         ) : null}
-                        {photoAfter ? (
+                        {sess.photo_after_path ? (
                           <View style={styles.photoWrap}>
-                            <Image source={{ uri: getPhotoUrl(photoAfter.storage_path) }} style={styles.photo} />
+                            <Image source={{ uri: getPhotoUrl(sess.photo_after_path) }} style={styles.photo} />
                             <Text style={styles.photoLabel}>Після</Text>
                           </View>
                         ) : null}
-                        {!photoBefore && !photoAfter && (
+                        {!sess.photo_before_path && !sess.photo_after_path && (
                           <View style={styles.noPhotos}>
                             <Feather name="camera-off" size={18} color={COLORS.textSecondary} />
                             <Text style={styles.noPhotosText}>Фото відсутні</Text>
@@ -232,14 +224,14 @@ export default function JournalScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  header: { 
-    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, 
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' 
+  header: {
+    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
   },
-  exportBtn: { 
-    width: 40, height: 40, borderRadius: 12, 
-    backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.border, 
-    alignItems: 'center', justifyContent: 'center' 
+  exportBtn: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.border,
+    alignItems: 'center', justifyContent: 'center',
   },
   title: { fontSize: 26, fontWeight: '800', color: COLORS.text },
   subtitle: { fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },

@@ -3,21 +3,12 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, SafeAreaView } fr
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../_layout';
 import { COLORS } from '../../lib/constants';
-
-interface CycleRow {
-  id: string;
-  instrument_name: string;
-  sterilizer_name: string;
-  packet_type: string;
-  duration_minutes: number | null;
-  result: string | null;
-  created_at: string;
-}
+import type { SterilizationSession } from '../../lib/api';
 
 function formatDuration(minutes: number | null): string {
   if (!minutes) return '--';
@@ -38,7 +29,7 @@ export default function HomeScreen() {
   const { session } = useAuth();
   const userId = session?.user?.id;
 
-  const [cycles, setCycles] = useState<CycleRow[]>([]);
+  const [sessions, setSessions] = useState<SterilizationSession[]>([]);
   const [solutionCount, setSolutionCount] = useState(0);
   const [instrumentCount, setInstrumentCount] = useState(0);
   const [solutions, setSolutions] = useState<any[]>([]);
@@ -50,11 +41,12 @@ export default function HomeScreen() {
       startOfMonth.setDate(1);
       startOfMonth.setHours(0, 0, 0, 0);
 
-      const [cycleRes, solRes, instrRes] = await Promise.all([
+      const [sessRes, solRes, instrRes] = await Promise.all([
         supabase
-          .from('sterilization_cycles')
+          .from('sterilization_sessions')
           .select('*')
           .eq('user_id', userId)
+          .eq('status', 'completed')
           .gte('created_at', startOfMonth.toISOString())
           .order('created_at', { ascending: false }),
         supabase
@@ -67,11 +59,11 @@ export default function HomeScreen() {
           .eq('user_id', userId),
       ]);
 
-      if (cycleRes.error) console.error('Cycles error:', cycleRes.error.message);
+      if (sessRes.error) console.error('Sessions error:', sessRes.error.message);
       if (solRes.error) console.error('Solutions error:', solRes.error.message);
       if (instrRes.error) console.error('Instruments error:', instrRes.error.message);
 
-      setCycles(cycleRes.data ?? []);
+      setSessions(sessRes.data ?? []);
       setSolutionCount(solRes.count ?? 0);
       setInstrumentCount(instrRes.count ?? 0);
 
@@ -87,8 +79,8 @@ export default function HomeScreen() {
 
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
-  const todayCycles = cycles.filter(c => new Date(c.created_at) >= startOfDay);
-  const monthCycles = cycles;
+  const todaySessions = sessions.filter((s) => new Date(s.created_at) >= startOfDay);
+  const monthSessions = sessions;
 
   return (
     <View style={styles.container}>
@@ -100,8 +92,8 @@ export default function HomeScreen() {
               <Text style={styles.heroSubtitle}>Журнал стерилізації</Text>
 
               <View style={styles.counters}>
-                <CounterBox icon={<Feather name="clipboard" size={18} color={COLORS.white} />} value={todayCycles.length} label="Сьогодні" />
-                <CounterBox icon={<Feather name="calendar" size={18} color={COLORS.white} />} value={monthCycles.length} label="Цей місяць" />
+                <CounterBox icon={<Feather name="clipboard" size={18} color={COLORS.white} />} value={todaySessions.length} label="Сьогодні" />
+                <CounterBox icon={<Feather name="calendar" size={18} color={COLORS.white} />} value={monthSessions.length} label="Цей місяць" />
                 <CounterBox icon={<Ionicons name="water-outline" size={18} color={COLORS.white} />} value={solutionCount} label="Розчинів" />
               </View>
             </View>
@@ -133,13 +125,13 @@ export default function HomeScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.onboardTitle}>Додайте інструменти</Text>
-                <Text style={styles.onboardText}>Вкажіть, які інструменти ви стерилізуєте — вони з'являться у wizard</Text>
+                <Text style={styles.onboardText}>Вкажіть, які інструменти ви стерилізуєте</Text>
               </View>
               <Feather name="chevron-right" size={18} color={COLORS.textSecondary} />
             </TouchableOpacity>
           )}
 
-          {instrumentCount > 0 && cycles.length === 0 && (
+          {instrumentCount > 0 && sessions.length === 0 && (
             <View style={styles.onboardCard}>
               <View style={styles.onboardIcon}>
                 <Feather name="play-circle" size={24} color={COLORS.success} />
@@ -153,7 +145,7 @@ export default function HomeScreen() {
 
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Останні записи</Text>
-            {cycles.length > 0 && (
+            {sessions.length > 0 && (
               <TouchableOpacity onPress={() => router.push('/(tabs)/journal')} style={styles.seeAll}>
                 <Text style={styles.seeAllText}>Всі</Text>
                 <Feather name="chevron-right" size={14} color={COLORS.brand} />
@@ -161,27 +153,30 @@ export default function HomeScreen() {
             )}
           </View>
 
-          {cycles.length === 0 ? (
+          {sessions.length === 0 ? (
             <View style={styles.emptyCard}>
               <Feather name="clipboard" size={36} color={COLORS.textSecondary} />
               <Text style={styles.emptyTitle}>Записів поки немає</Text>
               <Text style={styles.emptyText}>Розпочніть перший цикл стерилізації</Text>
             </View>
           ) : (
-            cycles.slice(0, 3).map((cycle) => {
-              const passed = cycle.result === 'passed';
+            sessions.slice(0, 3).map((sess) => {
+              const passed = sess.result === 'success';
               return (
-                <View key={cycle.id} style={styles.cycleCard}>
+                <View key={sess.id} style={styles.cycleCard}>
                   <View style={styles.cycleCardLeft}>
                     <View style={[styles.statusDot, { backgroundColor: passed ? COLORS.success : COLORS.danger }]} />
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.cycleInstruments} numberOfLines={1}>{cycle.instrument_name}</Text>
-                      <Text style={styles.cycleMeta}>{cycle.packet_type} · {cycle.sterilizer_name}</Text>
+                      <Text style={styles.cycleInstruments} numberOfLines={1}>{sess.instrument_names}</Text>
+                      <Text style={styles.cycleMeta}>
+                        {sess.packet_type} · {sess.sterilizer_name}
+                        {sess.temperature ? ` · ${sess.temperature}°C` : ''}
+                      </Text>
                     </View>
                   </View>
                   <View style={styles.cycleCardRight}>
-                    <Text style={styles.cycleTime}>{formatDuration(cycle.duration_minutes)}</Text>
-                    <Text style={styles.cycleDate}>{formatDate(cycle.created_at)}</Text>
+                    <Text style={styles.cycleTime}>{formatDuration(sess.duration_minutes)}</Text>
+                    <Text style={styles.cycleDate}>{formatDate(sess.created_at)}</Text>
                   </View>
                 </View>
               );
@@ -264,14 +259,14 @@ const styles = StyleSheet.create({
   cycleCardRight: { alignItems: 'flex-end' },
   cycleTime: { fontSize: 15, fontWeight: '700', color: COLORS.text, fontVariant: ['tabular-nums'] },
   cycleDate: { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
-  onboardCard: { 
+  onboardCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: COLORS.white, borderRadius: 14, borderWidth: 1, 
-    borderColor: COLORS.border, padding: 16, marginBottom: 12 
+    backgroundColor: COLORS.white, borderRadius: 14, borderWidth: 1,
+    borderColor: COLORS.border, padding: 16, marginBottom: 12,
   },
-  onboardIcon: { 
-    width: 48, height: 48, borderRadius: 12, backgroundColor: COLORS.cardBg, 
-    alignItems: 'center', justifyContent: 'center' 
+  onboardIcon: {
+    width: 48, height: 48, borderRadius: 12, backgroundColor: COLORS.cardBg,
+    alignItems: 'center', justifyContent: 'center',
   },
   onboardTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text, marginBottom: 2 },
   onboardText: { fontSize: 13, color: COLORS.textSecondary, lineHeight: 18 },
