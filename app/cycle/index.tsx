@@ -71,7 +71,6 @@ export default function CycleScreen() {
       setInstruments(instrRes.data ?? []);
       setSterilizers(sterRes.data ?? []);
     })();
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [userId]);
 
   useEffect(() => {
