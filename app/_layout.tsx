@@ -1,4 +1,4 @@
-import { useEffect, useState, createContext, useContext } from 'react';
+import { useEffect, useState, useCallback, createContext, useContext } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
@@ -6,6 +6,7 @@ import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { CartProvider } from '../lib/cart-context';
 import { requestNotificationPermissions } from '../lib/notifications';
+import OnboardingScreen from './onboarding';
 
 type AuthContextType = { session: Session | null };
 export const AuthContext = createContext<AuthContextType>({ session: null });
@@ -14,6 +15,7 @@ export const useAuth = () => useContext(AuthContext);
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -25,9 +27,29 @@ export default function RootLayout() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (!session) setProfileComplete(null);
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setProfileComplete(null);
+      return;
+    }
+    (async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('id', session.user.id)
+        .single();
+      setProfileComplete(!!data?.name);
+    })();
+  }, [session?.user?.id]);
+
+  const handleOnboardingComplete = useCallback(() => {
+    setProfileComplete(true);
   }, []);
 
   if (loading) {
@@ -38,12 +60,21 @@ export default function RootLayout() {
     );
   }
 
+  if (session && profileComplete === false) {
+    return (
+      <AuthContext.Provider value={{ session }}>
+        <StatusBar style="dark" />
+        <OnboardingScreen onComplete={handleOnboardingComplete} />
+      </AuthContext.Provider>
+    );
+  }
+
   return (
     <AuthContext.Provider value={{ session }}>
       <CartProvider>
         <StatusBar style="dark" />
         <Stack screenOptions={{ headerShown: false }}>
-          {session ? (
+          {session && profileComplete ? (
             <>
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="cycle/index" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />

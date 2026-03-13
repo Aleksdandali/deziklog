@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  SafeAreaView, KeyboardAvoidingView, Platform, Alert, ActivityIndicator,
+  SafeAreaView, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { COLORS } from '../lib/constants';
 
@@ -11,18 +12,30 @@ export default function AuthScreen() {
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [salonName, setSalonName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [city, setCity] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async () => {
-    const trimmedEmail = email.trim();
-    const trimmedPassword = password.trim();
-
-    if (!trimmedEmail || !trimmedPassword) {
-      Alert.alert('Помилка', 'Введіть email та пароль');
-      return;
+  const validate = (): string | null => {
+    if (isRegister) {
+      if (!name.trim()) return "Введіть ваше ім'я";
+      if (!salonName.trim()) return 'Введіть назву салону';
+      if (!phone.trim()) return 'Введіть телефон';
+      if (!city.trim()) return 'Введіть місто';
     }
-    if (trimmedPassword.length < 6) {
-      Alert.alert('Помилка', 'Пароль має містити щонайменше 6 символів');
+    if (!email.trim()) return 'Введіть email';
+    if (!/\S+@\S+\.\S+/.test(email.trim())) return 'Невірний формат email';
+    if (!password.trim()) return 'Введіть пароль';
+    if (password.trim().length < 6) return 'Пароль має містити щонайменше 6 символів';
+    return null;
+  };
+
+  const handleSubmit = async () => {
+    const errorMsg = validate();
+    if (errorMsg) {
+      Alert.alert('Помилка', errorMsg);
       return;
     }
 
@@ -30,24 +43,30 @@ export default function AuthScreen() {
     try {
       if (isRegister) {
         const { data, error } = await supabase.auth.signUp({
-          email: trimmedEmail,
-          password: trimmedPassword,
+          email: email.trim(),
+          password: password.trim(),
+          options: {
+            data: {
+              name: name.trim(),
+              salon_name: salonName.trim(),
+              phone: phone.trim(),
+              city: city.trim(),
+            },
+          },
         });
         if (error) throw error;
 
-        if (data.session) {
-          // auto-confirmed, session set automatically via onAuthStateChange
-        } else {
+        if (!data.session) {
           Alert.alert(
             'Перевірте пошту',
-            'Ми надіслали лист для підтвердження на ' + trimmedEmail,
+            'Ми надіслали лист для підтвердження на ' + email.trim(),
             [{ text: 'OK', onPress: () => setIsRegister(false) }],
           );
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
-          email: trimmedEmail,
-          password: trimmedPassword,
+          email: email.trim(),
+          password: password.trim(),
         });
         if (error) throw error;
       }
@@ -65,8 +84,11 @@ export default function AuthScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}
       >
-        <View style={styles.content}>
-          {/* Logo */}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.logoBlock}>
             <LinearGradient
               colors={[COLORS.brand, COLORS.brandDark]}
@@ -78,14 +100,78 @@ export default function AuthScreen() {
             <Text style={styles.appDesc}>Журнал стерилізації</Text>
           </View>
 
-          {/* Form */}
           <View style={styles.card}>
             <Text style={styles.formTitle}>
               {isRegister ? 'Реєстрація' : 'Вхід в акаунт'}
             </Text>
 
+            {isRegister && (
+              <>
+                <View style={styles.inputGroup}>
+                  <View style={styles.labelRow}>
+                    <Feather name="user" size={14} color={COLORS.textSecondary} />
+                    <Text style={styles.inputLabel}>Ваше ім'я</Text>
+                  </View>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Олена Коваленко"
+                    placeholderTextColor="#A0A4B8"
+                    value={name}
+                    onChangeText={setName}
+                    autoCapitalize="words"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <View style={styles.labelRow}>
+                    <Ionicons name="business-outline" size={14} color={COLORS.textSecondary} />
+                    <Text style={styles.inputLabel}>Назва салону</Text>
+                  </View>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Beauty Studio"
+                    placeholderTextColor="#A0A4B8"
+                    value={salonName}
+                    onChangeText={setSalonName}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <View style={styles.labelRow}>
+                    <Feather name="phone" size={14} color={COLORS.textSecondary} />
+                    <Text style={styles.inputLabel}>Телефон</Text>
+                  </View>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="+380 XX XXX XX XX"
+                    placeholderTextColor="#A0A4B8"
+                    value={phone}
+                    onChangeText={setPhone}
+                    keyboardType="phone-pad"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <View style={styles.labelRow}>
+                    <Feather name="map-pin" size={14} color={COLORS.textSecondary} />
+                    <Text style={styles.inputLabel}>Місто</Text>
+                  </View>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Одеса"
+                    placeholderTextColor="#A0A4B8"
+                    value={city}
+                    onChangeText={setCity}
+                  />
+                </View>
+              </>
+            )}
+
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Email</Text>
+              <View style={styles.labelRow}>
+                <Feather name="mail" size={14} color={COLORS.textSecondary} />
+                <Text style={styles.inputLabel}>Email</Text>
+              </View>
               <TextInput
                 style={styles.input}
                 placeholder="your@email.com"
@@ -100,7 +186,10 @@ export default function AuthScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Пароль</Text>
+              <View style={styles.labelRow}>
+                <Feather name="lock" size={14} color={COLORS.textSecondary} />
+                <Text style={styles.inputLabel}>Пароль</Text>
+              </View>
               <TextInput
                 style={styles.input}
                 placeholder="Мінімум 6 символів"
@@ -147,7 +236,7 @@ export default function AuthScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -156,98 +245,45 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
   flex: { flex: 1 },
-  content: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+  scrollContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 24 },
 
-  logoBlock: { alignItems: 'center', marginBottom: 36 },
+  logoBlock: { alignItems: 'center', marginBottom: 28 },
   logoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 14,
-    shadowColor: COLORS.brand,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 10,
+    width: 72, height: 72, borderRadius: 36,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 12,
+    shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35, shadowRadius: 20, elevation: 10,
   },
-  logoLetter: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  appName: {
-    fontSize: 30,
-    fontWeight: '800',
-    color: '#1B1B1B',
-    letterSpacing: -0.5,
-  },
-  appDesc: {
-    fontSize: 15,
-    color: '#6B7280',
-    marginTop: 4,
-  },
+  logoLetter: { fontSize: 32, fontWeight: '800', color: '#FFFFFF' },
+  appName: { fontSize: 28, fontWeight: '800', color: '#1B1B1B', letterSpacing: -0.5 },
+  appDesc: { fontSize: 14, color: '#6B7280', marginTop: 3 },
 
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: '#e2e4ed',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    elevation: 4,
+    backgroundColor: '#FFFFFF', borderRadius: 20, padding: 22,
+    borderWidth: 1, borderColor: '#e2e4ed',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06, shadowRadius: 16, elevation: 4,
   },
-  formTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1B1B1B',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
+  formTitle: { fontSize: 20, fontWeight: '700', color: '#1B1B1B', textAlign: 'center', marginBottom: 18 },
 
-  inputGroup: { marginBottom: 16 },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6B7280',
-    marginBottom: 6,
-    marginLeft: 2,
-  },
+  inputGroup: { marginBottom: 14 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 5, marginLeft: 2 },
+  inputLabel: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
   input: {
-    height: 52,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#e2e4ed',
-    backgroundColor: '#f5f6fa',
-    paddingHorizontal: 16,
-    fontSize: 15,
-    color: '#1B1B1B',
+    height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#e2e4ed',
+    backgroundColor: '#f5f6fa', paddingHorizontal: 14, fontSize: 15, color: '#1B1B1B',
   },
 
   submitBtn: { marginTop: 4, borderRadius: 14, overflow: 'hidden' },
   submitBtnDisabled: { opacity: 0.6 },
   submitGradient: {
-    height: 54,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: COLORS.brand,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 8,
+    height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
+    shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35, shadowRadius: 16, elevation: 8,
   },
-  submitText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
+  submitText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
 
-  toggleBtn: { alignItems: 'center', marginTop: 20 },
+  toggleBtn: { alignItems: 'center', marginTop: 18 },
   toggleText: { fontSize: 14, color: '#6B7280' },
   toggleLink: { color: COLORS.brand, fontWeight: '600' },
 });

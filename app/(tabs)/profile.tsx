@@ -132,6 +132,7 @@ export default function ProfileScreen() {
                 <Text style={styles.profileName}>{profile?.name || "Ваше ім'я"}</Text>
                 {profile?.salon_name ? <Text style={styles.profileSalon}>{profile.salon_name}</Text> : null}
                 <View style={styles.profileDetails}>
+                  {session?.user?.email ? (<View style={styles.detailRow}><Feather name="mail" size={12} color={COLORS.textSecondary} /><Text style={styles.detailText}>{session.user.email}</Text></View>) : null}
                   {profile?.phone ? (<View style={styles.detailRow}><Feather name="phone" size={12} color={COLORS.textSecondary} /><Text style={styles.detailText}>{profile.phone}</Text></View>) : null}
                   {profile?.city ? (<View style={styles.detailRow}><Feather name="map-pin" size={12} color={COLORS.textSecondary} /><Text style={styles.detailText}>{profile.city}</Text></View>) : null}
                 </View>
