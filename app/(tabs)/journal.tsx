@@ -74,7 +74,7 @@ export default function JournalScreen() {
     }
     setExporting(true);
     try {
-      const profile = await getProfile();
+      const profile = userId ? await getProfile(userId) : null;
       const uri = await generateJournalPDF(cycles, profile?.salon_name ?? undefined);
       await Sharing.shareAsync(uri, {
         mimeType: 'application/pdf',

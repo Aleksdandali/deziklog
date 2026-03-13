@@ -60,13 +60,11 @@ export default function CycleScreen() {
   const dotScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    if (!userId) return;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user?.id) return;
-      const user = session.user;
       const [instrRes, sterRes] = await Promise.all([
-        supabase.from('instruments').select('*').eq('user_id', user.id),
-        supabase.from('sterilizers').select('*').eq('user_id', user.id),
+        supabase.from('instruments').select('*').eq('user_id', userId),
+        supabase.from('sterilizers').select('*').eq('user_id', userId),
       ]);
       if (instrRes.error) console.error('Load instruments error:', instrRes.error.message);
       if (sterRes.error) console.error('Load sterilizers error:', sterRes.error.message);
@@ -74,7 +72,7 @@ export default function CycleScreen() {
       setSterilizers(sterRes.data ?? []);
     })();
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     if (step !== 3 || !timerStartedAt) return;
@@ -190,7 +188,12 @@ export default function CycleScreen() {
     try {
       const durationMinutes = Math.ceil(savedDuration / 60);
 
-      const cycle = await addCycle({
+      if (!userId) {
+        Alert.alert('Помилка', 'Не вдалось визначити користувача. Перезайдіть у додаток.');
+        return;
+      }
+
+      const cycle = await addCycle(userId, {
         instrument_name: selectedInstruments.join(', '),
         sterilizer_name: sterilizerName.trim(),
         packet_type: packType,
@@ -204,7 +207,7 @@ export default function CycleScreen() {
 
       if (photoBefore) {
         try {
-          await uploadCyclePhoto(cycle.id, 'before', photoBefore);
+          await uploadCyclePhoto(userId, cycle.id, 'before', photoBefore);
         } catch (e: any) {
           photoErrors.push('Фото ДО не завантажено');
           console.error('Upload before error:', e.message);
@@ -213,7 +216,7 @@ export default function CycleScreen() {
 
       if (photoAfter) {
         try {
-          await uploadCyclePhoto(cycle.id, 'after', photoAfter);
+          await uploadCyclePhoto(userId, cycle.id, 'after', photoAfter);
         } catch (e: any) {
           photoErrors.push('Фото ПІСЛЯ не завантажено');
           console.error('Upload after error:', e.message);
