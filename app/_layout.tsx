@@ -5,7 +5,6 @@ import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { CartProvider } from '../lib/cart-context';
-import { requestNotificationPermissions } from '../lib/notifications';
 import OnboardingScreen from './onboarding';
 
 type AuthContextType = { session: Session | null };
@@ -18,16 +17,17 @@ export default function RootLayout() {
   const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      if (!s) setLoading(false);
     });
 
-    requestNotificationPermissions();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (!session) setProfileComplete(null);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+      if (!s) {
+        setProfileComplete(null);
+        setLoading(false);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -36,15 +36,33 @@ export default function RootLayout() {
   useEffect(() => {
     if (!session?.user?.id) {
       setProfileComplete(null);
+      setLoading(false);
       return;
     }
+    
+    setLoading(true);
     (async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('name')
-        .eq('id', session.user.id)
-        .single();
-      setProfileComplete(!!data?.name);
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('name, salon_name')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        
+        if (error) {
+          console.error('Profile check error:', error.message);
+          setProfileComplete(false);
+        } else if (!data || !data.name || !data.name.trim()) {
+          setProfileComplete(false);
+        } else {
+          setProfileComplete(true);
+        }
+      } catch (e) {
+        console.error('Profile check exception:', e);
+        setProfileComplete(false);
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [session?.user?.id]);
 
@@ -60,7 +78,18 @@ export default function RootLayout() {
     );
   }
 
-  if (session && profileComplete === false) {
+  if (!session) {
+    return (
+      <AuthContext.Provider value={{ session }}>
+        <StatusBar style="dark" />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="auth" />
+        </Stack>
+      </AuthContext.Provider>
+    );
+  }
+
+  if (profileComplete === false) {
     return (
       <AuthContext.Provider value={{ session }}>
         <StatusBar style="dark" />
@@ -74,20 +103,14 @@ export default function RootLayout() {
       <CartProvider>
         <StatusBar style="dark" />
         <Stack screenOptions={{ headerShown: false }}>
-          {session && profileComplete ? (
-            <>
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="cycle/index" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-              <Stack.Screen name="solution/add" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-              <Stack.Screen name="cabinet/sterilizers" options={{ presentation: 'modal' }} />
-              <Stack.Screen name="cabinet/instruments" options={{ presentation: 'modal' }} />
-              <Stack.Screen name="product/[id]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-              <Stack.Screen name="cart" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-              <Stack.Screen name="legal/privacy" />
-            </>
-          ) : (
-            <Stack.Screen name="auth" />
-          )}
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="cycle/index" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="solution/add" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="cabinet/sterilizers" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="cabinet/instruments" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="product/[id]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="cart" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="legal/privacy" />
         </Stack>
       </CartProvider>
     </AuthContext.Provider>
