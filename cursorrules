@@ -1,0 +1,60 @@
+# Dezik Log — Cursor Rules
+
+## Проєкт
+Мобільний додаток для журналу стерилізації інструментів. React Native / Expo SDK 55 / TypeScript / Expo Router.
+
+## Кольори (ОБОВ'ЯЗКОВО використовувати тільки ці)
+- #4b569e — brand основний
+- #363f75 — темний акцент, градієнти
+- #eceef5 — світлий фон карток
+- #FFFFFF — фон
+- #1B1B1B — текст
+- #6B7280 — вторинний текст
+- #43A047 — зелений (успіх)
+- #E53935 — червоний (помилка)
+- #F9A825 — жовтий (попередження)
+
+## Supabase
+URL: https://csshbetufyocutdislkn.supabase.co
+Клієнт: lib/supabase.ts (вже створено)
+
+### Таблиці БД (всі створені, RLS увімкнено):
+- profiles — id (FK auth.users), name, salon_name, phone, city, avatar_url
+- instruments — id, user_id, name
+- sterilizers — id, user_id, name, type (dry_heat|autoclave), brand
+- sterilization_cycles — id, user_id, instrument_id, sterilizer_id, instrument_name, sterilizer_name, packet_type (kraft|transparent|white), temperature, duration_minutes, started_at, result (success|fail), notes
+- cycle_photos — id, cycle_id, type (before|after), storage_path
+- product_categories — id, name, sort_order
+- products — id, category_id, name, description, price, volume, image_path, in_stock, shelf_life_days, sort_order
+- solutions — id, user_id, product_id, name, opened_at, expires_at, status (active|expiring|expired)
+- orders — id, user_id, status (pending|paid|shipped|delivered|cancelled), total_amount, order_reference, wayforpay_response (JSONB), delivery_address, phone, notes
+- order_items — id, order_id, product_id, quantity, price_at_order
+
+### Storage бакети:
+- cycle-photos (приватний) — шлях: {user_id}/{cycle_id}/before.jpg
+- product-images (публічний)
+
+### Критичні правила:
+- sterilization_cycles та cycle_photos — ІММУТАБЕЛЬНІ (тригер, UPDATE заборонено)
+- Товари (43 шт) вже в products з image_path = прямий URL на dezik.com.ua
+- Не додавати кнопок редагування/видалення в журналі
+
+## Навігація (5 табів)
+1. Головна — dashboard, статистика, останні записи
+2. Журнал — список стерилізацій, ТІЛЬКИ перегляд
+3. Товари — каталог з Supabase, кошик
+4. Розчини — трекінг активних розчинів
+5. Кабінет — профіль, інструменти, стерилізатори
+
+## Wizard Новий цикл — 5 кроків:
+1. Упаковка — інструмент + тип пакета + стерилізатор
+2. Параметри — температура, час
+3. Фото ДО — камера
+4. Фото ПІСЛЯ — камера
+5. Підтвердження — результат → зберегти
+
+## Стиль коду
+- TypeScript strict
+- Функціональні компоненти з hooks
+- Expo Router для навігації
+- Мова інтерфейсу: українська

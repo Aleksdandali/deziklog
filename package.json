@@ -1,0 +1,53 @@
+{
+  "name": "dezik-log",
+  "main": "expo-router/entry",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "test": "jest --verbose",
+    "test:watch": "jest --watch"
+  },
+  "dependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-navigation/native": "^7.1.28",
+    "@supabase/supabase-js": "^2.99.1",
+    "expo": "~55.0.5",
+    "expo-camera": "~55.0.9",
+    "expo-constants": "~55.0.7",
+    "expo-font": "~55.0.4",
+    "expo-haptics": "~55.0.8",
+    "expo-image": "^55.0.6",
+    "expo-image-picker": "~55.0.11",
+    "expo-linear-gradient": "~55.0.8",
+    "expo-linking": "~55.0.7",
+    "expo-notifications": "~55.0.11",
+    "expo-print": "~55.0.8",
+    "expo-router": "~55.0.4",
+    "expo-sharing": "~55.0.11",
+    "expo-splash-screen": "~55.0.10",
+    "expo-status-bar": "~55.0.4",
+    "lucide-react-native": "^0.577.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "0.83.2",
+    "react-native-reanimated": "~4.2.1",
+    "react-native-safe-area-context": "~5.6.2",
+    "react-native-screens": "~4.23.0",
+    "react-native-svg": "^15.15.3",
+    "react-native-web": "~0.21.0",
+    "react-native-worklets": "~0.7.0"
+  },
+  "devDependencies": {
+    "@swc/core": "^1.15.18",
+    "@swc/jest": "^0.2.39",
+    "@types/jest": "^30.0.0",
+    "@types/react": "~19.2.2",
+    "jest": "^30.3.0",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}
