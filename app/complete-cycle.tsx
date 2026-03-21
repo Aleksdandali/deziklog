@@ -11,6 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import ReAnimated, { FadeIn } from 'react-native-reanimated';
 import { updateSession, uploadSessionPhoto } from '../lib/api';
 import { useSessionGuard } from '../lib/auth-context';
+import { notifyCycleDone } from '../lib/notifications';
 import { COLORS } from '../lib/constants';
 import { RADII } from '../lib/theme';
 import { getDurationStatus } from '../lib/steri-config';
@@ -48,12 +49,15 @@ export default function CompleteCycleScreen() {
     (async () => {
       const stored = await AsyncStorage.getItem(ACTIVE_TIMER_KEY);
       if (stored) {
-        const data: TimerData = JSON.parse(stored);
-        setTimerData(data);
-        if (data.photoBeforeUri) setPhotoBeforeUri(data.photoBeforeUri);
-        // Calculate actual elapsed time
-        const elapsedMs = Date.now() - data.startedAt;
-        setActualMinutes(Math.round(elapsedMs / 60000));
+        try {
+          const data: TimerData = JSON.parse(stored);
+          setTimerData(data);
+          if (data.photoBeforeUri) setPhotoBeforeUri(data.photoBeforeUri);
+          const elapsedMs = Date.now() - data.startedAt;
+          setActualMinutes(Math.round(elapsedMs / 60000));
+        } catch {
+          await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
+        }
       }
     })();
   }, []);
@@ -64,6 +68,10 @@ export default function CompleteCycleScreen() {
     : null;
   const isSufficient = durationStatus === 'sufficient';
 
+  // Block "success" if cycle lasted less than 60 minutes
+  const MIN_CYCLE_MINUTES = 60;
+  const canMarkSuccess = actualMinutes === null || actualMinutes >= MIN_CYCLE_MINUTES;
+
   const handleUploadAndConfirm = async () => {
     if (!photoAfter) { Alert.alert('Зробіть фото індикатора ПІСЛЯ'); return; }
     if (!selectedResult) { Alert.alert('Оберіть результат'); return; }
@@ -73,7 +81,17 @@ export default function CompleteCycleScreen() {
     const nowMs = Date.now();
     const finalActualMinutes = timerData ? Math.round((nowMs - timerData.startedAt) / 60000) : null;
 
-    // Warn if cycle was too short
+    // Hard block: cannot mark success if < 60 min
+    if (selectedResult === 'success' && finalActualMinutes !== null && finalActualMinutes < MIN_CYCLE_MINUTES) {
+      Alert.alert(
+        'Недостатній час',
+        `Мінімальний час стерилізації — ${MIN_CYCLE_MINUTES} хв. Пройшло лише ${finalActualMinutes} хв.\n\nНеможливо зберегти як успішну.`,
+      );
+      setSelectedResult(null);
+      return;
+    }
+
+    // Warn if cycle was too short (but still > 60 min)
     if (finalActualMinutes !== null && recommendedMinutes > 0 && finalActualMinutes < recommendedMinutes) {
       return new Promise<void>((resolve) => {
         Alert.alert(
@@ -116,6 +134,10 @@ export default function CompleteCycleScreen() {
       await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
       if (finalActualMinutes !== null) setActualMinutes(finalActualMinutes);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Local push notification (checks user preference, fire-and-forget)
+      if (timerData?.instruments) {
+        notifyCycleDone(uid, timerData.instruments).catch(() => {});
+      }
       setDone(true);
     } catch (err: any) {
       Alert.alert('Помилка', err.message || 'Не вдалось зберегти');
@@ -274,19 +296,54 @@ export default function CompleteCycleScreen() {
             </View>
           )}
 
+          {/* Minimum time info */}
+          {!canMarkSuccess && (
+            <View style={s.infoBanner}>
+              <View style={s.infoBannerIcon}>
+                <Feather name="info" size={16} color={COLORS.brand} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.infoBannerTitle}>Мінімальний час стерилізації — {MIN_CYCLE_MINUTES} хв</Text>
+                <Text style={s.infoBannerText}>
+                  Для сухожарової стерилізації при 180°C потрібно щонайменше 60 хвилин. Пройшло лише {actualMinutes} хв — позначити як успішну неможливо.
+                </Text>
+              </View>
+            </View>
+          )}
+
           {/* Result selection */}
           <Text style={[s.fieldLabel, { marginTop: 20 }]}>Чи змінився індикатор?</Text>
 
           <TouchableOpacity
-            style={[s.resultOption, selectedResult === 'success' && s.resultSuccess]}
-            onPress={() => setSelectedResult('success')}
+            style={[
+              s.resultOption,
+              selectedResult === 'success' && s.resultSuccess,
+              !canMarkSuccess && { opacity: 0.4 },
+            ]}
+            onPress={() => {
+              if (!canMarkSuccess) {
+                Alert.alert(
+                  'Недостатній час',
+                  `Мінімальний час стерилізації — ${MIN_CYCLE_MINUTES} хв. Пройшло лише ${actualMinutes} хв.\n\nНеможливо позначити як успішну.`,
+                );
+                return;
+              }
+              setSelectedResult('success');
+            }}
             activeOpacity={0.8}
           >
             <Feather name="check-circle" size={22} color={selectedResult === 'success' ? COLORS.success : COLORS.textSecondary} />
             <View style={{ flex: 1 }}>
               <Text style={[s.resultTitle, selectedResult === 'success' && { color: COLORS.success }]}>Так, змінився</Text>
-              <Text style={s.resultDesc}>Стерилізація пройшла успішно</Text>
+              <Text style={s.resultDesc}>
+                {canMarkSuccess
+                  ? 'Стерилізація пройшла успішно'
+                  : `Мінімум ${MIN_CYCLE_MINUTES} хв для підтвердження`}
+              </Text>
             </View>
+            {!canMarkSuccess && (
+              <Feather name="lock" size={16} color={COLORS.textTertiary} />
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -342,6 +399,12 @@ const s = StyleSheet.create({
   // Warning
   warningBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: COLORS.warningBg, borderRadius: RADII.md, marginBottom: 16 },
   warningText: { fontSize: 13, fontWeight: '500', color: COLORS.warning, flex: 1, lineHeight: 18 },
+
+  // Info banner (min cycle time)
+  infoBanner: { flexDirection: 'row', gap: 12, padding: 14, backgroundColor: COLORS.brandLight, borderRadius: RADII.lg, marginTop: 16, borderWidth: 1, borderColor: COLORS.brand + '25' },
+  infoBannerIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: COLORS.brand + '15', alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  infoBannerTitle: { fontSize: 14, fontWeight: '700', color: COLORS.brand },
+  infoBannerText: { fontSize: 13, color: COLORS.textSecondary, marginTop: 3, lineHeight: 18 },
 
   photoPlaceholder: { height: 180, borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: COLORS.border, backgroundColor: COLORS.bg, alignItems: 'center', justifyContent: 'center', gap: 6 },
   photoPlaceholderTitle: { fontSize: 15, fontWeight: '600', color: COLORS.brand },

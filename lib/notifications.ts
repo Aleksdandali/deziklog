@@ -1,4 +1,7 @@
+import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
+import { supabase } from './supabase';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -9,6 +12,8 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
+
+// ── Permission & Push Token ─────────────────────────────
 
 export async function requestNotificationPermissions(): Promise<boolean> {
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -21,6 +26,53 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 
   return finalStatus === 'granted';
 }
+
+/**
+ * Register for push notifications and save the Expo Push Token to profiles.
+ * Safe to call multiple times — only updates DB if token changed.
+ */
+export async function registerPushToken(userId: string): Promise<string | null> {
+  try {
+    const granted = await requestNotificationPermissions();
+    if (!granted) {
+      if (__DEV__) console.log('[Push] Permission not granted');
+      return null;
+    }
+
+    // Android needs a notification channel
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#4b569e',
+      });
+    }
+
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    if (!projectId) {
+      if (__DEV__) console.log('[Push] No EAS projectId found');
+      return null;
+    }
+
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+    const token = tokenData.data;
+
+    // Save to Supabase (only if changed)
+    await supabase
+      .from('profiles')
+      .update({ expo_push_token: token })
+      .eq('id', userId);
+
+    if (__DEV__) console.log('[Push] Token registered:', token.slice(0, 20) + '...');
+    return token;
+  } catch (err) {
+    if (__DEV__) console.log('[Push] Registration failed:', err);
+    return null;
+  }
+}
+
+// ── Solution reminders (local) ──────────────────────────
 
 export async function scheduleSolutionReminder(
   solutionId: string,
@@ -67,25 +119,43 @@ export async function cancelSolutionNotifications(solutionId: string): Promise<v
   await Notifications.cancelScheduledNotificationAsync(`solution-${solutionId}-expired`).catch(() => {});
 }
 
-// ── Cycle notifications ─────────────────────────────────
+// ── Cycle notifications (local) ─────────────────────────
 
-/** Show local notification when cycle completes (if user has notification_cycle_done enabled) */
-export async function notifyCycleDone(instruments: string): Promise<void> {
-  // TODO: Check profile.notification_cycle_done before calling
+/** Show local notification when cycle completes. Checks notification_cycle_done flag. */
+export async function notifyCycleDone(userId: string, instruments: string): Promise<void> {
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('notification_cycle_done')
+      .eq('id', userId)
+      .maybeSingle();
+    if (data?.notification_cycle_done === false) return;
+  } catch {}
+
   await Notifications.scheduleNotificationAsync({
     identifier: `cycle-done-${Date.now()}`,
     content: {
-      title: 'Цикл завершено ✅',
-      body: `Стерилізація завершена: ${instruments}. Зробіть фото ПІСЛЯ.`,
+      title: 'Цикл завершено',
+      body: `Стерилізація завершена: ${instruments}.`,
       sound: true,
     },
-    trigger: null, // immediate
+    trigger: null,
   });
 }
 
-/** Show local notification when order status changes (if user has notification_order_status enabled) */
-export async function notifyOrderStatusChange(orderId: string, newStatus: string): Promise<void> {
-  // TODO: Check profile.notification_order_status before calling
+// ── Order status notification (local fallback) ──────────
+
+/** Show local notification when order status changes. Checks notification_order_status flag. */
+export async function notifyOrderStatusChange(userId: string, orderId: string, newStatus: string): Promise<void> {
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('notification_order_status')
+      .eq('id', userId)
+      .maybeSingle();
+    if (data?.notification_order_status === false) return;
+  } catch {}
+
   const statusLabels: Record<string, string> = {
     confirmed: 'підтверджено',
     canceled: 'скасовано',

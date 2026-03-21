@@ -197,7 +197,8 @@ export async function uploadSessionPhoto(
   type: 'before' | 'after',
   uri: string,
 ): Promise<string> {
-  const ext = uri.split('.').pop()?.split('?')[0] || 'jpg';
+  const rawExt = (uri.split('.').pop()?.split('?')[0] || 'jpg').toLowerCase();
+  const ext = ['jpg', 'jpeg', 'png', 'webp', 'heic'].includes(rawExt) ? rawExt : 'jpg';
   const fileName = `${userId}/${sessionId}/${type}.${ext}`;
 
   const response = await fetch(uri);
@@ -350,7 +351,7 @@ async function syncOrderToKeyCRM(orderId: string) {
 export async function getOrders(userId: string) {
   const { data, error } = await supabase
     .from('orders')
-    .select('*')
+    .select('*, order_items(*)')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
   if (error) throw error;

@@ -55,6 +55,13 @@
           "photosPermission": "Дозвольте доступ до фото для фотографування індикаторів стерилізації.",
           "cameraPermission": "Дозвольте доступ до камери для фотографування індикаторів стерилізації."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#4b569e"
+        }
       ]
     ],
     "experiments": {

@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { useEffect, useRef } from 'react';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Notifications from 'expo-notifications';
 import {
   useFonts,
   Inter_400Regular,
@@ -18,10 +19,15 @@ import OnboardingScreen from './onboarding';
 import AnimatedSplash from '../components/AnimatedSplash';
 import { COLORS } from '../lib/constants';
 
+// Import to initialize notification handler (side effect)
+import '../lib/notifications';
+
 SplashScreen.preventAutoHideAsync();
 
 function RootNavigator() {
   const { session, status, profileComplete, setProfileComplete } = useAuth();
+  const router = useRouter();
+  const notifResponseListener = useRef<ReturnType<typeof Notifications.addNotificationResponseReceivedListener>>();
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -35,6 +41,25 @@ function RootNavigator() {
       SplashScreen.hideAsync();
     }
   }, [status, fontsLoaded]);
+
+  // Handle notification taps — navigate to relevant screen
+  useEffect(() => {
+    notifResponseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as Record<string, string> | undefined;
+      if (!data?.screen) return;
+      try {
+        if (data.screen === 'order' && data.orderId) {
+          router.push(`/order/${data.orderId}` as any);
+        } else if (data.screen === 'journal') {
+          router.push('/(tabs)/journal' as any);
+        }
+      } catch {}
+    });
+
+    return () => {
+      notifResponseListener.current?.remove();
+    };
+  }, []);
 
   if (status === 'loading' || !fontsLoaded) {
     return <AnimatedSplash />;

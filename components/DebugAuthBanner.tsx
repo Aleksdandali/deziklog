@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useAuth } from '../lib/auth-context';
 
-const SHOW_DEBUG = process.env.EXPO_PUBLIC_DEBUG_AUTH === '1';
+const SHOW_DEBUG = __DEV__ && process.env.EXPO_PUBLIC_DEBUG_AUTH === '1';
 
 export default function DebugAuthBanner() {
   const { session, status, profileComplete } = useAuth();

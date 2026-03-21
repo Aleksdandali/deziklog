@@ -50,21 +50,9 @@ export default function AuthScreen() {
     setLoading(true);
     try {
       if (isRegister) {
-        if (__DEV__) console.log('[Auth Screen] signUp start:', email.trim());
-
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password: password.trim(),
-        });
-
-        if (__DEV__) console.log('[Auth Screen] signUp result:', {
-          error: error?.message ?? null,
-          hasSession: !!data?.session,
-          hasUser: !!data?.user,
-          userId: data?.user?.id?.slice(0, 8),
-          identities: data?.user?.identities?.length,
-          emailConfirmed: data?.user?.email_confirmed_at ?? 'not confirmed',
-          accessToken: data?.session?.access_token ? 'present' : 'missing',
         });
 
         if (error) throw error;
@@ -81,32 +69,18 @@ export default function AuthScreen() {
         }
 
         if (!data.session) {
-          // Email confirmation is ON — show check-email screen
-          if (__DEV__) console.log('[Auth Screen] No session after signUp — showing confirmation screen');
           setShowConfirmation(true);
-        } else {
-          // Confirmation OFF — session exists, onAuthStateChange will pick it up
-          if (__DEV__) console.log('[Auth Screen] Session received — waiting for onAuthStateChange');
         }
       } else {
-        if (__DEV__) console.log('[Auth Screen] signIn start:', email.trim());
-
         const { data, error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password: password.trim(),
-        });
-
-        if (__DEV__) console.log('[Auth Screen] signIn result:', {
-          error: error?.message ?? null,
-          hasSession: !!data?.session,
-          userId: data?.user?.id?.slice(0, 8),
         });
 
         if (error) throw error;
         // onAuthStateChange in AuthProvider handles navigation
       }
     } catch (err: any) {
-      if (__DEV__) console.error('[Auth Screen] Error:', err?.message, err);
       const msg = localizeError(err?.message || 'Щось пішло не так');
       Alert.alert('Помилка', msg);
     } finally {

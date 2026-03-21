@@ -7,6 +7,7 @@ import * as Haptics from 'expo-haptics';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Circle as SvgCircle } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
 import { updateSession } from '../lib/api';
 import { useSessionGuard } from '../lib/auth-context';
 import { COLORS } from '../lib/constants';
@@ -46,9 +47,13 @@ export default function TimerScreen() {
     (async () => {
       const stored = await AsyncStorage.getItem(ACTIVE_TIMER_KEY);
       if (stored) {
-        const data: TimerData = JSON.parse(stored);
-        setTimerData(data);
-        setElapsed(Math.floor((Date.now() - data.startedAt) / 1000));
+        try {
+          const data: TimerData = JSON.parse(stored);
+          setTimerData(data);
+          setElapsed(Math.floor((Date.now() - data.startedAt) / 1000));
+        } catch {
+          await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
+        }
       } else if (params.sessionId && params.duration) {
         const data: TimerData = {
           sessionId: params.sessionId,
@@ -80,9 +85,18 @@ export default function TimerScreen() {
       if (newElapsed > 0 && newElapsed % 60 === 0) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
-      // Haptic when recommended time reached
+      // Haptic + local notification when recommended time reached
       if (newElapsed === recommendedSeconds && recommendedSeconds > 0) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Notifications.scheduleNotificationAsync({
+          identifier: `timer-done-${timerData.sessionId}`,
+          content: {
+            title: 'Час стерилізації досягнуто',
+            body: 'Мінімальний час пройшов. Можна завершувати цикл.',
+            sound: true,
+          },
+          trigger: null,
+        }).catch(() => {});
       }
     }, 1000);
 

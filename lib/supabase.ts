@@ -8,7 +8,6 @@ const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 if (__DEV__) {
   if (!supabaseUrl) console.error('[Supabase] EXPO_PUBLIC_SUPABASE_URL is missing! Check .env file.');
   if (!supabaseAnonKey) console.error('[Supabase] EXPO_PUBLIC_SUPABASE_ANON_KEY is missing! Check .env file.');
-  if (supabaseUrl) console.log('[Supabase] URL:', supabaseUrl);
 }
 
 export const supabase = createClient(supabaseUrl ?? '', supabaseAnonKey ?? '', {

@@ -11,6 +11,7 @@ import * as Sharing from 'expo-sharing';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth-context';
 import { getProfile, getOrders, type SterilizationSession } from '../../lib/api';
+import type { OrderItem } from '../../lib/types';
 import { generateJournalPDF } from '../../lib/pdf-export';
 import { getCached, setCache } from '../../lib/cache';
 import { COLORS } from '../../lib/constants';
@@ -79,7 +80,7 @@ export default function ProfileScreen() {
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState('');
 
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<(Order & { order_items?: OrderItem[] })[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
 
   const applyProfile = (p: ProfileData) => {
@@ -204,6 +205,62 @@ export default function ProfileScreen() {
     ]);
   };
 
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Видалити акаунт?',
+      'Всі ваші дані (журнал, замовлення, профіль) будуть видалені назавжди. Цю дію неможливо скасувати.',
+      [
+        { text: 'Скасувати', style: 'cancel' },
+        {
+          text: 'Видалити назавжди',
+          style: 'destructive',
+          onPress: () => {
+            // Double confirmation
+            Alert.alert(
+              'Ви впевнені?',
+              'Натисніть "Так, видалити" щоб остаточно видалити акаунт та всі дані.',
+              [
+                { text: 'Ні', style: 'cancel' },
+                {
+                  text: 'Так, видалити',
+                  style: 'destructive',
+                  onPress: doDeleteAccount,
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  };
+
+  const doDeleteAccount = async () => {
+    if (!userId) return;
+    setDeleting(true);
+    try {
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      if (!currentSession?.access_token) {
+        Alert.alert('Помилка', 'Сесія закінчилась. Увійдіть знову.');
+        setDeleting(false);
+        return;
+      }
+
+      const resp = await supabase.functions.invoke('delete-account', {
+        headers: { Authorization: `Bearer ${currentSession.access_token}` },
+      });
+
+      if (resp.error) throw new Error(resp.error.message);
+
+      await supabase.auth.signOut();
+    } catch (err: any) {
+      Alert.alert('Помилка', err.message || 'Не вдалось видалити акаунт');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const initial = profile?.name ? profile.name.charAt(0).toUpperCase() : '?';
   const displayName = [profile?.name, profile?.last_name].filter(Boolean).join(' ') || '—';
 
@@ -306,6 +363,10 @@ export default function ProfileScreen() {
           <View style={s.section}>
             {orders.map((o) => {
               const st = STATUS_LABELS[o.status] ?? STATUS_LABELS.pending;
+              const items = o.order_items ?? [];
+              const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
+              const itemNames = items.slice(0, 2).map((i) => i.product_name);
+              const moreCount = items.length - 2;
               return (
                 <TouchableOpacity
                   key={o.id}
@@ -313,26 +374,66 @@ export default function ProfileScreen() {
                   activeOpacity={0.7}
                   onPress={() => router.push(`/order/${o.id}` as any)}
                 >
-                  <View style={s.orderLeft}>
-                    <View style={[s.orderStatusDot, { backgroundColor: st.bg }]}>
-                      <Feather name={st.icon as any} size={14} color={st.color} />
-                    </View>
-                  </View>
-                  <View style={s.orderCenter}>
-                    <View style={s.orderTopRow}>
-                      <Text style={s.orderDate}>{formatOrderDate(o.created_at)}</Text>
-                      <View style={[s.orderBadge, { backgroundColor: st.bg }]}>
-                        <Text style={[s.orderBadgeText, { color: st.color }]}>{st.label}</Text>
+                  {/* Top row: date + status */}
+                  <View style={s.orderTopRow}>
+                    <View style={s.orderDateRow}>
+                      <View style={[s.orderStatusDot, { backgroundColor: st.bg }]}>
+                        <Feather name={st.icon as any} size={12} color={st.color} />
                       </View>
+                      <Text style={s.orderDate}>{formatOrderDate(o.created_at)}</Text>
                     </View>
+                    <View style={[s.orderBadge, { backgroundColor: st.bg }]}>
+                      <Text style={[s.orderBadgeText, { color: st.color }]}>{st.label}</Text>
+                    </View>
+                  </View>
+
+                  {/* Item names */}
+                  {itemNames.length > 0 && (
+                    <View style={s.orderItemsList}>
+                      {itemNames.map((name, idx) => (
+                        <Text key={idx} style={s.orderItemName} numberOfLines={1}>
+                          {name}
+                        </Text>
+                      ))}
+                      {moreCount > 0 && (
+                        <Text style={s.orderMoreItems}>+ ще {moreCount} поз.</Text>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Bottom row: amount + meta */}
+                  <View style={s.orderBottomRow}>
                     <Text style={s.orderAmount}>{formatPrice(o.total_amount)}</Text>
-                    {o.city_name && (
+                    <View style={s.orderMeta}>
+                      {totalItems > 0 && (
+                        <View style={s.orderMetaChip}>
+                          <Feather name="package" size={11} color={COLORS.textTertiary} />
+                          <Text style={s.orderMetaText}>{totalItems} шт</Text>
+                        </View>
+                      )}
+                      {o.np_ttn && (
+                        <View style={s.orderMetaChip}>
+                          <Feather name="truck" size={11} color={COLORS.textTertiary} />
+                          <Text style={s.orderMetaText}>ТТН</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* City + chevron */}
+                  {o.city_name && (
+                    <View style={s.orderFooter}>
+                      <Feather name="map-pin" size={11} color={COLORS.textTertiary} />
                       <Text style={s.orderCity} numberOfLines={1}>{o.city_name}</Text>
-                    )}
-                  </View>
-                  <View style={s.orderChevron}>
-                    <Feather name="chevron-right" size={16} color={COLORS.textTertiary} />
-                  </View>
+                      <Feather name="chevron-right" size={14} color={COLORS.textTertiary} />
+                    </View>
+                  )}
+                  {!o.city_name && (
+                    <View style={s.orderFooter}>
+                      <View style={{ flex: 1 }} />
+                      <Feather name="chevron-right" size={14} color={COLORS.textTertiary} />
+                    </View>
+                  )}
                 </TouchableOpacity>
               );
             })}
@@ -400,6 +501,23 @@ export default function ProfileScreen() {
         <TouchableOpacity style={s.logoutBtn} onPress={handleSignOut} activeOpacity={0.7}>
           <Feather name="log-out" size={16} color={COLORS.danger} />
           <Text style={s.logoutText}>Вийти з акаунту</Text>
+        </TouchableOpacity>
+
+        {/* ── Delete account (Apple requirement) ── */}
+        <TouchableOpacity
+          style={s.deleteBtn}
+          onPress={handleDeleteAccount}
+          activeOpacity={0.7}
+          disabled={deleting}
+        >
+          {deleting ? (
+            <ActivityIndicator color={COLORS.textTertiary} size="small" />
+          ) : (
+            <>
+              <Feather name="trash-2" size={14} color={COLORS.textTertiary} />
+              <Text style={s.deleteText}>Видалити акаунт</Text>
+            </>
+          )}
         </TouchableOpacity>
 
         <Text style={s.versionText}>Dezik v1.0</Text>
@@ -611,24 +729,37 @@ const s = StyleSheet.create({
 
   // Orders
   orderCard: {
-    flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, borderRadius: 16,
     borderWidth: 1, borderColor: COLORS.border,
-    padding: 14, gap: 12,
+    padding: 16, gap: 10,
   },
-  orderLeft: {},
+  orderTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  orderDateRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   orderStatusDot: {
-    width: 36, height: 36, borderRadius: 12,
+    width: 28, height: 28, borderRadius: 8,
     alignItems: 'center', justifyContent: 'center',
   },
-  orderCenter: { flex: 1 },
-  orderTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   orderDate: { fontSize: 14, fontWeight: '600', color: COLORS.text },
   orderBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: RADII.pill },
   orderBadgeText: { fontSize: 11, fontWeight: '700' },
-  orderAmount: { fontSize: 17, fontWeight: '800', color: COLORS.text, marginTop: 4 },
-  orderCity: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
-  orderChevron: { paddingLeft: 4 },
+  orderItemsList: { gap: 2, paddingLeft: 36 },
+  orderItemName: { fontSize: 13, color: COLORS.textSecondary },
+  orderMoreItems: { fontSize: 12, color: COLORS.textTertiary, fontStyle: 'italic' },
+  orderBottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingLeft: 36 },
+  orderAmount: { fontSize: 18, fontWeight: '800', color: COLORS.text },
+  orderMeta: { flexDirection: 'row', gap: 8 },
+  orderMetaChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: COLORS.cardBg, paddingHorizontal: 7, paddingVertical: 3,
+    borderRadius: 6,
+  },
+  orderMetaText: { fontSize: 11, color: COLORS.textTertiary, fontWeight: '500' },
+  orderFooter: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingTop: 6, borderTopWidth: 1, borderTopColor: COLORS.borderLight,
+    paddingLeft: 36,
+  },
+  orderCity: { fontSize: 12, color: COLORS.textTertiary, flex: 1 },
 
   // Empty
   emptyBlock: { paddingHorizontal: 24, paddingVertical: 32, alignItems: 'center', gap: 8 },
@@ -673,6 +804,13 @@ const s = StyleSheet.create({
     backgroundColor: COLORS.dangerBg, borderRadius: 14,
   },
   logoutText: { fontSize: 14, fontWeight: '600', color: COLORS.danger },
+
+  // Delete account
+  deleteBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 14, marginTop: 8, marginHorizontal: 20,
+  },
+  deleteText: { fontSize: 13, color: COLORS.textTertiary },
 
   // Version
   versionText: { textAlign: 'center', fontSize: 12, color: COLORS.textTertiary, marginTop: 16 },

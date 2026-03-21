@@ -3,11 +3,13 @@ export type UserRole = 'owner' | 'staff';
 export interface Profile {
   id: string;
   name: string | null;
+  last_name: string | null;
   salon_name: string | null;
   phone: string | null;
   city: string | null;
   avatar_url: string | null;
   role: UserRole;
+  expo_push_token: string | null;
   notification_cycle_done: boolean;
   notification_cycle_idle: boolean;
   notification_order_status: boolean;

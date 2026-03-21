@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, createContext, useContext, useRef } f
 import { AppState, AppStateStatus, Alert } from 'react-native';
 import { Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { registerPushToken } from './notifications';
 
 // ── Types ─────────────────────────────────────────────────
 type AuthStatus = 'loading' | 'authed' | 'guest';
@@ -159,6 +160,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } finally {
         setStatus('authed');
         authLog('status → authed', { profileComplete });
+        // Register push token (fire-and-forget, never blocks auth)
+        registerPushToken(session.user.id).catch(() => {});
       }
     })();
   }, [session?.user?.id]);
