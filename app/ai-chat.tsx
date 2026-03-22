@@ -204,30 +204,40 @@ export default function AIChatScreen() {
     try {
       const history = messages.map((m) => ({ role: m.role, content: m.content }));
 
-      const { data, error } = await supabase.functions.invoke('ai-assistant', {
-        body: { message: msg, history },
+      // Use fetch directly to avoid supabase.functions.invoke throwing on non-2xx
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/ai-assistant`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ message: msg, history }),
       });
 
-      if (error) throw error;
-
-      // Handle edge function returning error in body
-      if (data?.error) throw new Error(data.error);
+      const data = await res.json();
+      const replyText = data?.reply ?? data?.error ?? 'Не вдалося отримати відповідь.';
 
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data?.reply ?? 'Не вдалося отримати відповідь.',
+        content: replyText,
         timestamp: new Date().toISOString(),
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (res.ok && !data?.error) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
     } catch (err: any) {
       console.error('[AI Assistant]', err);
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `Вибачте, сталася помилка: ${err?.message || 'спробуйте ще раз'}`,
+        content: `Помилка з'єднання. Перевірте інтернет та спробуйте ще раз.`,
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMsg]);
