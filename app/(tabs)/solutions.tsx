@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { Clock, CheckCircle2, AlertCircle, Plus, Sparkles } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import ReAnimated, { FadeIn } from 'react-native-reanimated';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth-context';
@@ -130,16 +131,11 @@ export default function SolutionsScreen() {
     <SafeAreaView style={s.container}>
       <View style={s.header}>
         <Text style={s.title}>Розчини</Text>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TouchableOpacity style={s.aiBtn} onPress={() => router.push('/ai-chat')} activeOpacity={0.8}>
-            <Sparkles size={18} color={COLORS.brand} strokeWidth={2} />
+        {tab === 'tracker' && (
+          <TouchableOpacity style={s.addBtn} onPress={() => router.push('/solution/add')} activeOpacity={0.8}>
+            <Plus size={20} color="#fff" />
           </TouchableOpacity>
-          {tab === 'tracker' && (
-            <TouchableOpacity style={s.addBtn} onPress={() => router.push('/solution/add')} activeOpacity={0.8}>
-              <Plus size={20} color="#fff" />
-            </TouchableOpacity>
-          )}
-        </View>
+        )}
       </View>
 
       {/* Tabs */}
@@ -364,6 +360,13 @@ export default function SolutionsScreen() {
           </View>
         </ScrollView>
       )}
+      {/* FAB — AI Assistant */}
+      <TouchableOpacity style={s.aiFab} onPress={() => router.push('/ai-chat')} activeOpacity={0.85}>
+        <LinearGradient colors={[COLORS.brand, COLORS.brandDark]} style={s.aiFabGradient}>
+          <Sparkles size={20} color="#fff" strokeWidth={2} />
+          <Text style={s.aiFabText}>AI-асистент</Text>
+        </LinearGradient>
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -375,7 +378,6 @@ const s = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 },
   title: { fontSize: 26, fontWeight: '800', color: COLORS.text },
   addBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center' },
-  aiBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.brandLight, alignItems: 'center', justifyContent: 'center' },
 
   // Tabs
   tabs: { flexDirection: 'row', paddingHorizontal: 24, gap: 6, marginBottom: 12 },
@@ -456,4 +458,9 @@ const s = StyleSheet.create({
   guideDesc: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   guideFooter: { alignItems: 'center', paddingVertical: 20 },
   guideFooterText: { fontSize: 13, color: COLORS.textTertiary },
+
+  // FAB
+  aiFab: { position: 'absolute', bottom: 16, right: 20, borderRadius: 28, shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8 },
+  aiFabGradient: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 14, borderRadius: 28 },
+  aiFabText: { fontSize: 14, fontWeight: '700', color: '#fff' },
 });
