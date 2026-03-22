@@ -341,8 +341,8 @@ export default function SolutionsScreen() {
               <Sparkles size={22} color="#fff" strokeWidth={2} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.aiCardTitle}>AI-Асистент Деланол</Text>
-              <Text style={s.aiCardDesc}>Запитайте про розведення, режими дезінфекції та стерилізації</Text>
+              <Text style={s.aiCardTitle}>AI-Асистент</Text>
+              <Text style={s.aiCardDesc}>Деланол та Біонол форте — розведення, режими, ДСО</Text>
             </View>
             <Feather name="chevron-right" size={16} color="#fff" />
           </TouchableOpacity>

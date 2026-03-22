@@ -27,8 +27,8 @@ interface Message {
 
 const SUGGESTIONS = [
   'Як розвести Деланол для замочування інструментів?',
+  'Як приготувати розчин Біонол форте?',
   'Скільки мл засобу на 1 літр води?',
-  'Як правильно стерилізувати пінцети та ножиці?',
   'Що робити після замочування інструментів?',
 ];
 
@@ -192,9 +192,9 @@ export default function AIChatScreen() {
         </LinearGradient>
       </View>
 
-      <Text style={styles.emptyTitle}>AI-Асистент Деланол</Text>
+      <Text style={styles.emptyTitle}>AI-Асистент</Text>
       <Text style={styles.emptySubtitle}>
-        Підкажу як правильно розвести Деланол, скільки тримати інструменти та які режими використовувати
+        Підкажу як правильно розвести Деланол або Біонол форте, скільки тримати інструменти та які режими використовувати
       </Text>
 
       <View style={styles.suggestionsWrap}>
@@ -233,7 +233,7 @@ export default function AIChatScreen() {
           </View>
           <View>
             <Text style={styles.headerTitle}>AI-Асистент</Text>
-            <Text style={styles.headerSubtitle}>Деланол</Text>
+            <Text style={styles.headerSubtitle}>Деланол · Біонол форте</Text>
           </View>
         </View>
         <TouchableOpacity
