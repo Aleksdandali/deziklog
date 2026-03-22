@@ -6,7 +6,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { Clock, CheckCircle2, AlertCircle, Plus } from 'lucide-react-native';
+import { Clock, CheckCircle2, AlertCircle, Plus, Sparkles } from 'lucide-react-native';
 import ReAnimated, { FadeIn } from 'react-native-reanimated';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth-context';
@@ -130,11 +130,16 @@ export default function SolutionsScreen() {
     <SafeAreaView style={s.container}>
       <View style={s.header}>
         <Text style={s.title}>Розчини</Text>
-        {tab === 'tracker' && (
-          <TouchableOpacity style={s.addBtn} onPress={() => router.push('/solution/add')} activeOpacity={0.8}>
-            <Plus size={20} color="#fff" />
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity style={s.aiBtn} onPress={() => router.push('/ai-chat')} activeOpacity={0.8}>
+            <Sparkles size={18} color={COLORS.brand} strokeWidth={2} />
           </TouchableOpacity>
-        )}
+          {tab === 'tracker' && (
+            <TouchableOpacity style={s.addBtn} onPress={() => router.push('/solution/add')} activeOpacity={0.8}>
+              <Plus size={20} color="#fff" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Tabs */}
@@ -330,6 +335,18 @@ export default function SolutionsScreen() {
       {/* ═══ TAB: Guides ═══ */}
       {tab === 'guides' && (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 32 }}>
+          {/* AI Assistant card */}
+          <TouchableOpacity style={s.aiCard} onPress={() => router.push('/ai-chat')} activeOpacity={0.8}>
+            <View style={s.aiCardIcon}>
+              <Sparkles size={22} color="#fff" strokeWidth={2} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.aiCardTitle}>AI-Асистент Деланол</Text>
+              <Text style={s.aiCardDesc}>Запитайте про розведення, режими дезінфекції та стерилізації</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color="#fff" />
+          </TouchableOpacity>
+
           {GUIDES.map((g) => (
             <TouchableOpacity key={g.id} style={s.guideCard} activeOpacity={0.7}>
               <View style={s.guideIcon}>
@@ -358,6 +375,7 @@ const s = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 },
   title: { fontSize: 26, fontWeight: '800', color: COLORS.text },
   addBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center' },
+  aiBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.brandLight, alignItems: 'center', justifyContent: 'center' },
 
   // Tabs
   tabs: { flexDirection: 'row', paddingHorizontal: 24, gap: 6, marginBottom: 12 },
@@ -424,6 +442,12 @@ const s = StyleSheet.create({
   saveRecipeBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.brand },
   newCalcBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14, marginTop: 4 },
   newCalcBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.textSecondary },
+
+  // AI card
+  aiCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: COLORS.brand, borderRadius: 14, padding: 16, marginBottom: 14 },
+  aiCardIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  aiCardTitle: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  aiCardDesc: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
 
   // Guides
   guideCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: COLORS.white, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, padding: 14, marginBottom: 10 },
