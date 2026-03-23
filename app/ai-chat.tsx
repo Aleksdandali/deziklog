@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { X, Send, Sparkles, Bot, ArrowDown, Plus, Trash2, MessageCircle, ChevronLeft } from 'lucide-react-native';
+import { X, Send, Sparkles, Bot, ArrowDown, Plus, Trash2, MessageCircle, ChevronLeft, Copy, Check } from 'lucide-react-native';
 import ReAnimated, { FadeInDown, FadeIn, FadeInUp } from 'react-native-reanimated';
 import { COLORS } from '../lib/constants';
 import { RADII, SHADOWS } from '../lib/theme';
@@ -77,6 +77,21 @@ export default function AIChatScreen() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [showScrollDown, setShowScrollDown] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const copyToClipboard = async (text: string, id: string) => {
+    try {
+      const Clip = require('expo-clipboard');
+      if (Clip.setStringAsync) {
+        await Clip.setStringAsync(text);
+      }
+    } catch {
+      // expo-clipboard not installed — text is still selectable via long press
+    }
+    setCopiedId(id);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   // Load sessions on mount
   useEffect(() => {
@@ -249,6 +264,7 @@ export default function AIChatScreen() {
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isUser = item.role === 'user';
+    const isCopied = copiedId === item.id;
     return (
       <ReAnimated.View
         entering={FadeInDown.duration(250).delay(30)}
@@ -259,18 +275,40 @@ export default function AIChatScreen() {
             <Bot size={16} color={COLORS.brand} strokeWidth={2} />
           </View>
         )}
-        <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
-          {isUser ? (
-            <LinearGradient
-              colors={[COLORS.brand, COLORS.brandDark]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.bubbleGradient}
+        <View style={{ maxWidth: '100%' }}>
+          <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
+            {isUser ? (
+              <LinearGradient
+                colors={[COLORS.brand, COLORS.brandDark]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.bubbleGradient}
+              >
+                <Text style={styles.msgTextUser} selectable>{item.content}</Text>
+              </LinearGradient>
+            ) : (
+              <Text style={styles.msgTextAssistant} selectable>{item.content}</Text>
+            )}
+          </View>
+          {!isUser && (
+            <TouchableOpacity
+              style={styles.copyBtn}
+              onPress={() => copyToClipboard(item.content, item.id)}
+              activeOpacity={0.6}
+              hitSlop={8}
             >
-              <Text style={styles.msgTextUser}>{item.content}</Text>
-            </LinearGradient>
-          ) : (
-            <Text style={styles.msgTextAssistant}>{item.content}</Text>
+              {isCopied ? (
+                <>
+                  <Check size={12} color={COLORS.success} strokeWidth={2.5} />
+                  <Text style={[styles.copyText, { color: COLORS.success }]}>Скопійовано</Text>
+                </>
+              ) : (
+                <>
+                  <Copy size={12} color={COLORS.textTertiary} strokeWidth={2} />
+                  <Text style={styles.copyText}>Копіювати</Text>
+                </>
+              )}
+            </TouchableOpacity>
           )}
         </View>
       </ReAnimated.View>
@@ -527,6 +565,8 @@ const styles = StyleSheet.create({
   msgTextUser: { fontSize: 14, lineHeight: 21, color: '#fff', fontFamily: 'Inter_400Regular' },
   msgTextAssistant: { fontSize: 14, lineHeight: 21, color: COLORS.text, fontFamily: 'Inter_400Regular' },
   typingBubble: { paddingVertical: 12, paddingHorizontal: 16 },
+  copyBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: 6, paddingLeft: 4 },
+  copyText: { fontSize: 11, color: COLORS.textTertiary, fontFamily: 'Inter_400Regular' },
 
   // Empty state
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, paddingBottom: 40 },

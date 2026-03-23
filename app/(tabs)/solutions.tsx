@@ -364,7 +364,7 @@ export default function SolutionsScreen() {
       <TouchableOpacity style={s.aiFab} onPress={() => router.push('/ai-chat')} activeOpacity={0.85}>
         <LinearGradient colors={[COLORS.brand, COLORS.brandDark]} style={s.aiFabGradient}>
           <Sparkles size={20} color="#fff" strokeWidth={2} />
-          <Text style={s.aiFabText}>AI-асистент</Text>
+          <Text style={s.aiFabText}>AI-асистент по розчинам</Text>
         </LinearGradient>
       </TouchableOpacity>
     </SafeAreaView>
@@ -460,7 +460,7 @@ const s = StyleSheet.create({
   guideFooterText: { fontSize: 13, color: COLORS.textTertiary },
 
   // FAB
-  aiFab: { position: 'absolute', bottom: 16, right: 20, borderRadius: 28, shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8 },
-  aiFabGradient: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 14, borderRadius: 28 },
-  aiFabText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  aiFab: { position: 'absolute', bottom: 20, alignSelf: 'center', left: 24, right: 24, borderRadius: 16, shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 10 },
+  aiFabGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16, borderRadius: 16 },
+  aiFabText: { fontSize: 15, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
 });
