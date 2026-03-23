@@ -10,16 +10,12 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Auth: cron secret or any valid auth header
+    // Auth: ONLY cron secret (no anon/user access)
     const authSecret = req.headers.get("x-cron-secret");
     const expectedSecret = Deno.env.get("CRON_SECRET");
-    const authHeader = req.headers.get("Authorization");
 
-    if (!authSecret && !authHeader) {
-      return jsonRes({ error: "Unauthorized" }, 401);
-    }
-    if (authSecret && expectedSecret && authSecret !== expectedSecret) {
-      return jsonRes({ error: "Invalid secret" }, 403);
+    if (!authSecret || !expectedSecret || authSecret !== expectedSecret) {
+      return jsonRes({ error: "Unauthorized" }, 403);
     }
 
     const adminClient = createClient(
