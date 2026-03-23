@@ -39,12 +39,20 @@ export default function CycleDetailScreen() {
   const [sess, setSess] = useState<SterilizationSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
+  const [photoBeforeUrl, setPhotoBeforeUrl] = useState<string | null>(null);
+  const [photoAfterUrl, setPhotoAfterUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id || !userId) return;
     (async () => {
       const data = await getSessionById(id, userId);
       setSess(data);
+      if (data?.photo_before_path) {
+        setPhotoBeforeUrl(await getPhotoUrl(data.photo_before_path));
+      }
+      if (data?.photo_after_path) {
+        setPhotoAfterUrl(await getPhotoUrl(data.photo_after_path));
+      }
       setLoading(false);
     })();
   }, [id, userId]);
@@ -111,8 +119,7 @@ export default function CycleDetailScreen() {
     );
   }
 
-  const photoBeforeUrl = sess.photo_before_path ? getPhotoUrl(sess.photo_before_path) : null;
-  const photoAfterUrl = sess.photo_after_path ? getPhotoUrl(sess.photo_after_path) : null;
+  // photoBeforeUrl and photoAfterUrl loaded in useEffect above
 
   return (
     <SafeAreaView style={st.container}>

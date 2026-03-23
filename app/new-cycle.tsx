@@ -215,7 +215,7 @@ export default function NewCycleScreen() {
             <Text style={st.readonlyText}>{sterilizerName}</Text>
           </View>
         ) : (
-          <TextInput style={st.input} placeholder="Назва стерилізатора" placeholderTextColor={COLORS.textTertiary} value={sterilizerName} onChangeText={setSterilizerName} />
+          <TextInput style={st.input} placeholder="Назва стерилізатора" placeholderTextColor={COLORS.textTertiary} value={sterilizerName} onChangeText={setSterilizerName} maxLength={100} />
         )}
 
         {/* Employee */}
@@ -246,6 +246,7 @@ export default function NewCycleScreen() {
           multiline
           numberOfLines={2}
           textAlignVertical="top"
+          maxLength={500}
         />
 
         {/* Package type */}
@@ -282,6 +283,7 @@ export default function NewCycleScreen() {
           placeholderTextColor={COLORS.textTertiary}
           value={solutionNote}
           onChangeText={setSolutionNote}
+          maxLength={200}
         />
 
         {/* Photo preview if retaking */}

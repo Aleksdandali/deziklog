@@ -251,9 +251,14 @@ export async function uploadSessionPhoto(
   return fileName;
 }
 
-export function getPhotoUrl(storagePath: string): string {
-  const { data } = supabase.storage.from('cycle-photos').getPublicUrl(storagePath);
-  return data.publicUrl;
+export async function getPhotoUrl(storagePath: string): Promise<string> {
+  const { data, error } = await supabase.storage.from('cycle-photos').createSignedUrl(storagePath, 3600);
+  if (error || !data?.signedUrl) {
+    // Fallback to public URL if signed URL fails
+    const { data: pub } = supabase.storage.from('cycle-photos').getPublicUrl(storagePath);
+    return pub.publicUrl;
+  }
+  return data.signedUrl;
 }
 
 export async function getSessionById(sessionId: string, userId: string): Promise<SterilizationSession | null> {

@@ -72,7 +72,7 @@ export default function EmployeesScreen() {
         <View style={styles.addRow}>
           <View style={styles.inputWrapper}>
             <Feather name="user" size={16} color={COLORS.textSecondary} style={{ marginLeft: 12 }} />
-            <TextInput style={styles.input} value={newName} onChangeText={setNewName} placeholder="Ім'я та прізвище" placeholderTextColor={COLORS.textSecondary} onSubmitEditing={handleAdd} returnKeyType="done" />
+            <TextInput style={styles.input} value={newName} onChangeText={setNewName} placeholder="Ім'я та прізвище" placeholderTextColor={COLORS.textSecondary} onSubmitEditing={handleAdd} returnKeyType="done" maxLength={100} />
           </View>
           <TouchableOpacity style={styles.addBtn} onPress={handleAdd} activeOpacity={0.8} disabled={adding}>
             {adding ? <ActivityIndicator size="small" color={COLORS.white} /> : <Feather name="plus" size={20} color={COLORS.white} />}

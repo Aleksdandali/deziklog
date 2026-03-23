@@ -243,10 +243,10 @@ export default function CartScreen() {
             />
 
             <Text style={s.fieldLabel}>Ім'я *</Text>
-            <TextInput style={s.input} value={firstName} onChangeText={setFirstName} placeholder="Ваше ім'я" placeholderTextColor="#A0A4B8" />
+            <TextInput style={s.input} value={firstName} onChangeText={setFirstName} placeholder="Ваше ім'я" placeholderTextColor="#A0A4B8" maxLength={50} />
 
             <Text style={s.fieldLabel}>Прізвище *</Text>
-            <TextInput style={s.input} value={lastName} onChangeText={setLastName} placeholder="Ваше прізвище" placeholderTextColor="#A0A4B8" />
+            <TextInput style={s.input} value={lastName} onChangeText={setLastName} placeholder="Ваше прізвище" placeholderTextColor="#A0A4B8" maxLength={50} />
 
             {/* Nova Poshta */}
             <Text style={s.sectionLabel}>Доставка Нова Пошта</Text>

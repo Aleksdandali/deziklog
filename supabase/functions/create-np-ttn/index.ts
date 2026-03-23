@@ -50,6 +50,7 @@ Deno.serve(async (req) => {
       .from("orders")
       .select("*")
       .eq("id", order_id)
+      .eq("user_id", user.id)
       .single();
 
     if (orderErr || !order) {
