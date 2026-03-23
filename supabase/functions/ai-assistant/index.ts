@@ -86,6 +86,12 @@ Deno.serve(async (req) => {
     const responseText = await response.text();
 
     if (!response.ok) {
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ reply: "Забагато запитів. Зачекайте хвилину і спробуйте ще раз." }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
       throw new Error(`Claude API ${response.status}: ${responseText.slice(0, 300)}`);
     }
 
