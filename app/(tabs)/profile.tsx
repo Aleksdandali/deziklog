@@ -596,6 +596,19 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {/* ── Staff ── */}
+        <SectionHeader title="Персонал" />
+        <View style={s.section}>
+          <MenuItemFeather
+            icon="users"
+            iconColor="#1B5E20"
+            iconBg="#E8F5E9"
+            label="Співробітники"
+            subtitle="Хто проводить стерилізацію"
+            onPress={() => router.push('/cabinet/employees' as any)}
+          />
+        </View>
+
         {/* ── Equipment ── */}
         <SectionHeader title="Обладнання" />
         <View style={s.section}>
@@ -615,14 +628,11 @@ export default function ProfileScreen() {
             subtitle="Перелік інструментів"
             onPress={() => router.push('/cabinet/instruments' as any)}
           />
-          <MenuItemFeather
-            icon="users"
-            iconColor="#1B5E20"
-            iconBg="#E8F5E9"
-            label="Співробітники"
-            subtitle="Хто проводить стерилізацію"
-            onPress={() => router.push('/cabinet/employees' as any)}
-          />
+        </View>
+
+        {/* ── Data ── */}
+        <SectionHeader title="Дані" />
+        <View style={s.section}>
           <MenuItemFeather
             icon="download"
             iconColor="#E65100"
