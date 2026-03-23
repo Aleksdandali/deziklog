@@ -32,15 +32,20 @@ Deno.serve(async (req) => {
       return jsonRes({ error: "order_id required" }, 400);
     }
 
-    // Auth: user JWT or service-role (for cron retry)
+    // Auth: user JWT or cron secret (for retry)
     let userId: string;
     let userEmail: string | undefined;
 
-    if (body._service_role === true) {
+    const cronSecret = req.headers.get("x-cron-secret");
+    const expectedCronSecret = Deno.env.get("CRON_SECRET");
+    const isCron = cronSecret && expectedCronSecret && cronSecret === expectedCronSecret;
+
+    if (isCron) {
+      // Called from retry-failed-syncs via shared sync-logic
       userId = body.user_id;
       userEmail = body.user_email;
       if (!userId) {
-        return jsonRes({ error: "user_id required for service role calls" }, 400);
+        return jsonRes({ error: "user_id required for cron calls" }, 400);
       }
     } else {
       const supabase = createClient(
@@ -128,7 +133,7 @@ Deno.serve(async (req) => {
       const errMsg = `KeyCRM ${keycrmRes.status}: ${JSON.stringify(keycrmData).slice(0, 500)}`;
       console.error(errMsg);
       await markFailed(adminClient, orderId, errMsg);
-      return jsonRes({ error: "KeyCRM sync failed", details: keycrmData }, 502);
+      return jsonRes({ error: "KeyCRM sync failed" }, 502);
     }
 
     const keycrmOrderId = keycrmData.id;

@@ -10,25 +10,15 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // This function can be called via cron (no auth) or manually (with auth)
-    // For manual calls, optionally verify admin secret
-    const adminSecret = req.headers.get("x-admin-secret");
-    const authHeader = req.headers.get("Authorization");
+    // Auth: ONLY cron secret
+    const cronSecret = req.headers.get("x-cron-secret");
+    const expectedSecret = Deno.env.get("CRON_SECRET");
 
-    // If called with Authorization header, verify user
-    if (authHeader && !adminSecret) {
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } },
-      );
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    if (!cronSecret || !expectedSecret || cronSecret !== expectedSecret) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Use service role to bypass RLS
