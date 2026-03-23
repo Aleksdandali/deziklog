@@ -8,13 +8,18 @@ const KEYCRM_SOURCE_ID = Number(Deno.env.get("KEYCRM_SOURCE_ID") || "10");
 const NP_API_URL = "https://api.novaposhta.ua/v2.0/json/";
 const NP_API_KEY = Deno.env.get("NOVA_POSHTA_API_KEY")!;
 
+/**
+ * Sync a single order to KeyCRM.
+ * Can be called from:
+ * - App (with user JWT auth) after checkout
+ * - retry-failed-syncs cron (with service role, passing user_id in body)
+ */
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    // Verify auth
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "No auth header" }), {
@@ -23,21 +28,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabase = createClient(
+    // Admin client for updates
+    const adminClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const { order_id } = await req.json();
+    const body = await req.json();
+    const { order_id } = body;
     if (!order_id) {
       return new Response(JSON.stringify({ error: "order_id required" }), {
         status: 400,
@@ -45,28 +43,87 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Use service role for updates
-    const adminClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    // Auth: either user JWT or service-role (for cron retry)
+    let userId: string;
+    let userEmail: string | undefined;
+
+    const isServiceRole = body._service_role === true;
+    if (isServiceRole) {
+      // Called from retry cron — user_id passed in body
+      userId = body.user_id;
+      userEmail = body.user_email;
+      if (!userId) {
+        return new Response(JSON.stringify({ error: "user_id required for service role calls" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    } else {
+      // Called from app — verify JWT
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader } } },
+      );
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userId = user.id;
+      userEmail = user.email;
+    }
+
+    // Mark sync in progress
+    await adminClient
+      .from("orders")
+      .update({
+        keycrm_sync_status: "syncing",
+        keycrm_sync_attempts: adminClient.rpc ? undefined : undefined, // incremented below
+      })
+      .eq("id", order_id);
+
+    // Increment attempts
+    await adminClient.rpc("increment_sync_attempts", { oid: order_id }).catch(() => {
+      // Fallback if RPC doesn't exist yet
+      adminClient
+        .from("orders")
+        .update({ keycrm_sync_attempts: 1 })
+        .eq("id", order_id)
+        .eq("keycrm_sync_attempts", 0);
+    });
 
     // 1. Fetch order + items
-    const { data: order, error: orderErr } = await supabase
+    const { data: order, error: orderErr } = await adminClient
       .from("orders")
       .select("*")
       .eq("id", order_id)
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .single();
 
     if (orderErr || !order) {
+      await markFailed(adminClient, order_id, "Order not found");
       return new Response(JSON.stringify({ error: "Order not found" }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { data: items } = await supabase
+    // Already synced? Skip
+    if (order.keycrm_order_id) {
+      await adminClient
+        .from("orders")
+        .update({ keycrm_sync_status: "synced", keycrm_sync_error: null })
+        .eq("id", order_id);
+      return new Response(
+        JSON.stringify({ success: true, keycrm_order_id: order.keycrm_order_id, skipped: true }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const { data: items } = await adminClient
       .from("order_items")
       .select("*")
       .eq("order_id", order_id);
@@ -86,7 +143,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           full_name: buyerName,
           phone: order.phone,
-          email: user.email || undefined,
+          email: userEmail || undefined,
         }),
       });
       const buyerData = await buyerRes.json();
@@ -99,16 +156,16 @@ Deno.serve(async (req) => {
       console.warn("KeyCRM buyer creation failed:", e);
     }
 
-    // 3. Create order in KeyCRM with enhanced shipping
+    // 3. Create order in KeyCRM
     const keycrmPayload: Record<string, any> = {
       source_id: KEYCRM_SOURCE_ID,
       buyer: {
         full_name: buyerName,
         phone: order.phone,
-        email: user.email || undefined,
+        email: userEmail || undefined,
       },
       shipping: {
-        delivery_service_id: 1, // Nova Poshta in KeyCRM
+        delivery_service_id: 1,
         shipping_receive_point: order.warehouse_name || order.delivery_address,
         shipping_address_city: order.city_name || "",
         recipient_full_name: buyerName,
@@ -140,13 +197,12 @@ Deno.serve(async (req) => {
     const keycrmData = await keycrmRes.json();
 
     if (!keycrmRes.ok) {
-      console.error("KeyCRM order error:", keycrmData);
+      const errMsg = JSON.stringify(keycrmData).slice(0, 500);
+      console.error("KeyCRM order error:", errMsg);
+      await markFailed(adminClient, order_id, `KeyCRM ${keycrmRes.status}: ${errMsg}`);
       return new Response(
         JSON.stringify({ error: "KeyCRM sync failed", details: keycrmData }),
-        {
-          status: 502,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -204,7 +260,7 @@ Deno.serve(async (req) => {
           ttn = npData.data[0].IntDocNumber;
           const deliveryCost = npData.data[0].CostOnSite;
 
-          // 5. Update KeyCRM order with tracking number
+          // Update KeyCRM order with tracking number
           try {
             await fetch(`${KEYCRM_API_URL}/order/${keycrmOrderId}`, {
               method: "PUT",
@@ -213,17 +269,12 @@ Deno.serve(async (req) => {
                 "Content-Type": "application/json",
                 Accept: "application/json",
               },
-              body: JSON.stringify({
-                shipping: {
-                  tracking_code: ttn,
-                },
-              }),
+              body: JSON.stringify({ shipping: { tracking_code: ttn } }),
             });
           } catch (e) {
             console.warn("KeyCRM tracking update failed:", e);
           }
 
-          // Update order with TTN + delivery cost
           await adminClient
             .from("orders")
             .update({
@@ -239,10 +290,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 6. Update Supabase order with KeyCRM ID
+    // 5. Mark as synced
     await adminClient
       .from("orders")
-      .update({ keycrm_order_id: keycrmOrderId })
+      .update({
+        keycrm_order_id: keycrmOrderId,
+        keycrm_sync_status: "synced",
+        keycrm_sync_error: null,
+      })
       .eq("id", order_id);
 
     return new Response(
@@ -252,16 +307,36 @@ Deno.serve(async (req) => {
         buyer_id: buyerId || null,
         np_ttn: ttn,
       }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
     console.error("Edge function error:", err);
+
+    // Try to mark order as failed
+    try {
+      const { order_id } = await req.clone().json().catch(() => ({ order_id: null }));
+      if (order_id) {
+        const adminClient = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        );
+        await markFailed(adminClient, order_id, (err as Error).message);
+      }
+    } catch { /* ignore */ }
+
     return new Response(JSON.stringify({ error: "Internal error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
+
+async function markFailed(client: any, orderId: string, error: string) {
+  await client
+    .from("orders")
+    .update({
+      keycrm_sync_status: "failed",
+      keycrm_sync_error: error.slice(0, 1000),
+    })
+    .eq("id", orderId);
+}

@@ -67,32 +67,43 @@ Deno.serve(async (req) => {
 
     messages.push({ role: "user", content: message });
 
-    // Call Claude API
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 512,
-        system: SYSTEM_PROMPT,
-        messages,
-      }),
+    // Call Claude API with retry on 429
+    const apiBody = JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 512,
+      system: SYSTEM_PROMPT,
+      messages,
     });
+    const apiHeaders = {
+      "Content-Type": "application/json",
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+    };
 
-    const responseText = await response.text();
+    let response: Response | null = null;
+    let responseText = "";
 
-    if (!response.ok) {
-      if (response.status === 429) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: apiHeaders,
+        body: apiBody,
+      });
+      responseText = await response.text();
+
+      if (response.status !== 429) break;
+      // Wait before retry: 2s, 4s
+      if (attempt < 2) await new Promise((r) => setTimeout(r, (attempt + 1) * 2000));
+    }
+
+    if (!response!.ok) {
+      if (response!.status === 429) {
         return new Response(
           JSON.stringify({ reply: "Забагато запитів. Зачекайте хвилину і спробуйте ще раз." }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      throw new Error(`Claude API ${response.status}: ${responseText.slice(0, 300)}`);
+      throw new Error(`Claude API ${response!.status}: ${responseText.slice(0, 300)}`);
     }
 
     let data;
