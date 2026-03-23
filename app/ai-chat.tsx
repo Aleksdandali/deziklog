@@ -209,17 +209,26 @@ export default function AIChatScreen() {
       const token = session.data.session?.access_token;
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 
-      const res = await fetch(`${supabaseUrl}/functions/v1/ai-assistant`, {
+      const url = `${supabaseUrl}/functions/v1/ai-assistant`;
+      const res = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
+          'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
         },
         body: JSON.stringify({ message: msg, history }),
       });
 
-      const data = await res.json();
-      const replyText = data?.reply ?? data?.error ?? 'Не вдалося отримати відповідь.';
+      const text = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = null;
+      }
+
+      const replyText = data?.reply || data?.error || data?.message || `[DEBUG] Status: ${res.status}, Body: ${text.slice(0, 200)}`;
 
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
