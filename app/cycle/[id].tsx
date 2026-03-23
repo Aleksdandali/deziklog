@@ -66,6 +66,7 @@ export default function CycleDetailScreen() {
       `Кінець: ${fmt(sess.ended_at, 'time')}`,
       `Тривалість: ${fmtDuration(actual)}${recommended ? ` (рекомендовано ${recommended} хв)` : ''}`,
       ``,
+      sess.employee_name ? `Хто стерилізував: ${sess.employee_name}` : null,
       `Інструменти: ${sess.instrument_names}`,
       `Стерилізатор: ${sess.sterilizer_name}`,
       `Режим: ${sess.temperature}°C · ${sess.duration_minutes} хв`,
@@ -142,6 +143,19 @@ export default function CycleDetailScreen() {
         {/* Instruments */}
         <Text style={st.sectionLabel}>Інструменти</Text>
         <Text style={st.sectionValue}>{sess.instrument_names}</Text>
+
+        {/* Employee */}
+        {sess.employee_name && (
+          <>
+            <Text style={st.sectionLabel}>Хто стерилізував</Text>
+            <View style={st.infoCard}>
+              <View style={st.infoRow}>
+                <Feather name="user" size={16} color={COLORS.brand} />
+                <Text style={st.infoText}>{sess.employee_name}</Text>
+              </View>
+            </View>
+          </>
+        )}
 
         {/* Sterilizer + mode */}
         <Text style={st.sectionLabel}>Стерилізатор та режим</Text>

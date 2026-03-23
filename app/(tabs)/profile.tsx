@@ -1,22 +1,26 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity,
-  TextInput, Alert, Switch, ActivityIndicator,
+  TextInput, Alert, Switch, ActivityIndicator, LayoutAnimation, UIManager, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth-context';
-import { getProfile, getOrders, type SterilizationSession } from '../../lib/api';
-import type { OrderItem } from '../../lib/types';
+import { getProfile, getOrders, searchNPCities, getNPWarehouses, type SterilizationSession } from '../../lib/api';
+import type { OrderItem, NPCity, NPWarehouse } from '../../lib/types';
 import { generateJournalPDF } from '../../lib/pdf-export';
 import { getCached, setCache } from '../../lib/cache';
 import { COLORS } from '../../lib/constants';
 import { RADII } from '../../lib/theme';
 import type { UserRole, Order } from '../../lib/types';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 interface ProfileData {
   id: string;
@@ -25,6 +29,9 @@ interface ProfileData {
   salon_name: string | null;
   phone: string | null;
   city: string | null;
+  city_ref: string | null;
+  warehouse_ref: string | null;
+  warehouse_name: string | null;
   email: string | null;
   role: UserRole;
   notification_cycle_done: boolean;
@@ -80,6 +87,17 @@ export default function ProfileScreen() {
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState('');
 
+  // Nova Poshta delivery
+  const [cityQuery, setCityQuery] = useState('');
+  const [npCities, setNpCities] = useState<NPCity[]>([]);
+  const [selectedCity, setSelectedCity] = useState<NPCity | null>(null);
+  const [loadingCities, setLoadingCities] = useState(false);
+  const [warehouseQuery, setWarehouseQuery] = useState('');
+  const [npWarehouses, setNpWarehouses] = useState<NPWarehouse[]>([]);
+  const [selectedWarehouse, setSelectedWarehouse] = useState<NPWarehouse | null>(null);
+  const [loadingWarehouses, setLoadingWarehouses] = useState(false);
+  const cityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [orders, setOrders] = useState<(Order & { order_items?: OrderItem[] })[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
 
@@ -90,6 +108,22 @@ export default function ProfileScreen() {
     setSalonName(p.salon_name || '');
     setPhone(p.phone || '');
     setCity(p.city || '');
+    // Restore NP delivery data
+    setCityQuery(p.city || '');
+    if (p.city && p.city_ref) {
+      setSelectedCity({ ref: p.city_ref, name: p.city, region: '' });
+    } else {
+      setSelectedCity(null);
+    }
+    if (p.warehouse_ref && p.warehouse_name) {
+      setSelectedWarehouse({ ref: p.warehouse_ref, description: p.warehouse_name, number: '' });
+      setWarehouseQuery(p.warehouse_name);
+    } else {
+      setSelectedWarehouse(null);
+      setWarehouseQuery('');
+    }
+    setNpCities([]);
+    setNpWarehouses([]);
   };
 
   useFocusEffect(useCallback(() => {
@@ -108,6 +142,9 @@ export default function ProfileScreen() {
             salon_name: data.salon_name,
             phone: data.phone,
             city: data.city,
+            city_ref: data.city_ref ?? null,
+            warehouse_ref: data.warehouse_ref ?? null,
+            warehouse_name: data.warehouse_name ?? null,
             email: userEmail ?? null,
             role: data.role ?? 'owner',
             notification_cycle_done: data.notification_cycle_done ?? true,
@@ -130,13 +167,17 @@ export default function ProfileScreen() {
     if (!userId) return;
     setSaving(true);
     try {
+      const cityName = selectedCity?.name || city.trim() || null;
       await supabase.from('profiles')
         .update({
           name: name.trim() || null,
           last_name: lastName.trim() || null,
           salon_name: salonName.trim() || null,
           phone: phone.trim() || null,
-          city: city.trim() || null,
+          city: cityName,
+          city_ref: selectedCity?.ref || null,
+          warehouse_ref: selectedWarehouse?.ref || null,
+          warehouse_name: selectedWarehouse?.description || null,
         })
         .eq('id', userId);
       setProfile((p) => p ? {
@@ -145,7 +186,10 @@ export default function ProfileScreen() {
         last_name: lastName.trim(),
         salon_name: salonName.trim(),
         phone: phone.trim(),
-        city: city.trim(),
+        city: cityName,
+        city_ref: selectedCity?.ref || null,
+        warehouse_ref: selectedWarehouse?.ref || null,
+        warehouse_name: selectedWarehouse?.description || null,
       } : p);
       setEditing(false);
     } catch (err: any) {
@@ -288,7 +332,106 @@ export default function ProfileScreen() {
                 <EditField label="Прізвище *" value={lastName} onChangeText={setLastName} placeholder="Ваше прізвище" icon="user" />
                 <EditField label="Назва салону" value={salonName} onChangeText={setSalonName} placeholder="Назва вашого салону" icon="home" />
                 <EditField label="Телефон" value={phone} onChangeText={setPhone} placeholder="+380..." keyboardType="phone-pad" icon="phone" />
-                <EditField label="Місто" value={city} onChangeText={setCity} placeholder="Ваше місто" icon="map-pin" />
+
+                {/* Nova Poshta City */}
+                <View style={s.editFieldWrap}>
+                  <Text style={s.editFieldLabel}>Місто (Нова Пошта)</Text>
+                  <View style={s.npInputWrap}>
+                    <Feather name="map-pin" size={15} color={COLORS.textTertiary} style={s.editInputIcon} />
+                    <TextInput
+                      style={[s.editFieldInput, { paddingLeft: 40, paddingRight: 40 }, selectedCity && s.npInputSelected]}
+                      value={cityQuery}
+                      onChangeText={(text) => {
+                        setCityQuery(text);
+                        setSelectedCity(null);
+                        setSelectedWarehouse(null);
+                        setNpWarehouses([]);
+                        setWarehouseQuery('');
+                        if (cityTimerRef.current) clearTimeout(cityTimerRef.current);
+                        if (text.length < 2) { setNpCities([]); return; }
+                        cityTimerRef.current = setTimeout(async () => {
+                          setLoadingCities(true);
+                          try { const result = await searchNPCities(text); setNpCities(result); } catch { setNpCities([]); }
+                          setLoadingCities(false);
+                        }, 300);
+                      }}
+                      placeholder="Почніть вводити назву міста"
+                      placeholderTextColor={COLORS.textTertiary}
+                    />
+                    {selectedCity && (
+                      <TouchableOpacity style={s.npClearBtn} onPress={() => {
+                        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                        setCityQuery(''); setSelectedCity(null); setNpWarehouses([]); setSelectedWarehouse(null); setWarehouseQuery('');
+                      }}>
+                        <Ionicons name="close-circle" size={20} color={COLORS.textSecondary} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {loadingCities && <ActivityIndicator style={{ marginTop: 6 }} color={COLORS.brand} />}
+                  {npCities.length > 0 && !selectedCity && (
+                    <View style={s.npDropdown}>
+                      {npCities.map((c) => (
+                        <TouchableOpacity key={c.ref} style={s.npDropdownItem} onPress={async () => {
+                          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                          setSelectedCity(c); setCityQuery(c.name); setNpCities([]);
+                          setSelectedWarehouse(null); setWarehouseQuery('');
+                          setLoadingWarehouses(true);
+                          try { const wh = await getNPWarehouses(c.ref); LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setNpWarehouses(wh); } catch { setNpWarehouses([]); }
+                          setLoadingWarehouses(false);
+                        }}>
+                          <Text style={s.npDropdownText}>{c.name}</Text>
+                          {c.region ? <Text style={s.npDropdownHint}>{c.region}</Text> : null}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
+
+                {/* Nova Poshta Warehouse */}
+                {selectedCity && (
+                  <View style={s.editFieldWrap}>
+                    <Text style={s.editFieldLabel}>Відділення Нової Пошти</Text>
+                    <View style={s.npInputWrap}>
+                      <Feather name="package" size={15} color={COLORS.textTertiary} style={s.editInputIcon} />
+                      <TextInput
+                        style={[s.editFieldInput, { paddingLeft: 40, paddingRight: 40 }, selectedWarehouse && s.npInputSelected]}
+                        value={warehouseQuery}
+                        onChangeText={(text) => {
+                          setWarehouseQuery(text);
+                          if (selectedWarehouse) { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setSelectedWarehouse(null); }
+                        }}
+                        placeholder="Пошук за номером або адресою"
+                        placeholderTextColor={COLORS.textTertiary}
+                      />
+                      {selectedWarehouse && (
+                        <TouchableOpacity style={s.npClearBtn} onPress={() => {
+                          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                          setWarehouseQuery(''); setSelectedWarehouse(null);
+                        }}>
+                          <Ionicons name="close-circle" size={20} color={COLORS.textSecondary} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    {loadingWarehouses && <ActivityIndicator style={{ marginTop: 6 }} color={COLORS.brand} />}
+                    {!selectedWarehouse && npWarehouses.length > 0 && (
+                      <View style={s.npDropdown}>
+                        <ScrollView style={{ maxHeight: 220 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+                          {(warehouseQuery && !selectedWarehouse
+                            ? npWarehouses.filter((w) => w.description.toLowerCase().includes(warehouseQuery.toLowerCase()))
+                            : npWarehouses
+                          ).map((wh) => (
+                            <TouchableOpacity key={wh.ref} style={s.npDropdownItem} onPress={() => {
+                              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                              setSelectedWarehouse(wh); setWarehouseQuery(wh.description);
+                            }}>
+                              <Text style={s.npDropdownText}>{wh.description}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    )}
+                  </View>
+                )}
 
                 <View style={s.editBtns}>
                   <TouchableOpacity
@@ -336,6 +479,9 @@ export default function ProfileScreen() {
               <View style={s.contactGrid}>
                 <ContactItem icon="phone" label="Телефон" value={profile?.phone} />
                 <ContactItem icon="map-pin" label="Місто" value={profile?.city} />
+                {profile?.warehouse_name && (
+                  <ContactItem icon="package" label="Відділення НП" value={profile.warehouse_name} />
+                )}
                 <ContactItem icon="mail" label="Email" value={userEmail} />
               </View>
 
@@ -458,6 +604,14 @@ export default function ProfileScreen() {
             label="Інструменти"
             subtitle="Перелік інструментів"
             onPress={() => router.push('/cabinet/instruments' as any)}
+          />
+          <MenuItemFeather
+            icon="users"
+            iconColor="#1B5E20"
+            iconBg="#E8F5E9"
+            label="Співробітники"
+            subtitle="Хто проводить стерилізацію"
+            onPress={() => router.push('/cabinet/employees' as any)}
           />
           <MenuItemFeather
             icon="download"
@@ -645,7 +799,7 @@ const s = StyleSheet.create({
 
   // Profile card
   profileCard: {
-    marginHorizontal: 20,
+    marginHorizontal: 24,
     marginTop: 12,
     backgroundColor: COLORS.white,
     borderRadius: 20,
@@ -725,7 +879,7 @@ const s = StyleSheet.create({
   },
   sectionCount: { fontSize: 12, fontWeight: '700', color: COLORS.brand },
 
-  section: { paddingHorizontal: 20, gap: 8 },
+  section: { paddingHorizontal: 24, gap: 8 },
 
   // Orders
   orderCard: {
@@ -780,7 +934,7 @@ const s = StyleSheet.create({
 
   // Notifications
   notifCard: {
-    marginHorizontal: 20,
+    marginHorizontal: 24,
     backgroundColor: COLORS.white,
     borderRadius: 16,
     borderWidth: 1,
@@ -800,7 +954,7 @@ const s = StyleSheet.create({
   // Logout
   logoutBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, paddingVertical: 16, marginTop: 24, marginHorizontal: 20,
+    gap: 8, paddingVertical: 16, marginTop: 24, marginHorizontal: 24,
     backgroundColor: COLORS.dangerBg, borderRadius: 14,
   },
   logoutText: { fontSize: 14, fontWeight: '600', color: COLORS.danger },
@@ -808,9 +962,18 @@ const s = StyleSheet.create({
   // Delete account
   deleteBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, paddingVertical: 14, marginTop: 8, marginHorizontal: 20,
+    gap: 6, paddingVertical: 14, marginTop: 8, marginHorizontal: 24,
   },
   deleteText: { fontSize: 13, color: COLORS.textTertiary },
+
+  // Nova Poshta
+  npInputWrap: { position: 'relative' },
+  npInputSelected: { borderColor: COLORS.brand, backgroundColor: COLORS.brandLight },
+  npClearBtn: { position: 'absolute', right: 12, top: 14, zIndex: 1 },
+  npDropdown: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, backgroundColor: COLORS.white, marginTop: 6, overflow: 'hidden' },
+  npDropdownItem: { paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.borderLight },
+  npDropdownText: { fontSize: 14, color: COLORS.text },
+  npDropdownHint: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
 
   // Version
   versionText: { textAlign: 'center', fontSize: 12, color: COLORS.textTertiary, marginTop: 16 },

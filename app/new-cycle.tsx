@@ -17,6 +17,7 @@ import { getDefaultPreset, type SteriType } from '../lib/steri-config';
 import CameraCapture from '../components/CameraCapture';
 
 interface SterilizerRow { id: string; name: string; type: string | null; }
+interface EmployeeRow { id: string; name: string; }
 
 const ACTIVE_TIMER_KEY = 'active_timer';
 
@@ -52,6 +53,11 @@ export default function NewCycleScreen() {
   const [temperature, setTemperature] = useState('180');
   const [durationInput, setDurationInput] = useState('60');
 
+  // Employee
+  const [employees, setEmployees] = useState<EmployeeRow[]>([]);
+  const [employeeId, setEmployeeId] = useState<string | null>(null);
+  const [employeeName, setEmployeeName] = useState('');
+
   // Solution (optional)
   const [solutionNote, setSolutionNote] = useState('');
 
@@ -74,6 +80,14 @@ export default function NewCycleScreen() {
           setTemperature(String(preset.temperature));
           setDurationInput(String(preset.duration));
         }
+      }
+
+      const { data: empData } = await supabase.from('employees').select('id, name').eq('user_id', userId).order('created_at');
+      const empList = empData ?? [];
+      setEmployees(empList);
+      if (empList.length >= 1) {
+        setEmployeeId(empList[0].id);
+        setEmployeeName(empList[0].name);
       }
     })();
   }, [userId]);
@@ -130,6 +144,8 @@ export default function NewCycleScreen() {
         pouch_size: packType === 'none' ? 'none' : undefined,
         temperature: temp,
         duration_minutes: dur,
+        employee_id: employeeId ?? undefined,
+        employee_name: employeeName.trim() || undefined,
       });
 
       const path = await uploadSessionPhoto(uid, sess.id, 'before', photoUri);
@@ -200,6 +216,23 @@ export default function NewCycleScreen() {
           </View>
         ) : (
           <TextInput style={st.input} placeholder="Назва стерилізатора" placeholderTextColor={COLORS.textTertiary} value={sterilizerName} onChangeText={setSterilizerName} />
+        )}
+
+        {/* Employee */}
+        {employees.length > 0 && (
+          <>
+            <Text style={st.label}>Хто стерилізує</Text>
+            <View style={st.chips}>
+              {employees.map((e) => {
+                const active = employeeId === e.id;
+                return (
+                  <TouchableOpacity key={e.id} style={[st.chip, active && st.chipActive]} onPress={() => { setEmployeeId(e.id); setEmployeeName(e.name); }} activeOpacity={0.8}>
+                    <Text style={[st.chipText, active && st.chipTextActive]}>{e.name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
         )}
 
         {/* Instruments + quantity — free text like paper */}

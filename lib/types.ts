@@ -49,6 +49,13 @@ export interface SterilizationCycle {
   created_at: string;
 }
 
+export interface Employee {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+}
+
 export interface Solution {
   id: string;
   user_id: string;

@@ -192,7 +192,7 @@ export default function JournalScreen() {
       </LinearGradient>
 
       {initialLoad && sessions.length === 0 ? (
-        <View style={{ paddingHorizontal: 20, paddingTop: 20 }}>
+        <View style={{ paddingHorizontal: 24, paddingTop: 20 }}>
           <SkeletonEntryCard />
           <SkeletonEntryCard />
           <SkeletonEntryCard />
@@ -226,7 +226,7 @@ export default function JournalScreen() {
             data={groups}
             keyExtractor={(item) => item.dateKey}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}
+            contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 32 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadJournal(true)} tintColor={COLORS.brand} />}
             ListEmptyComponent={
               <View style={s.filterEmpty}>
@@ -348,6 +348,12 @@ function SessionCard({ sess, onPress }: { sess: SterilizationSession; onPress: (
               <Text style={s.chipText}>{pouchLabel}</Text>
             </View>
           )}
+          {sess.employee_name && (
+            <View style={s.infoChip}>
+              <Feather name="user" size={11} color={COLORS.textSecondary} />
+              <Text style={s.chipText}>{sess.employee_name}</Text>
+            </View>
+          )}
         </View>
 
         {/* Bottom row: time + duration */}
@@ -398,7 +404,7 @@ const s = StyleSheet.create({
   },
 
   // Stats
-  statsRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12 },
+  statsRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 12 },
   statCard: {
     flex: 1, borderRadius: 14, padding: 12,
     alignItems: 'center',
@@ -408,7 +414,7 @@ const s = StyleSheet.create({
   statLabel: { fontSize: 11, fontWeight: '600', color: COLORS.textSecondary, marginTop: 2 },
 
   // Filter chips
-  filterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12 },
+  filterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 12 },
   filterChip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: 14, paddingVertical: 8,
@@ -482,7 +488,7 @@ const s = StyleSheet.create({
   emptyText: { fontSize: 14, color: COLORS.textSecondary, marginTop: 6, textAlign: 'center', lineHeight: 20 },
   emptyBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    marginTop: 24, paddingHorizontal: 20, paddingVertical: 12,
+    marginTop: 24, paddingHorizontal: 24, paddingVertical: 12,
     borderRadius: 12, backgroundColor: COLORS.brandLight,
   },
   emptyBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.brand },

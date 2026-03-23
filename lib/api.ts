@@ -3,6 +3,7 @@ import type {
   Profile,
   Instrument,
   Sterilizer,
+  Employee,
   Solution,
   NPCity,
   NPWarehouse,
@@ -91,6 +92,37 @@ export async function deleteInstrument(id: string, userId: string) {
   if (error) throw error;
 }
 
+// ── Employees ────────────────────────────────────────────
+
+export async function getEmployees(userId: string): Promise<Employee[]> {
+  const { data, error } = await supabase
+    .from('employees')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function addEmployee(userId: string, name: string): Promise<Employee> {
+  const { data, error } = await supabase
+    .from('employees')
+    .insert({ user_id: userId, name })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteEmployee(id: string, userId: string) {
+  const { error } = await supabase
+    .from('employees')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
 // ── Sterilizers ───────────────────────────────────────────
 
 export async function getSterilizers(userId: string): Promise<Sterilizer[]> {
@@ -141,6 +173,8 @@ export interface SterilizationSession {
   result: 'success' | 'fail' | null;
   status: 'draft' | 'in_progress' | 'completed' | 'failed' | 'canceled';
   pouch_size: string | null;
+  employee_id: string | null;
+  employee_name: string | null;
   created_at: string;
 }
 
@@ -165,6 +199,8 @@ export async function createSession(userId: string, session: {
   pouch_size?: string;
   temperature: number;
   duration_minutes: number;
+  employee_id?: string;
+  employee_name?: string;
 }): Promise<SterilizationSession> {
   const { data, error } = await supabase
     .from('sterilization_sessions')
