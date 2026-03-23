@@ -1,4 +1,5 @@
 export type UserRole = 'owner' | 'staff';
+export type DeliveryType = 'warehouse' | 'address';
 
 export interface Profile {
   id: string;
@@ -7,8 +8,16 @@ export interface Profile {
   salon_name: string | null;
   phone: string | null;
   city: string | null;
+  city_ref: string | null;
+  warehouse_ref: string | null;
+  warehouse_name: string | null;
+  delivery_type: DeliveryType;
+  address_street: string | null;
+  address_building: string | null;
+  address_apartment: string | null;
   avatar_url: string | null;
   role: UserRole;
+  keycrm_buyer_id: number | null;
   expo_push_token: string | null;
   notification_cycle_done: boolean;
   notification_cycle_idle: boolean;
@@ -117,13 +126,20 @@ export interface Order {
   status: 'pending' | 'confirmed' | 'canceled';
   total_amount: number;
   delivery_address: string;
+  delivery_type: DeliveryType;
   phone: string;
   first_name: string | null;
   last_name: string | null;
+  recipient_first_name: string | null;
+  recipient_last_name: string | null;
+  recipient_phone: string | null;
   city_ref: string | null;
   city_name: string | null;
   warehouse_ref: string | null;
   warehouse_name: string | null;
+  address_street: string | null;
+  address_building: string | null;
+  address_apartment: string | null;
   np_ttn: string | null;
   np_delivery_cost: number | null;
   notes: string | null;

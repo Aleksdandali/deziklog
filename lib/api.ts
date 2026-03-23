@@ -332,13 +332,20 @@ export async function getNPWarehouses(cityRef: string): Promise<NPWarehouse[]> {
 export async function createOrder(userId: string, order: {
   total_amount: number;
   delivery_address: string;
+  delivery_type?: string;
   phone: string;
   first_name?: string;
   last_name?: string;
+  recipient_first_name?: string;
+  recipient_last_name?: string;
+  recipient_phone?: string;
   city_ref?: string;
   city_name?: string;
   warehouse_ref?: string;
   warehouse_name?: string;
+  address_street?: string;
+  address_building?: string;
+  address_apartment?: string;
   notes?: string;
 }, items: { product_id: string; product_name: string; quantity: number; price_at_order: number }[]) {
   const { data: orderData, error: orderError } = await supabase
@@ -348,13 +355,20 @@ export async function createOrder(userId: string, order: {
       status: 'pending',
       total_amount: order.total_amount,
       delivery_address: order.delivery_address,
+      delivery_type: order.delivery_type ?? 'warehouse',
       phone: order.phone,
       first_name: order.first_name ?? null,
       last_name: order.last_name ?? null,
+      recipient_first_name: order.recipient_first_name ?? order.first_name ?? null,
+      recipient_last_name: order.recipient_last_name ?? order.last_name ?? null,
+      recipient_phone: order.recipient_phone ?? order.phone ?? null,
       city_ref: order.city_ref ?? null,
       city_name: order.city_name ?? null,
       warehouse_ref: order.warehouse_ref ?? null,
       warehouse_name: order.warehouse_name ?? null,
+      address_street: order.address_street ?? null,
+      address_building: order.address_building ?? null,
+      address_apartment: order.address_apartment ?? null,
       notes: order.notes ?? null,
     })
     .select()
