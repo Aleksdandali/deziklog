@@ -310,7 +310,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={s.container}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
         {/* ── Header with gradient ── */}
         <LinearGradient
           colors={['#eceef5', COLORS.bg]}
@@ -485,7 +485,17 @@ export default function ProfileScreen() {
                 <ContactItem icon="mail" label="Email" value={userEmail} />
               </View>
 
-              <TouchableOpacity style={s.editProfileBtn} onPress={() => setEditing(true)} activeOpacity={0.7}>
+              <TouchableOpacity style={s.editProfileBtn} onPress={() => {
+                setEditing(true);
+                // Load warehouses if city already selected
+                if (selectedCity && !npWarehouses.length) {
+                  (async () => {
+                    setLoadingWarehouses(true);
+                    try { const wh = await getNPWarehouses(selectedCity.ref); setNpWarehouses(wh); } catch { setNpWarehouses([]); }
+                    setLoadingWarehouses(false);
+                  })();
+                }
+              }} activeOpacity={0.7}>
                 <Feather name="edit-2" size={14} color={COLORS.brand} />
                 <Text style={s.editProfileBtnText}>Редагувати профіль</Text>
               </TouchableOpacity>
