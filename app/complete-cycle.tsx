@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView,
   Alert, Image,
@@ -9,13 +9,17 @@ import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ReAnimated, { FadeIn } from 'react-native-reanimated';
+import ViewShot from 'react-native-view-shot';
 import { updateSession, uploadSessionPhoto } from '../lib/api';
-import { useSessionGuard } from '../lib/auth-context';
+import { useAuth, useSessionGuard } from '../lib/auth-context';
+import { supabase } from '../lib/supabase';
 import { notifyCycleDone } from '../lib/notifications';
 import { COLORS } from '../lib/constants';
 import { RADII } from '../lib/theme';
 import { getDurationStatus } from '../lib/steri-config';
+import { shareToInstagramStory } from '../lib/share-instagram';
 import CameraCapture from '../components/CameraCapture';
+import StoryCard from '../components/StoryCard';
 
 const ACTIVE_TIMER_KEY = 'active_timer';
 
@@ -32,7 +36,9 @@ interface TimerData {
 export default function CompleteCycleScreen() {
   const router = useRouter();
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
+  const { session } = useAuth();
   const getUid = useSessionGuard();
+  const userId = session?.user?.id;
 
   const [showCamera, setShowCamera] = useState(false);
   const [photoAfter, setPhotoAfter] = useState<string | null>(null);
@@ -40,9 +46,20 @@ export default function CompleteCycleScreen() {
   const [selectedResult, setSelectedResult] = useState<'success' | 'fail' | null>(null);
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const [timerData, setTimerData] = useState<TimerData | null>(null);
   const [actualMinutes, setActualMinutes] = useState<number | null>(null);
+  const [profileData, setProfileData] = useState<{ salon_name: string | null; city: string | null }>({ salon_name: null, city: null });
+
+  const storyRef = useRef<ViewShot>(null);
+
+  // Load profile data for story card
+  useEffect(() => {
+    if (!userId) return;
+    supabase.from('profiles').select('salon_name, city').eq('id', userId).single()
+      .then(({ data }) => { if (data) setProfileData(data); });
+  }, [userId]);
 
   // Load timer data from AsyncStorage
   useEffect(() => {
@@ -189,6 +206,37 @@ export default function CompleteCycleScreen() {
               : 'Запис збережено. Потрібно повторити стерилізацію.'}
           </Text>
 
+          {/* Instagram Story share */}
+          {selectedResult === 'success' && (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={async () => {
+                if (!storyRef.current) return;
+                setSharing(true);
+                try {
+                  const uri = await storyRef.current.capture!();
+                  if (uri) await shareToInstagramStory(uri);
+                } catch (err) {
+                  console.error('Share error:', err);
+                } finally {
+                  setSharing(false);
+                }
+              }}
+              disabled={sharing}
+              style={{ opacity: sharing ? 0.6 : 1 }}
+            >
+              <LinearGradient
+                colors={['#C13584', '#E1306C', '#FD1D1D']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={s.igBtnInner}
+              >
+                <Feather name="camera" size={18} color="#FFFFFF" />
+                <Text style={s.igBtnText}>{sharing ? 'Підготовка...' : 'Поділитись в Instagram'}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity activeOpacity={0.85} onPress={() => router.replace('/(tabs)/journal')}>
             <LinearGradient colors={[COLORS.brandDark, COLORS.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.gradientInner}>
               <Feather name="book-open" size={18} color="#fff" />
@@ -201,6 +249,23 @@ export default function CompleteCycleScreen() {
             <Text style={s.secondaryBtnText}>На головну</Text>
           </TouchableOpacity>
         </ReAnimated.View>
+
+        {/* Offscreen StoryCard for capture */}
+        <View style={{ position: 'absolute', left: -9999 }}>
+          <ViewShot ref={storyRef} options={{ format: 'png', quality: 1, result: 'tmpfile', width: 1080, height: 1920 }}>
+            <StoryCard
+              instruments={timerData?.instruments || ''}
+              sterilizer={timerData?.sterilizerName || ''}
+              duration={actualMinutes != null ? `${Math.floor(actualMinutes / 60).toString().padStart(2, '0')}:${(actualMinutes % 60).toString().padStart(2, '0')}` : '--'}
+              packType=""
+              photoBefore={photoBeforeUri}
+              photoAfter={photoAfter}
+              salonName={profileData.salon_name}
+              city={profileData.city}
+              date={new Date().toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}
+            />
+          </ViewShot>
+        </View>
       </SafeAreaView>
     );
   }
@@ -444,6 +509,8 @@ const s = StyleSheet.create({
   doneSub: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
   gradientInner: { flexDirection: 'row', height: 54, borderRadius: RADII.lg, alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 32 },
   gradientText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  igBtnInner: { flexDirection: 'row', height: 52, borderRadius: RADII.lg, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12 },
+  igBtnText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   secondaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14, marginTop: 8 },
   secondaryBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.textSecondary },
 });

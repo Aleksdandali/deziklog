@@ -20,7 +20,8 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Dezik Log потребує доступ до камери для фотографування індикаторів стерилізації",
         "NSPhotoLibraryUsageDescription": "Dezik Log потребує доступ до фото для вибору фото індикаторів стерилізації",
-        "NSPhotoLibraryAddUsageDescription": "Dezik Log потребує доступ для збереження фото індикаторів"
+        "NSPhotoLibraryAddUsageDescription": "Dezik Log потребує доступ для збереження фото індикаторів",
+        "LSApplicationQueriesSchemes": ["instagram-stories", "instagram"]
       },
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": []
@@ -54,6 +55,12 @@
         {
           "photosPermission": "Дозвольте доступ до фото для фотографування індикаторів стерилізації.",
           "cameraPermission": "Дозвольте доступ до камери для фотографування індикаторів стерилізації."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Для збереження карток стерилізації"
         }
       ],
       [
