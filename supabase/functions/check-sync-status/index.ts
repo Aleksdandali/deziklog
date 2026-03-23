@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { syncOrderToKeyCRM } from "../_shared/sync-logic.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -13,57 +14,32 @@ Deno.serve(async (req) => {
 
   const body = await req.json().catch(() => ({}));
 
-  // If test_order_id provided, try syncing that order directly
-  if (body.test_order_id) {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  // Reset attempts for all failed orders
+  if (body.reset === true) {
+    await adminClient
+      .from("orders")
+      .update({ keycrm_sync_status: "pending", keycrm_sync_attempts: 0, keycrm_sync_error: null })
+      .eq("keycrm_sync_status", "failed");
+    return jsonRes({ done: "reset all failed to pending" });
+  }
 
-    // Get order user_id
+  // Test sync one order directly
+  if (body.test_order_id) {
     const { data: order } = await adminClient
       .from("orders")
       .select("id, user_id")
       .eq("id", body.test_order_id)
       .single();
+    if (!order) return jsonRes({ error: "Order not found" });
 
-    if (!order) {
-      return new Response(JSON.stringify({ error: "Order not found" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Get user email
-    const { data: authUser } = await adminClient.auth.admin.getUserById(order.user_id);
-
-    const syncPayload = {
-      order_id: order.id,
-      user_id: order.user_id,
-      user_email: authUser?.user?.email || undefined,
-      _service_role: true,
-    };
-
+    let userEmail: string | undefined;
     try {
-      const res = await fetch(`${supabaseUrl}/functions/v1/sync-order-to-keycrm`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${anonKey}`,
-        },
-        body: JSON.stringify(syncPayload),
-      });
+      const { data: authUser } = await adminClient.auth.admin.getUserById(order.user_id);
+      userEmail = authUser?.user?.email;
+    } catch {}
 
-      const resText = await res.text();
-      return new Response(JSON.stringify({
-        sync_status: res.status,
-        sync_response: resText,
-        payload_sent: { ...syncPayload, user_email: "***" },
-      }, null, 2), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    } catch (e) {
-      return new Response(JSON.stringify({ error: (e as Error).message }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const result = await syncOrderToKeyCRM(adminClient, order.id, order.user_id, userEmail);
+    return jsonRes(result);
   }
 
   // Default: list orders
@@ -73,7 +49,11 @@ Deno.serve(async (req) => {
     .order("created_at", { ascending: false })
     .limit(10);
 
-  return new Response(JSON.stringify(orders, null, 2), {
+  return jsonRes(orders);
+});
+
+function jsonRes(data: any) {
+  return new Response(JSON.stringify(data, null, 2), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
-});
+}

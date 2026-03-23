@@ -11,9 +11,15 @@ export async function syncOrderToKeyCRM(
   userId: string,
   userEmail?: string,
 ): Promise<{ success: boolean; keycrm_order_id?: number; error?: string; np_ttn?: string | null }> {
-  const KEYCRM_API_KEY = Deno.env.get("KEYCRM_API_KEY")!;
+  const KEYCRM_API_KEY = Deno.env.get("KEYCRM_API_KEY");
   const KEYCRM_SOURCE_ID = Number(Deno.env.get("KEYCRM_SOURCE_ID") || "10");
-  const NP_API_KEY = Deno.env.get("NOVA_POSHTA_API_KEY")!;
+  const NP_API_KEY = Deno.env.get("NOVA_POSHTA_API_KEY") || "";
+
+  if (!KEYCRM_API_KEY) {
+    await markFailed(adminClient, orderId, "KEYCRM_API_KEY not set");
+    return { success: false, error: "KEYCRM_API_KEY not set in secrets" };
+  }
+
 
   // 1. Fetch order
   const { data: order, error: orderErr } = await adminClient
