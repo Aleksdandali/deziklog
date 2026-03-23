@@ -204,30 +204,21 @@ export default function AIChatScreen() {
     try {
       const history = messages.map((m) => ({ role: m.role, content: m.content }));
 
-      // Refresh session to get valid token
-      const { data: { session: authSess } } = await supabase.auth.refreshSession();
-      const token = authSess?.access_token;
-
-      if (!token) {
-        throw new Error('Увійдіть в акаунт та спробуйте знову.');
-      }
-
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      const res = await fetch(`${supabaseUrl}/functions/v1/ai-assistant`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
-        },
-        body: JSON.stringify({ message: msg, history }),
+      // Use supabase.functions.invoke — it handles auth token automatically
+      const { data, error } = await supabase.functions.invoke('ai-assistant', {
+        body: { message: msg, history },
       });
 
-      const text = await res.text();
-      let data: any;
-      try { data = JSON.parse(text); } catch { data = null; }
+      let replyText: string;
 
-      const replyText = data?.reply || `Помилка: ${data?.error || data?.message || res.status}`;
+      if (error) {
+        // supabase.functions.invoke threw — try to read body anyway
+        replyText = `Помилка: ${error.message || error}`;
+      } else if (data?.reply) {
+        replyText = data.reply;
+      } else {
+        replyText = `Помилка: ${JSON.stringify(data || 'пустий відповідь').slice(0, 200)}`;
+      }
 
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
@@ -237,7 +228,7 @@ export default function AIChatScreen() {
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
-      if (res.ok && data?.reply) {
+      if (!error && data?.reply) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } catch (err: any) {
@@ -245,7 +236,7 @@ export default function AIChatScreen() {
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `Помилка з'єднання. Перевірте інтернет та спробуйте ще раз.`,
+        content: `Помилка: ${err?.message || 'невідома помилка'}`,
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -566,7 +557,7 @@ const styles = StyleSheet.create({
 
   // Input
   inputContainer: {
-    paddingHorizontal: 12, paddingTop: 6, paddingBottom: Platform.OS === 'ios' ? 6 : 12,
+    paddingHorizontal: 12, paddingTop: 8, paddingBottom: Platform.OS === 'ios' ? 16 : 12,
     borderTopWidth: 1, borderTopColor: COLORS.borderLight, backgroundColor: COLORS.white,
   },
   inputWrap: {
