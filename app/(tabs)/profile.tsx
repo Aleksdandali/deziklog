@@ -22,6 +22,8 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+type DeliveryType = 'warehouse' | 'address';
+
 interface ProfileData {
   id: string;
   name: string | null;
@@ -32,8 +34,13 @@ interface ProfileData {
   city_ref: string | null;
   warehouse_ref: string | null;
   warehouse_name: string | null;
+  delivery_type: DeliveryType;
+  address_street: string | null;
+  address_building: string | null;
+  address_apartment: string | null;
   email: string | null;
   role: UserRole;
+  keycrm_buyer_id: number | null;
   notification_cycle_done: boolean;
   notification_cycle_idle: boolean;
   notification_order_status: boolean;
@@ -87,6 +94,12 @@ export default function ProfileScreen() {
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState('');
 
+  // Delivery
+  const [deliveryType, setDeliveryType] = useState<DeliveryType>('warehouse');
+  const [addressStreet, setAddressStreet] = useState('');
+  const [addressBuilding, setAddressBuilding] = useState('');
+  const [addressApartment, setAddressApartment] = useState('');
+
   // Nova Poshta delivery
   const [cityQuery, setCityQuery] = useState('');
   const [npCities, setNpCities] = useState<NPCity[]>([]);
@@ -124,6 +137,10 @@ export default function ProfileScreen() {
     }
     setNpCities([]);
     setNpWarehouses([]);
+    setDeliveryType(p.delivery_type || 'warehouse');
+    setAddressStreet(p.address_street || '');
+    setAddressBuilding(p.address_building || '');
+    setAddressApartment(p.address_apartment || '');
   };
 
   useFocusEffect(useCallback(() => {
@@ -145,8 +162,13 @@ export default function ProfileScreen() {
             city_ref: data.city_ref ?? null,
             warehouse_ref: data.warehouse_ref ?? null,
             warehouse_name: data.warehouse_name ?? null,
+            delivery_type: data.delivery_type ?? 'warehouse',
+            address_street: data.address_street ?? null,
+            address_building: data.address_building ?? null,
+            address_apartment: data.address_apartment ?? null,
             email: userEmail ?? null,
             role: data.role ?? 'owner',
+            keycrm_buyer_id: data.keycrm_buyer_id ?? null,
             notification_cycle_done: data.notification_cycle_done ?? true,
             notification_cycle_idle: data.notification_cycle_idle ?? true,
             notification_order_status: data.notification_order_status ?? true,
@@ -168,29 +190,30 @@ export default function ProfileScreen() {
     setSaving(true);
     try {
       const cityName = selectedCity?.name || city.trim() || null;
-      await supabase.from('profiles')
-        .update({
-          name: name.trim() || null,
-          last_name: lastName.trim() || null,
-          salon_name: salonName.trim() || null,
-          phone: phone.trim() || null,
-          city: cityName,
-          city_ref: selectedCity?.ref || null,
-          warehouse_ref: selectedWarehouse?.ref || null,
-          warehouse_name: selectedWarehouse?.description || null,
-        })
-        .eq('id', userId);
-      setProfile((p) => p ? {
-        ...p,
-        name: name.trim(),
-        last_name: lastName.trim(),
-        salon_name: salonName.trim(),
-        phone: phone.trim(),
+      const updates: Record<string, any> = {
+        name: name.trim() || null,
+        last_name: lastName.trim() || null,
+        salon_name: salonName.trim() || null,
+        phone: phone.trim() || null,
         city: cityName,
         city_ref: selectedCity?.ref || null,
-        warehouse_ref: selectedWarehouse?.ref || null,
-        warehouse_name: selectedWarehouse?.description || null,
-      } : p);
+        delivery_type: deliveryType,
+      };
+      if (deliveryType === 'warehouse') {
+        updates.warehouse_ref = selectedWarehouse?.ref || null;
+        updates.warehouse_name = selectedWarehouse?.description || null;
+        updates.address_street = null;
+        updates.address_building = null;
+        updates.address_apartment = null;
+      } else {
+        updates.warehouse_ref = null;
+        updates.warehouse_name = null;
+        updates.address_street = addressStreet.trim() || null;
+        updates.address_building = addressBuilding.trim() || null;
+        updates.address_apartment = addressApartment.trim() || null;
+      }
+      await supabase.from('profiles').update(updates).eq('id', userId);
+      setProfile((p) => p ? { ...p, ...updates } as ProfileData : p);
       setEditing(false);
     } catch (err: any) {
       Alert.alert('Помилка', err.message);
@@ -387,8 +410,33 @@ export default function ProfileScreen() {
                   )}
                 </View>
 
-                {/* Nova Poshta Warehouse */}
+                {/* Delivery type toggle */}
                 {selectedCity && (
+                  <View style={s.editFieldWrap}>
+                    <Text style={s.editFieldLabel}>Спосіб доставки</Text>
+                    <View style={s.deliveryToggle}>
+                      <TouchableOpacity
+                        style={[s.deliveryChip, deliveryType === 'warehouse' && s.deliveryChipActive]}
+                        onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setDeliveryType('warehouse'); }}
+                        activeOpacity={0.8}
+                      >
+                        <Feather name="package" size={14} color={deliveryType === 'warehouse' ? '#fff' : COLORS.textSecondary} />
+                        <Text style={[s.deliveryChipText, deliveryType === 'warehouse' && s.deliveryChipTextActive]}>На відділення</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[s.deliveryChip, deliveryType === 'address' && s.deliveryChipActive]}
+                        onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setDeliveryType('address'); }}
+                        activeOpacity={0.8}
+                      >
+                        <Feather name="home" size={14} color={deliveryType === 'address' ? '#fff' : COLORS.textSecondary} />
+                        <Text style={[s.deliveryChipText, deliveryType === 'address' && s.deliveryChipTextActive]}>За адресою</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {/* Nova Poshta Warehouse */}
+                {deliveryType === 'warehouse' && selectedCity && (
                   <View style={s.editFieldWrap}>
                     <Text style={s.editFieldLabel}>Відділення Нової Пошти</Text>
                     <View style={s.npInputWrap}>
@@ -430,6 +478,48 @@ export default function ProfileScreen() {
                         </ScrollView>
                       </View>
                     )}
+                  </View>
+                )}
+
+                {/* Address delivery fields */}
+                {deliveryType === 'address' && selectedCity && (
+                  <View style={s.editFieldWrap}>
+                    <Text style={s.editFieldLabel}>Вулиця</Text>
+                    <View style={s.editInputWrap}>
+                      <Feather name="navigation" size={15} color={COLORS.textTertiary} style={s.editInputIcon} />
+                      <TextInput
+                        style={[s.editFieldInput, { paddingLeft: 40 }]}
+                        value={addressStreet}
+                        onChangeText={setAddressStreet}
+                        placeholder="Назва вулиці"
+                        placeholderTextColor={COLORS.textTertiary}
+                        maxLength={100}
+                      />
+                    </View>
+                    <View style={s.addressRow}>
+                      <View style={s.addressFieldWide}>
+                        <Text style={[s.editFieldLabel, { marginTop: 8 }]}>Будинок</Text>
+                        <TextInput
+                          style={s.editFieldInput}
+                          value={addressBuilding}
+                          onChangeText={setAddressBuilding}
+                          placeholder="№"
+                          placeholderTextColor={COLORS.textTertiary}
+                          maxLength={20}
+                        />
+                      </View>
+                      <View style={s.addressFieldNarrow}>
+                        <Text style={[s.editFieldLabel, { marginTop: 8 }]}>Квартира</Text>
+                        <TextInput
+                          style={s.editFieldInput}
+                          value={addressApartment}
+                          onChangeText={setAddressApartment}
+                          placeholder="кв."
+                          placeholderTextColor={COLORS.textTertiary}
+                          maxLength={10}
+                        />
+                      </View>
+                    </View>
                   </View>
                 )}
 
@@ -479,8 +569,11 @@ export default function ProfileScreen() {
               <View style={s.contactGrid}>
                 <ContactItem icon="phone" label="Телефон" value={profile?.phone} />
                 <ContactItem icon="map-pin" label="Місто" value={profile?.city} />
-                {profile?.warehouse_name && (
+                {profile?.delivery_type === 'warehouse' && profile?.warehouse_name && (
                   <ContactItem icon="package" label="Відділення НП" value={profile.warehouse_name} />
+                )}
+                {profile?.delivery_type === 'address' && profile?.address_street && (
+                  <ContactItem icon="home" label="Адреса доставки" value={`${profile.address_street} ${profile.address_building || ''}${profile.address_apartment ? ', кв. ' + profile.address_apartment : ''}`} />
                 )}
                 <ContactItem icon="mail" label="Email" value={userEmail} />
               </View>
@@ -985,6 +1078,16 @@ const s = StyleSheet.create({
     gap: 6, paddingVertical: 14, marginTop: 8, marginHorizontal: 24,
   },
   deleteText: { fontSize: 13, color: COLORS.textTertiary },
+
+  // Delivery toggle
+  deliveryToggle: { flexDirection: 'row', gap: 8 },
+  deliveryChip: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.bg },
+  deliveryChipActive: { borderColor: COLORS.brand, backgroundColor: COLORS.brand },
+  deliveryChipText: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
+  deliveryChipTextActive: { color: '#fff' },
+  addressRow: { flexDirection: 'row', gap: 12 },
+  addressFieldWide: { flex: 2 },
+  addressFieldNarrow: { flex: 1 },
 
   // Nova Poshta
   npInputWrap: { position: 'relative' },

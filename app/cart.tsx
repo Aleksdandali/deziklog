@@ -14,9 +14,9 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 import { Image } from 'expo-image';
 import { useCart, CartItem } from '../lib/cart-context';
 import { useAuth, useSessionGuard } from '../lib/auth-context';
-import { createOrder, searchNPCities, getNPWarehouses } from '../lib/api';
+import { createOrder, searchNPCities, getNPWarehouses, getProfile } from '../lib/api';
 import { COLORS, FONT, RADIUS } from '../lib/constants';
-import type { NPCity, NPWarehouse } from '../lib/types';
+import type { NPCity, NPWarehouse, DeliveryType } from '../lib/types';
 
 function formatPrice(price: number): string {
   return price.toLocaleString('uk-UA') + ' ₴';
@@ -74,7 +74,45 @@ export default function CartScreen() {
   const [selectedWarehouse, setSelectedWarehouse] = useState<NPWarehouse | null>(null);
   const [loadingWarehouses, setLoadingWarehouses] = useState(false);
 
+  // Buyer + recipient
+  const [buyerProfile, setBuyerProfile] = useState<any>(null);
+  const [otherRecipient, setOtherRecipient] = useState(false);
+  const [recipientFirstName, setRecipientFirstName] = useState('');
+  const [recipientLastName, setRecipientLastName] = useState('');
+  const [recipientPhone, setRecipientPhone] = useState('+380');
+
+  // Delivery type
+  const [deliveryType, setDeliveryType] = useState<DeliveryType>('warehouse');
+  const [addressStreet, setAddressStreet] = useState('');
+  const [addressBuilding, setAddressBuilding] = useState('');
+  const [addressApartment, setAddressApartment] = useState('');
+
   const cityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Pre-fill from profile
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    (async () => {
+      const p = await getProfile(session.user.id);
+      if (!p) return;
+      setBuyerProfile(p);
+      if (p.name) setFirstName(p.name);
+      if (p.last_name) setLastName(p.last_name);
+      if (p.phone) setPhone(formatPhone(p.phone));
+      setDeliveryType((p as any).delivery_type || 'warehouse');
+      if (p.city && (p as any).city_ref) {
+        setSelectedCity({ ref: (p as any).city_ref, name: p.city, region: '' });
+        setCityQuery(p.city);
+      }
+      if ((p as any).delivery_type !== 'address' && (p as any).warehouse_ref && (p as any).warehouse_name) {
+        setSelectedWarehouse({ ref: (p as any).warehouse_ref, description: (p as any).warehouse_name, number: '' });
+        setWarehouseQuery((p as any).warehouse_name);
+      }
+      if ((p as any).address_street) setAddressStreet((p as any).address_street);
+      if ((p as any).address_building) setAddressBuilding((p as any).address_building);
+      if ((p as any).address_apartment) setAddressApartment((p as any).address_apartment);
+    })();
+  }, [session?.user?.id]);
 
   const handlePhoneChange = useCallback((text: string) => {
     setPhone(formatPhone(text));
@@ -129,11 +167,22 @@ export default function CartScreen() {
     : warehouses;
 
   const handleOrder = async () => {
-    if (!isPhoneValid(phone)) { Alert.alert('Невірний телефон', 'Введіть 9 цифр після +380'); return; }
-    if (!firstName.trim()) { Alert.alert("Вкажіть ім'я"); return; }
-    if (!lastName.trim()) { Alert.alert('Вкажіть прізвище'); return; }
+    if (!firstName.trim()) { Alert.alert("Вкажіть ім'я в профілі"); return; }
     if (!selectedCity) { Alert.alert('Оберіть місто'); return; }
-    if (!selectedWarehouse) { Alert.alert('Оберіть відділення'); return; }
+    if (deliveryType === 'warehouse' && !selectedWarehouse) { Alert.alert('Оберіть відділення'); return; }
+    if (deliveryType === 'address' && !addressStreet.trim()) { Alert.alert('Вкажіть вулицю'); return; }
+    if (otherRecipient) {
+      if (!recipientFirstName.trim()) { Alert.alert("Вкажіть ім'я отримувача"); return; }
+      if (!isPhoneValid(recipientPhone)) { Alert.alert('Невірний телефон отримувача'); return; }
+    }
+
+    const rFirstName = otherRecipient ? recipientFirstName.trim() : firstName.trim();
+    const rLastName = otherRecipient ? recipientLastName.trim() : lastName.trim();
+    const rPhone = otherRecipient ? phoneToDigits(recipientPhone) : phoneToDigits(phone);
+
+    const deliveryAddr = deliveryType === 'warehouse'
+      ? `${selectedCity.name}, ${selectedWarehouse!.description}`
+      : `${selectedCity.name}, ${addressStreet.trim()} ${addressBuilding.trim()}${addressApartment.trim() ? ', кв. ' + addressApartment.trim() : ''}`;
 
     setOrdering(true);
     try {
@@ -142,14 +191,21 @@ export default function CartScreen() {
 
       await createOrder(uid, {
         total_amount: total,
-        delivery_address: `${selectedCity.name}, ${selectedWarehouse.description}`,
+        delivery_address: deliveryAddr,
+        delivery_type: deliveryType,
         phone: phoneToDigits(phone),
         first_name: firstName.trim(),
         last_name: lastName.trim(),
+        recipient_first_name: rFirstName,
+        recipient_last_name: rLastName,
+        recipient_phone: rPhone,
         city_ref: selectedCity.ref,
         city_name: selectedCity.name,
-        warehouse_ref: selectedWarehouse.ref,
-        warehouse_name: selectedWarehouse.description,
+        warehouse_ref: deliveryType === 'warehouse' ? selectedWarehouse?.ref : undefined,
+        warehouse_name: deliveryType === 'warehouse' ? selectedWarehouse?.description : undefined,
+        address_street: deliveryType === 'address' ? addressStreet.trim() : undefined,
+        address_building: deliveryType === 'address' ? addressBuilding.trim() : undefined,
+        address_apartment: deliveryType === 'address' ? addressApartment.trim() : undefined,
       }, items.map((i) => ({
         product_id: i.product.id,
         product_name: i.product.name,
@@ -228,28 +284,78 @@ export default function CartScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {/* Contact info */}
-            <Text style={s.sectionLabel}>Контактна інформація</Text>
+            {/* Buyer (read-only from profile) */}
+            <Text style={s.sectionLabel}>Покупець</Text>
+            <View style={s.buyerCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.buyerName}>{firstName} {lastName}</Text>
+                <Text style={s.buyerPhone}>{phone}</Text>
+              </View>
+              <TouchableOpacity onPress={() => { router.push('/(tabs)/profile' as any); }} hitSlop={12}>
+                <Text style={s.buyerEditLink}>Змінити</Text>
+              </TouchableOpacity>
+            </View>
 
-            <Text style={s.fieldLabel}>Телефон *</Text>
-            <TextInput
-              style={s.input}
-              value={phone}
-              onChangeText={handlePhoneChange}
-              placeholder="+380 XX XXX XX XX"
-              keyboardType="phone-pad"
-              placeholderTextColor="#A0A4B8"
-              maxLength={17}
-            />
+            {/* Recipient */}
+            <Text style={s.sectionLabel}>Отримувач</Text>
+            <View style={s.toggleRow}>
+              <TouchableOpacity
+                style={[s.toggleChip, !otherRecipient && s.toggleChipActive]}
+                onPress={() => setOtherRecipient(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={[s.toggleChipText, !otherRecipient && s.toggleChipTextActive]}>Я ({firstName || 'покупець'})</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.toggleChip, otherRecipient && s.toggleChipActive]}
+                onPress={() => setOtherRecipient(true)}
+                activeOpacity={0.8}
+              >
+                <Text style={[s.toggleChipText, otherRecipient && s.toggleChipTextActive]}>Інший отримувач</Text>
+              </TouchableOpacity>
+            </View>
 
-            <Text style={s.fieldLabel}>Ім'я *</Text>
-            <TextInput style={s.input} value={firstName} onChangeText={setFirstName} placeholder="Ваше ім'я" placeholderTextColor="#A0A4B8" maxLength={50} />
+            {otherRecipient && (
+              <>
+                <Text style={s.fieldLabel}>Ім'я отримувача *</Text>
+                <TextInput style={s.input} value={recipientFirstName} onChangeText={setRecipientFirstName} placeholder="Ім'я" placeholderTextColor="#A0A4B8" maxLength={50} />
 
-            <Text style={s.fieldLabel}>Прізвище *</Text>
-            <TextInput style={s.input} value={lastName} onChangeText={setLastName} placeholder="Ваше прізвище" placeholderTextColor="#A0A4B8" maxLength={50} />
+                <Text style={s.fieldLabel}>Прізвище отримувача</Text>
+                <TextInput style={s.input} value={recipientLastName} onChangeText={setRecipientLastName} placeholder="Прізвище" placeholderTextColor="#A0A4B8" maxLength={50} />
 
-            {/* Nova Poshta */}
-            <Text style={s.sectionLabel}>Доставка Нова Пошта</Text>
+                <Text style={s.fieldLabel}>Телефон отримувача *</Text>
+                <TextInput
+                  style={s.input}
+                  value={recipientPhone}
+                  onChangeText={(t) => setRecipientPhone(formatPhone(t))}
+                  placeholder="+380 XX XXX XX XX"
+                  keyboardType="phone-pad"
+                  placeholderTextColor="#A0A4B8"
+                  maxLength={17}
+                />
+              </>
+            )}
+
+            {/* Delivery */}
+            <Text style={s.sectionLabel}>Доставка</Text>
+            <View style={s.toggleRow}>
+              <TouchableOpacity
+                style={[s.toggleChip, deliveryType === 'warehouse' && s.toggleChipActive]}
+                onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setDeliveryType('warehouse'); }}
+                activeOpacity={0.8}
+              >
+                <Feather name="package" size={14} color={deliveryType === 'warehouse' ? '#fff' : COLORS.textSecondary} />
+                <Text style={[s.toggleChipText, deliveryType === 'warehouse' && s.toggleChipTextActive]}>На відділення</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.toggleChip, deliveryType === 'address' && s.toggleChipActive]}
+                onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setDeliveryType('address'); }}
+                activeOpacity={0.8}
+              >
+                <Feather name="home" size={14} color={deliveryType === 'address' ? '#fff' : COLORS.textSecondary} />
+                <Text style={[s.toggleChipText, deliveryType === 'address' && s.toggleChipTextActive]}>За адресою</Text>
+              </TouchableOpacity>
+            </View>
 
             <Text style={s.fieldLabel}>Місто *</Text>
             <View style={s.inputWrap}>
@@ -278,7 +384,7 @@ export default function CartScreen() {
               </View>
             )}
 
-            {selectedCity && (
+            {deliveryType === 'warehouse' && selectedCity && (
               <>
                 <Text style={s.fieldLabel}>Відділення *</Text>
                 <View style={s.inputWrap}>
@@ -310,6 +416,24 @@ export default function CartScreen() {
                     </ScrollView>
                   </View>
                 )}
+              </>
+            )}
+
+            {deliveryType === 'address' && selectedCity && (
+              <>
+                <Text style={s.fieldLabel}>Вулиця *</Text>
+                <TextInput style={s.input} value={addressStreet} onChangeText={setAddressStreet} placeholder="Назва вулиці" placeholderTextColor="#A0A4B8" maxLength={100} />
+
+                <View style={s.addressRow}>
+                  <View style={s.addressFieldWide}>
+                    <Text style={s.fieldLabel}>Будинок</Text>
+                    <TextInput style={s.input} value={addressBuilding} onChangeText={setAddressBuilding} placeholder="№" placeholderTextColor="#A0A4B8" maxLength={20} />
+                  </View>
+                  <View style={s.addressFieldNarrow}>
+                    <Text style={s.fieldLabel}>Квартира</Text>
+                    <TextInput style={s.input} value={addressApartment} onChangeText={setAddressApartment} placeholder="кв." placeholderTextColor="#A0A4B8" maxLength={10} />
+                  </View>
+                </View>
               </>
             )}
 
@@ -465,6 +589,24 @@ const s = StyleSheet.create({
   summaryValue: { fontSize: 14, fontWeight: '500', color: COLORS.text },
   summaryTotal: { fontSize: 16, fontWeight: '700', color: COLORS.text },
   summaryTotalPrice: { fontSize: 18, fontWeight: '800', color: COLORS.success },
+
+  // Buyer card
+  buyerCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.bg, borderRadius: 12, padding: 14, marginBottom: 4 },
+  buyerName: { fontSize: 15, fontWeight: '600', color: COLORS.text },
+  buyerPhone: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
+  buyerEditLink: { fontSize: 13, fontWeight: '600', color: COLORS.brand },
+
+  // Toggle chips
+  toggleRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  toggleChip: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.bg },
+  toggleChipActive: { borderColor: COLORS.brand, backgroundColor: COLORS.brand },
+  toggleChipText: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
+  toggleChipTextActive: { color: '#fff' },
+
+  // Address fields
+  addressRow: { flexDirection: 'row', gap: 12, marginTop: 4 },
+  addressFieldWide: { flex: 2 },
+  addressFieldNarrow: { flex: 1 },
 
   // NP Dropdown
   dropdown: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, backgroundColor: COLORS.surface, marginTop: 6, marginBottom: 8, overflow: 'hidden' },
