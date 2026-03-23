@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity,
   Alert, RefreshControl, ActivityIndicator,
@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Sharing from 'expo-sharing';
+import ViewShot from 'react-native-view-shot';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth-context';
 import { COLORS } from '../../lib/constants';
@@ -17,6 +18,8 @@ import { generateJournalPDF } from '../../lib/pdf-export';
 import { getProfile, type SterilizationSession } from '../../lib/api';
 import { SkeletonEntryCard } from '../../components/Skeleton';
 import { calcActualMinutes, getDurationStatus } from '../../lib/steri-config';
+import { shareToInstagramStory } from '../../lib/share-instagram';
+import StoryCard from '../../components/StoryCard';
 
 type FilterType = 'all' | 'success' | 'fail';
 
@@ -72,6 +75,16 @@ export default function JournalScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [filter, setFilter] = useState<FilterType>('all');
+  const [sharingCycle, setSharingCycle] = useState<SterilizationSession | null>(null);
+  const [profileInfo, setProfileInfo] = useState<{ salon_name: string | null; city: string | null }>({ salon_name: null, city: null });
+  const storyRef = useRef<ViewShot>(null);
+
+  // Load profile for story card
+  useFocusEffect(useCallback(() => {
+    if (!userId) return;
+    supabase.from('profiles').select('salon_name, city').eq('id', userId).single()
+      .then(({ data }) => { if (data) setProfileInfo(data); });
+  }, [userId]));
 
   const loadJournal = useCallback(async (isRefresh = false) => {
     if (!userId) return;
@@ -137,6 +150,22 @@ export default function JournalScreen() {
       setExporting(false);
     }
   };
+
+  // Share cycle to Instagram
+  React.useEffect(() => {
+    if (!sharingCycle || !storyRef.current) return;
+    const timer = setTimeout(async () => {
+      try {
+        const uri = await storyRef.current!.capture!();
+        if (uri) await shareToInstagramStory(uri);
+      } catch (err) {
+        console.error('Share error:', err);
+      } finally {
+        setSharingCycle(null);
+      }
+    }, 300); // small delay for ViewShot to render
+    return () => clearTimeout(timer);
+  }, [sharingCycle]);
 
   return (
     <SafeAreaView style={s.container}>
@@ -244,15 +273,32 @@ export default function JournalScreen() {
                   </View>
                 </View>
                 {group.data.map((sess) => (
-                  <SessionCard key={sess.id} sess={sess} onPress={() => router.push(`/cycle/${sess.id}`)} />
+                  <SessionCard key={sess.id} sess={sess} onPress={() => router.push(`/cycle/${sess.id}`)} onShare={() => setSharingCycle(sess)} />
                 ))}
               </View>
             )}
           />
         </>
       )}
+      {/* Offscreen StoryCard for journal share */}
+      {sharingCycle && (
+        <View style={{ position: 'absolute', left: -9999 }}>
+          <ViewShot ref={storyRef} options={{ format: 'png', quality: 1, result: 'tmpfile', width: 1080, height: 1920 }}>
+            <StoryCard
+              instruments={sharingCycle.instrument_names}
+              sterilizer={sharingCycle.sterilizer_name}
+              duration={formatDuration(calcActualMinutes(sharingCycle.started_at, sharingCycle.ended_at) ?? sharingCycle.duration_minutes)}
+              packType={sharingCycle.pouch_size && sharingCycle.pouch_size !== 'none' ? sharingCycle.pouch_size : ''}
+              salonName={profileInfo.salon_name}
+              city={profileInfo.city}
+              date={new Date(sharingCycle.created_at).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}
+            />
+          </ViewShot>
+        </View>
+      )}
     </SafeAreaView>
   );
+
 }
 
 // ── Sub-components ──
@@ -298,7 +344,7 @@ function FilterChip({ label, count, active, onPress, color }: {
   );
 }
 
-function SessionCard({ sess, onPress }: { sess: SterilizationSession; onPress: () => void }) {
+function SessionCard({ sess, onPress, onShare }: { sess: SterilizationSession; onPress: () => void; onShare?: () => void }) {
   const passed = sess.result === 'success';
   const actual = calcActualMinutes(sess.started_at, sess.ended_at);
   const recommended = sess.duration_minutes;
@@ -375,7 +421,12 @@ function SessionCard({ sess, onPress }: { sess: SterilizationSession; onPress: (
         </View>
       </View>
 
-      <View style={s.cardChevron}>
+      <View style={s.cardActions}>
+        {onShare && passed && (
+          <TouchableOpacity onPress={onShare} hitSlop={12} style={s.shareBtn}>
+            <Feather name="share" size={14} color={COLORS.brand} />
+          </TouchableOpacity>
+        )}
         <Feather name="chevron-right" size={16} color={COLORS.textTertiary} />
       </View>
     </TouchableOpacity>
@@ -449,7 +500,8 @@ const s = StyleSheet.create({
   },
   cardStatusBar: { width: 4, alignSelf: 'stretch' },
   cardBody: { flex: 1, paddingVertical: 12, paddingLeft: 14, paddingRight: 8 },
-  cardChevron: { paddingRight: 12, paddingLeft: 4 },
+  cardActions: { alignItems: 'center', justifyContent: 'center', paddingRight: 12, paddingLeft: 4, gap: 8 },
+  shareBtn: { width: 28, height: 28, borderRadius: 8, backgroundColor: COLORS.brandLight, alignItems: 'center', justifyContent: 'center' },
 
   // Card top
   cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
