@@ -204,13 +204,16 @@ export default function AIChatScreen() {
     try {
       const history = messages.map((m) => ({ role: m.role, content: m.content }));
 
-      // Use fetch directly to avoid supabase.functions.invoke throwing on non-2xx
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      // Refresh session to get valid token
+      const { data: { session: authSess } } = await supabase.auth.refreshSession();
+      const token = authSess?.access_token;
 
-      const url = `${supabaseUrl}/functions/v1/ai-assistant`;
-      const res = await fetch(url, {
+      if (!token) {
+        throw new Error('Увійдіть в акаунт та спробуйте знову.');
+      }
+
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const res = await fetch(`${supabaseUrl}/functions/v1/ai-assistant`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -222,13 +225,9 @@ export default function AIChatScreen() {
 
       const text = await res.text();
       let data: any;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = null;
-      }
+      try { data = JSON.parse(text); } catch { data = null; }
 
-      const replyText = data?.reply || data?.error || data?.message || `[DEBUG] Status: ${res.status}, Body: ${text.slice(0, 200)}`;
+      const replyText = data?.reply || `Помилка: ${data?.error || data?.message || res.status}`;
 
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
@@ -238,7 +237,7 @@ export default function AIChatScreen() {
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
-      if (res.ok && !data?.error) {
+      if (res.ok && data?.reply) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } catch (err: any) {
