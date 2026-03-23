@@ -1,8 +1,7 @@
 /**
  * AI Assistant for disinfection solution preparation.
- * Uses Claude API with official "Delanol" instruction as context.
+ * Uses Claude API with official product instructions as context.
  *
- * Instruction source: _shared/delanol-instruction.ts
  * Auth: requires valid user JWT (Bearer token).
  * Secrets: ANTHROPIC_API_KEY
  */
@@ -20,7 +19,7 @@ Deno.serve(async (req) => {
 
   try {
     if (!ANTHROPIC_API_KEY) {
-      throw new Error("ANTHROPIC_API_KEY is not configured");
+      throw new Error("ANTHROPIC_API_KEY не налаштовано в Supabase Secrets");
     }
 
     // Auth check
@@ -50,8 +49,8 @@ Deno.serve(async (req) => {
     const { message, history } = await req.json();
     if (!message || typeof message !== "string") {
       return new Response(
-        JSON.stringify({ error: "Message is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        JSON.stringify({ reply: "Будь ласка, введіть повідомлення." }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -84,20 +83,29 @@ Deno.serve(async (req) => {
       }),
     });
 
+    const responseText = await response.text();
+
     if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Claude API error: ${response.status} ${errorBody}`);
+      throw new Error(`Claude API ${response.status}: ${responseText.slice(0, 300)}`);
     }
 
-    const data = await response.json();
-    const reply = data.content?.[0]?.text ?? "Не вдалося отримати відповідь.";
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      throw new Error("Невалідна відповідь від Claude API");
+    }
+
+    const reply = data.content?.[0]?.text;
+    if (!reply) {
+      throw new Error("Порожня відповідь від Claude API");
+    }
 
     return new Response(
       JSON.stringify({ reply }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
-    // Return 200 with error in body so supabase.functions.invoke doesn't throw
     return new Response(
       JSON.stringify({ reply: `Помилка: ${(err as Error).message}` }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
