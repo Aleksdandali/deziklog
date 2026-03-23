@@ -56,14 +56,7 @@ function formatDate(iso: string): string {
   catch { return iso; }
 }
 
-// ── Mock guides ─────────────────────────────────────────
-
-const GUIDES = [
-  { id: '1', title: 'Приготування робочого розчину Деланол', desc: 'Покрокова інструкція для дезінфекції інструментів' },
-  { id: '2', title: 'Правила ПСО інструментів', desc: 'Передстерилізаційне очищення за стандартами МОЗ' },
-  { id: '3', title: 'Зберігання концентратів Dezik', desc: 'Температура, термін, правила безпеки' },
-  { id: '4', title: 'Контроль якості дезінфекції', desc: 'Азопірамова проба та інші методи перевірки' },
-];
+import { GUIDES } from '../../lib/guides-data';
 
 // ── Main component ──────────────────────────────────────
 
@@ -344,9 +337,9 @@ export default function SolutionsScreen() {
           </TouchableOpacity>
 
           {GUIDES.map((g) => (
-            <TouchableOpacity key={g.id} style={s.guideCard} activeOpacity={0.7}>
+            <TouchableOpacity key={g.id} style={s.guideCard} activeOpacity={0.7} onPress={() => router.push(`/guide/${g.id}` as any)}>
               <View style={s.guideIcon}>
-                <Feather name="file-text" size={20} color={COLORS.brand} />
+                <Feather name={g.icon as any} size={20} color={COLORS.brand} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.guideTitle}>{g.title}</Text>
@@ -355,9 +348,6 @@ export default function SolutionsScreen() {
               <Feather name="chevron-right" size={16} color={COLORS.textTertiary} />
             </TouchableOpacity>
           ))}
-          <View style={s.guideFooter}>
-            <Text style={s.guideFooterText}>Більше методичок — скоро</Text>
-          </View>
         </ScrollView>
       )}
       {/* FAB — AI Assistant */}
