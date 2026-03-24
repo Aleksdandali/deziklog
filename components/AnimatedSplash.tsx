@@ -151,7 +151,7 @@ export default function AnimatedSplash() {
         {/* Logo */}
         <Animated.View style={[st.logoWrap, logoStyle]}>
           <Image
-            source={require('../assets/images/icon.png')}
+            source={require('../assets/images/splash-icon.png')}
             style={st.logoImg}
             resizeMode="contain"
           />
@@ -191,8 +191,8 @@ const st = StyleSheet.create({
     alignItems: 'center',
   },
   logoImg: {
-    width: Math.min(SCREEN_W * 0.65, 280),
-    height: Math.min(SCREEN_W * 0.65, 280),
+    width: Math.min(SCREEN_W * 0.6, 260),
+    height: Math.min(SCREEN_W * 0.25, 100),
   },
   loaderBottom: {
     marginTop: -20,
