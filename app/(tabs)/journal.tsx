@@ -423,8 +423,8 @@ function SessionCard({ sess, onPress, onShare }: { sess: SterilizationSession; o
 
       <View style={s.cardActions}>
         {onShare && passed && (
-          <TouchableOpacity onPress={onShare} hitSlop={12} style={s.shareBtn}>
-            <Feather name="share" size={14} color={COLORS.brand} />
+          <TouchableOpacity onPress={(e) => { e.stopPropagation(); onShare(); }} hitSlop={12} style={s.shareBtn}>
+            <Feather name="instagram" size={14} color="#C13584" />
           </TouchableOpacity>
         )}
         <Feather name="chevron-right" size={16} color={COLORS.textTertiary} />
@@ -501,7 +501,7 @@ const s = StyleSheet.create({
   cardStatusBar: { width: 4, alignSelf: 'stretch' },
   cardBody: { flex: 1, paddingVertical: 12, paddingLeft: 14, paddingRight: 8 },
   cardActions: { alignItems: 'center', justifyContent: 'center', paddingRight: 12, paddingLeft: 4, gap: 8 },
-  shareBtn: { width: 28, height: 28, borderRadius: 8, backgroundColor: COLORS.brandLight, alignItems: 'center', justifyContent: 'center' },
+  shareBtn: { width: 28, height: 28, borderRadius: 8, backgroundColor: '#C1358415', alignItems: 'center', justifyContent: 'center' },
 
   // Card top
   cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },

@@ -1,16 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView,
   Image, Modal, Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
+import ViewShot from 'react-native-view-shot';
 import { getSessionById, getPhotoUrl, type SterilizationSession } from '../../lib/api';
 import { useAuth } from '../../lib/auth-context';
+import { supabase } from '../../lib/supabase';
 import { COLORS } from '../../lib/constants';
 import { RADII } from '../../lib/theme';
 import { calcActualMinutes, getDurationStatus } from '../../lib/steri-config';
+import { shareToInstagramStory } from '../../lib/share-instagram';
+import StoryCard from '../../components/StoryCard';
 
 function fmt(iso: string | null, mode: 'time' | 'date' | 'datetime'): string {
   if (!iso) return '--';
@@ -41,6 +47,9 @@ export default function CycleDetailScreen() {
   const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
   const [photoBeforeUrl, setPhotoBeforeUrl] = useState<string | null>(null);
   const [photoAfterUrl, setPhotoAfterUrl] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [profileData, setProfileData] = useState<{ salon_name: string | null; city: string | null }>({ salon_name: null, city: null });
+  const storyRef = useRef<ViewShot>(null);
 
   useEffect(() => {
     if (!id || !userId) return;
@@ -56,6 +65,12 @@ export default function CycleDetailScreen() {
       setLoading(false);
     })();
   }, [id, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    supabase.from('profiles').select('salon_name, city').eq('id', userId).single()
+      .then(({ data }) => { if (data) setProfileData(data); });
+  }, [userId]);
 
   const actualMin = sess ? calcActualMinutes(sess.started_at, sess.ended_at) : null;
   const recommended = sess?.duration_minutes ?? null;
@@ -83,9 +98,10 @@ export default function CycleDetailScreen() {
       `— Dezik SteriLog`,
     ].filter(Boolean).join('\n');
 
-    // TODO: Replace with PDF export (generateCyclePDF) when ready
     try {
-      await Sharing.shareAsync('data:text/plain;base64,' + btoa(unescape(encodeURIComponent(lines))), {
+      const fileUri = FileSystem.cacheDirectory + `sterilization-${sess.id}.txt`;
+      await FileSystem.writeAsStringAsync(fileUri, lines, { encoding: FileSystem.EncodingType.UTF8 });
+      await Sharing.shareAsync(fileUri, {
         mimeType: 'text/plain',
         dialogTitle: 'Експорт стерилізації',
         UTI: 'public.utf8-plain-text',
@@ -240,12 +256,67 @@ export default function CycleDetailScreen() {
           </View>
         </View>
 
+        {/* Instagram Story share — only for passed */}
+        {passed && (
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={async () => {
+              if (!storyRef.current) return;
+              setSharing(true);
+              try {
+                const uri = await storyRef.current.capture!();
+                if (uri) await shareToInstagramStory(uri);
+              } catch (err) {
+                console.error('Share error:', err);
+              } finally {
+                setSharing(false);
+              }
+            }}
+            disabled={sharing}
+            style={[st.igBtnWrap, { opacity: sharing ? 0.6 : 1 }]}
+          >
+            <LinearGradient
+              colors={['#833AB4', '#C13584', '#E1306C', '#F77737']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={st.igBtnInner}
+            >
+              <View style={st.igIconWrap}>
+                <Feather name="instagram" size={20} color="#FFFFFF" />
+              </View>
+              <View>
+                <Text style={st.igBtnText}>{sharing ? 'Підготовка...' : 'Поділитись в Stories'}</Text>
+                <Text style={st.igBtnHint}>Покажіть клієнтам вашу відповідальність</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
         {/* Export button */}
         <TouchableOpacity style={st.exportBtn} onPress={handleExport} activeOpacity={0.85}>
           <Feather name="share" size={18} color={COLORS.brand} />
           <Text style={st.exportBtnText}>Експортувати</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Offscreen StoryCard for capture */}
+      {passed && (
+        <View style={{ position: 'absolute', left: -9999 }}>
+          <ViewShot ref={storyRef} options={{ format: 'png', quality: 1, result: 'tmpfile', width: 1080, height: 1920 }}>
+            <StoryCard
+              instruments={sess.instrument_names}
+              sterilizer={sess.sterilizer_name}
+              duration={fmtDuration(actualMin ?? recommended)}
+              packType={sess.pouch_size && sess.pouch_size !== 'none' ? sess.pouch_size : ''}
+              photoBefore={photoBeforeUrl}
+              photoAfter={photoAfterUrl}
+              salonName={profileData.salon_name}
+              city={profileData.city}
+              date={new Date(sess.created_at).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}
+            />
+          </ViewShot>
+        </View>
+      )}
 
       {/* Fullscreen photo modal */}
       <Modal visible={!!fullscreenPhoto} transparent animationType="fade">
@@ -304,8 +375,15 @@ const st = StyleSheet.create({
   photo: { height: 160, borderRadius: RADII.lg, backgroundColor: COLORS.cardBg },
   photoEmpty: { height: 160, borderRadius: RADII.lg, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center' },
 
+  // Instagram
+  igBtnWrap: { marginTop: 24, borderRadius: RADII.lg + 2, shadowColor: '#C13584', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 14, elevation: 8 },
+  igBtnInner: { flexDirection: 'row', height: 60, borderRadius: RADII.lg + 2, alignItems: 'center', paddingHorizontal: 20, gap: 14 },
+  igIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  igBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  igBtnHint: { fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 1 },
+
   // Export
-  exportBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 50, borderRadius: RADII.lg, borderWidth: 1.5, borderColor: COLORS.brand, marginTop: 24 },
+  exportBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 50, borderRadius: RADII.lg, borderWidth: 1.5, borderColor: COLORS.brand, marginTop: 12 },
   exportBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.brand },
 
   // Modal

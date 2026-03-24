@@ -91,7 +91,7 @@ export default function StoryCard({
         <View style={st.cta}>
           <View style={st.ctaDivider} />
           <Text style={st.ctaText}>Цифровий журнал стерилізації</Text>
-          <Text style={st.ctaApp}>dezik.app</Text>
+          <Text style={st.ctaApp}>Dezik SteriLog</Text>
         </View>
       </LinearGradient>
     </View>
@@ -167,5 +167,5 @@ const st = StyleSheet.create({
   cta: { position: 'absolute', bottom: 32, left: 24, right: 24, alignItems: 'center' },
   ctaDivider: { width: 32, height: 2, borderRadius: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginBottom: 12 },
   ctaText: { fontSize: 11, color: 'rgba(255,255,255,0.35)', letterSpacing: 0.5 },
-  ctaApp: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.5)', marginTop: 3, letterSpacing: 1 },
+  ctaApp: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.5)', marginTop: 3, letterSpacing: 2 },
 });
