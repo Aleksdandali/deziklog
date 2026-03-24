@@ -14,7 +14,9 @@ function localizeError(msg: string): string {
     'Invalid login credentials': 'Невірний email або пароль',
     'Email not confirmed': 'Email не підтверджено. Перевірте пошту.',
     'User already registered': 'Цей email вже зареєстровано. Спробуйте увійти.',
-    'Password should be at least 6 characters': 'Пароль має містити щонайменше 6 символів',
+    'Password should be at least 6 characters': 'Пароль має містити щонайменше 8 символів (великі, малі літери та цифри)',
+    'Password should be at least 8 characters': 'Пароль має містити щонайменше 8 символів (великі, малі літери та цифри)',
+    'Password should contain at least one character': 'Пароль має містити великі, малі літери та цифри',
     'Unable to validate email address: invalid format': 'Невірний формат email',
     'Signup requires a valid password': 'Введіть пароль',
     'For security purposes, you can only request this after': 'Забагато спроб. Зачекайте хвилину.',
@@ -36,7 +38,8 @@ export default function AuthScreen() {
     if (!email.trim()) return 'Введіть email';
     if (!/\S+@\S+\.\S+/.test(email.trim())) return 'Невірний формат email';
     if (!password.trim()) return 'Введіть пароль';
-    if (password.trim().length < 6) return 'Пароль — мінімум 6 символів';
+    if (password.trim().length < 8) return 'Пароль — мінімум 8 символів (великі, малі літери та цифри)';
+    if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) return 'Пароль має містити великі, малі літери та цифри';
     return null;
   };
 

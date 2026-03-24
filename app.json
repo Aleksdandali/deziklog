@@ -58,12 +58,6 @@
         }
       ],
       [
-        "expo-media-library",
-        {
-          "photosPermission": "Для збереження карток стерилізації"
-        }
-      ],
-      [
         "expo-notifications",
         {
           "icon": "./assets/images/icon.png",
