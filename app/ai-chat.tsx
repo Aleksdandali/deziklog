@@ -120,12 +120,13 @@ export default function AIChatScreen() {
     });
   }, [messages, activeSessionId]);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = (animated = true) => {
     if (flatListRef.current && messages.length > 0) {
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated }), 50);
     }
   };
 
+  // Scroll on new messages
   useEffect(() => { scrollToBottom(); }, [messages.length]);
 
   // ── Session management ────────────────────────────────
@@ -476,6 +477,8 @@ export default function AIChatScreen() {
               scrollEventThrottle={100}
               ListFooterComponent={renderTypingIndicator}
               keyboardShouldPersistTaps="handled"
+              onContentSizeChange={() => scrollToBottom(false)}
+              onLayout={() => scrollToBottom(false)}
             />
           )}
 
