@@ -247,21 +247,28 @@ export default function NewCycleScreen() {
 
   if (photoPreview) {
     return (
-      <SafeAreaView style={st.container}>
-        <View style={st.header}>
-          <Text style={st.headerTitle}>Перевірте фото</Text>
-          <TouchableOpacity style={st.closeBtn} onPress={() => { setPhotoPreview(null); }}>
-            <Feather name="x" size={20} color={COLORS.textSecondary} />
-          </TouchableOpacity>
-        </View>
+      <View style={st.previewContainer}>
+        <Image source={{ uri: photoPreview }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <View style={st.previewOverlay} />
 
-        <View style={st.previewScreen}>
-          <Image source={{ uri: photoPreview }} style={st.previewImage} resizeMode="contain" />
+        {/* Top bar */}
+        <SafeAreaView style={st.previewTopBar}>
+          <View style={st.previewHeader}>
+            <TouchableOpacity style={st.previewCloseBtn} onPress={() => { setPhotoPreview(null); }}>
+              <Feather name="x" size={20} color="#fff" />
+            </TouchableOpacity>
+            <Text style={st.previewTitle}>Фото індикатора</Text>
+            <View style={{ width: 40 }} />
+          </View>
+        </SafeAreaView>
 
+        {/* Bottom actions */}
+        <SafeAreaView style={st.previewBottom}>
+          <Text style={st.previewHint}>Переконайтеся, що індикатор чітко видно</Text>
           <View style={st.previewActions}>
             <TouchableOpacity style={st.retakeBtn} onPress={handleRetakePhoto} activeOpacity={0.85}>
-              <Feather name="refresh-cw" size={18} color={COLORS.brand} />
-              <Text style={st.retakeBtnText}>Переснять</Text>
+              <Feather name="camera" size={18} color="#fff" />
+              <Text style={st.retakeBtnText}>Перезняти</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -270,14 +277,14 @@ export default function NewCycleScreen() {
               onPress={handleConfirmPhoto}
               activeOpacity={0.85}
             >
-              <LinearGradient colors={[COLORS.brandDark, COLORS.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={st.confirmBtnInner}>
-                <Feather name="check" size={18} color="#fff" />
-                <Text style={st.confirmBtnText}>{saving ? 'Запускаю...' : 'Підтвердити → Старт'}</Text>
+              <LinearGradient colors={[COLORS.brand, COLORS.brandDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={st.confirmBtnInner}>
+                <Text style={st.confirmBtnText}>{saving ? 'Зачекайте...' : 'Почати цикл'}</Text>
+                <Feather name="arrow-right" size={18} color="#fff" />
               </LinearGradient>
             </TouchableOpacity>
           </View>
-        </View>
-      </SafeAreaView>
+        </SafeAreaView>
+      </View>
     );
   }
 
@@ -441,7 +448,7 @@ export default function NewCycleScreen() {
         >
           <LinearGradient colors={[COLORS.brandDark, COLORS.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={st.startBtnInner}>
             <Feather name="camera" size={20} color="#fff" />
-            <Text style={st.startBtnText}>{saving ? 'Запускаю...' : 'Фото індикатора → Старт'}</Text>
+            <Text style={st.startBtnText}>{saving ? 'Зачекайте...' : 'Фото індикатора → Старт'}</Text>
           </LinearGradient>
         </TouchableOpacity>
 
@@ -499,13 +506,19 @@ const st = StyleSheet.create({
 
   hint: { fontSize: 12, color: COLORS.textSecondary, textAlign: 'center', marginTop: 10 },
 
-  // Photo preview screen
-  previewScreen: { flex: 1, padding: 20 },
-  previewImage: { flex: 1, borderRadius: RADII.lg, backgroundColor: '#000' },
-  previewActions: { flexDirection: 'row', gap: 12, marginTop: 16, paddingBottom: 16 },
-  retakeBtn: { flex: 1, flexDirection: 'row', height: 52, borderRadius: RADII.lg, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  retakeBtnText: { fontSize: 15, fontWeight: '600', color: COLORS.brand },
+  // Photo preview screen — fullscreen with overlay
+  previewContainer: { flex: 1, backgroundColor: '#000' },
+  previewOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.15)' },
+  previewTopBar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
+  previewHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
+  previewCloseBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  previewTitle: { fontSize: 16, fontWeight: '600', color: '#fff' },
+  previewBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingBottom: 8, zIndex: 10 },
+  previewHint: { fontSize: 13, color: 'rgba(255,255,255,0.7)', textAlign: 'center', marginBottom: 14 },
+  previewActions: { flexDirection: 'row', gap: 12 },
+  retakeBtn: { flex: 1, flexDirection: 'row', height: 52, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.15)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  retakeBtnText: { fontSize: 15, fontWeight: '600', color: '#fff' },
   confirmBtn: { flex: 2 },
-  confirmBtnInner: { flexDirection: 'row', height: 52, borderRadius: RADII.lg, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  confirmBtnInner: { flexDirection: 'row', height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 8 },
   confirmBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 });
