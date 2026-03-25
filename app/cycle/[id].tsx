@@ -99,21 +99,22 @@ export default function CycleDetailScreen() {
     ].filter(Boolean).join('\n');
 
     try {
-      const canShare = await Sharing.isAvailableAsync();
-      if (!canShare) {
-        Alert.alert('Помилка', 'Функція поширення недоступна на цьому пристрої');
+      const fileUri = `${FileSystem.cacheDirectory}sterilization-${sess.id}.txt`;
+      await FileSystem.writeAsStringAsync(fileUri, lines, { encoding: FileSystem.EncodingType.UTF8 });
+
+      // Verify file was written
+      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      if (!fileInfo.exists) {
+        Alert.alert('Помилка', 'Не вдалось зберегти файл');
         return;
       }
-      const fileUri = FileSystem.cacheDirectory + `sterilization-${sess.id}.txt`;
-      await FileSystem.writeAsStringAsync(fileUri, lines, { encoding: FileSystem.EncodingType.UTF8 });
-      await Sharing.shareAsync(fileUri, {
-        mimeType: 'text/plain',
-        dialogTitle: 'Експорт стерилізації',
-      });
+
+      await Sharing.shareAsync(fileUri, { mimeType: 'text/plain' });
     } catch (err: any) {
       // User cancelled share — not an error
-      if (err?.message?.includes('cancel') || err?.message?.includes('dismiss')) return;
-      Alert.alert('Помилка', 'Не вдалось експортувати');
+      const msg = err?.message ?? '';
+      if (msg.includes('cancel') || msg.includes('dismiss') || msg.includes('aborted')) return;
+      Alert.alert('Помилка', `Не вдалось експортувати: ${msg.slice(0, 100)}`);
     }
   };
 
