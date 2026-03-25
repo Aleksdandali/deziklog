@@ -43,8 +43,57 @@ export default function NewCycleScreen() {
   const [sterilizerName, setSterilizerName] = useState('');
   const [sterilizerType, setSterilizerType] = useState<SteriType | null>(null);
 
-  // Instruments (free text like paper journal)
-  const [instrumentsText, setInstrumentsText] = useState('');
+  // Instruments
+  const [selectedInstruments, setSelectedInstruments] = useState<Record<string, number>>({});
+  const [customInstrument, setCustomInstrument] = useState('');
+
+  const INSTRUMENT_PRESETS = [
+    'Кусачки для кутикули',
+    'Ножиці для кутикули',
+    'Пушер',
+    'Пінцет',
+    'Кусачки для нігтів',
+    'Ножиці для нігтів',
+    'Фреза',
+    'Шабер',
+  ];
+
+  const toggleInstrument = (name: string) => {
+    setSelectedInstruments((prev) => {
+      const next = { ...prev };
+      if (next[name]) {
+        delete next[name];
+      } else {
+        next[name] = 1;
+      }
+      return next;
+    });
+  };
+
+  const updateQty = (name: string, delta: number) => {
+    setSelectedInstruments((prev) => {
+      const next = { ...prev };
+      const val = (next[name] ?? 1) + delta;
+      if (val <= 0) {
+        delete next[name];
+      } else {
+        next[name] = Math.min(val, 99);
+      }
+      return next;
+    });
+  };
+
+  const addCustomInstrument = () => {
+    const name = customInstrument.trim();
+    if (!name) return;
+    setSelectedInstruments((prev) => ({ ...prev, [name]: prev[name] ?? 1 }));
+    setCustomInstrument('');
+  };
+
+  // Build text for API from selected instruments
+  const instrumentsText = Object.entries(selectedInstruments)
+    .map(([name, qty]) => qty > 1 ? `${name} ×${qty}` : name)
+    .join(', ');
 
   // Package
   const [packType, setPackType] = useState('kraft');
@@ -109,7 +158,7 @@ export default function NewCycleScreen() {
   // ── Validate & start ──────────────────────────────────
 
   const handlePhotoAndStart = () => {
-    if (!instrumentsText.trim()) { Alert.alert('Вкажіть інструменти'); return; }
+    if (Object.keys(selectedInstruments).length === 0) { Alert.alert('Вкажіть інструменти'); return; }
     if (!sterilizerName.trim()) { Alert.alert('Вкажіть стерилізатор'); return; }
     const temp = parseInt(temperature, 10);
     const dur = parseInt(durationInput, 10);
@@ -284,19 +333,60 @@ export default function NewCycleScreen() {
           </>
         )}
 
-        {/* Instruments + quantity — free text like paper */}
-        <Text style={st.label}>Інструменти та кількість</Text>
-        <TextInput
-          style={[st.input, st.inputMultiline]}
-          placeholder="Кусачки ×1, Пушер ×3, Ножиці ×2"
-          placeholderTextColor={COLORS.textTertiary}
-          value={instrumentsText}
-          onChangeText={setInstrumentsText}
-          multiline
-          numberOfLines={2}
-          textAlignVertical="top"
-          maxLength={500}
-        />
+        {/* Instruments — quick select + custom */}
+        <Text style={st.label}>Інструменти</Text>
+        <View style={st.instrumentChips}>
+          {INSTRUMENT_PRESETS.map((name) => {
+            const active = !!selectedInstruments[name];
+            return (
+              <TouchableOpacity key={name} style={[st.chip, active && st.chipActive]} onPress={() => toggleInstrument(name)} activeOpacity={0.8}>
+                <Text style={[st.chipText, active && st.chipTextActive]}>{name}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Selected instruments with quantity */}
+        {Object.keys(selectedInstruments).length > 0 && (
+          <View style={st.selectedList}>
+            {Object.entries(selectedInstruments).map(([name, qty]) => (
+              <View key={name} style={st.selectedRow}>
+                <Text style={st.selectedName} numberOfLines={1}>{name}</Text>
+                <View style={st.qtyControls}>
+                  <TouchableOpacity style={st.qtyBtn} onPress={() => updateQty(name, -1)} activeOpacity={0.7}>
+                    <Feather name="minus" size={14} color={COLORS.textSecondary} />
+                  </TouchableOpacity>
+                  <Text style={st.qtyText}>{qty}</Text>
+                  <TouchableOpacity style={st.qtyBtn} onPress={() => updateQty(name, 1)} activeOpacity={0.7}>
+                    <Feather name="plus" size={14} color={COLORS.brand} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => updateQty(name, -qty)} hitSlop={8} style={{ marginLeft: 4 }}>
+                    <Feather name="x" size={14} color={COLORS.textTertiary} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Custom instrument input */}
+        <View style={st.customRow}>
+          <TextInput
+            style={[st.input, { flex: 1 }]}
+            placeholder="Додати свій інструмент..."
+            placeholderTextColor={COLORS.textTertiary}
+            value={customInstrument}
+            onChangeText={setCustomInstrument}
+            onSubmitEditing={addCustomInstrument}
+            returnKeyType="done"
+            maxLength={100}
+          />
+          {customInstrument.trim() ? (
+            <TouchableOpacity style={st.addCustomBtn} onPress={addCustomInstrument} activeOpacity={0.7}>
+              <Feather name="plus" size={18} color="#fff" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
 
         {/* Package type */}
         <Text style={st.label}>Пакет</Text>
@@ -394,6 +484,18 @@ const st = StyleSheet.create({
   startBtn: { marginTop: 24 },
   startBtnInner: { flexDirection: 'row', height: 56, borderRadius: RADII.lg, alignItems: 'center', justifyContent: 'center', gap: 10 },
   startBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+
+  instrumentChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+
+  selectedList: { marginTop: 12, gap: 8 },
+  selectedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.bg, borderRadius: RADII.md, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: COLORS.border },
+  selectedName: { flex: 1, fontSize: 14, fontWeight: '500', color: COLORS.text, marginRight: 8 },
+  qtyControls: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  qtyBtn: { width: 30, height: 30, borderRadius: 8, backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
+  qtyText: { fontSize: 16, fontWeight: '700', color: COLORS.text, minWidth: 20, textAlign: 'center' },
+
+  customRow: { flexDirection: 'row', gap: 8, marginTop: 8, alignItems: 'center' },
+  addCustomBtn: { width: 48, height: 48, borderRadius: RADII.md, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center' },
 
   hint: { fontSize: 12, color: COLORS.textSecondary, textAlign: 'center', marginTop: 10 },
 
