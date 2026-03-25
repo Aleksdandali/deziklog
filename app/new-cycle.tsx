@@ -118,11 +118,22 @@ export default function NewCycleScreen() {
     setShowCamera(true);
   };
 
-  const handlePhotoCaptured = async (uri: string) => {
-    setPhotoBefore(uri);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
+  const handlePhotoCaptured = (uri: string) => {
+    setPhotoPreview(uri);
     setShowCamera(false);
-    // Start cycle immediately after photo
-    await startCycle(uri);
+  };
+
+  const handleConfirmPhoto = async () => {
+    if (!photoPreview) return;
+    setPhotoBefore(photoPreview);
+    await startCycle(photoPreview);
+  };
+
+  const handleRetakePhoto = () => {
+    setPhotoPreview(null);
+    setShowCamera(true);
   };
 
   const startCycle = async (photoUri: string) => {
@@ -180,6 +191,44 @@ export default function NewCycleScreen() {
         onCapture={handlePhotoCaptured}
         onClose={() => setShowCamera(false)}
       />
+    );
+  }
+
+  // ── Photo preview ──────────────────────────────────────
+
+  if (photoPreview) {
+    return (
+      <SafeAreaView style={st.container}>
+        <View style={st.header}>
+          <Text style={st.headerTitle}>Перевірте фото</Text>
+          <TouchableOpacity style={st.closeBtn} onPress={() => { setPhotoPreview(null); }}>
+            <Feather name="x" size={20} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={st.previewScreen}>
+          <Image source={{ uri: photoPreview }} style={st.previewImage} resizeMode="contain" />
+
+          <View style={st.previewActions}>
+            <TouchableOpacity style={st.retakeBtn} onPress={handleRetakePhoto} activeOpacity={0.85}>
+              <Feather name="refresh-cw" size={18} color={COLORS.brand} />
+              <Text style={st.retakeBtnText}>Переснять</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[st.confirmBtn, saving && { opacity: 0.5 }]}
+              disabled={saving}
+              onPress={handleConfirmPhoto}
+              activeOpacity={0.85}
+            >
+              <LinearGradient colors={[COLORS.brandDark, COLORS.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={st.confirmBtnInner}>
+                <Feather name="check" size={18} color="#fff" />
+                <Text style={st.confirmBtnText}>{saving ? 'Запускаю...' : 'Підтвердити → Старт'}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -306,7 +355,7 @@ export default function NewCycleScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        <Text style={st.hint}>Після фото індикатора цикл почнеться автоматично</Text>
+        <Text style={st.hint}>Після фото ви зможете перевірити знімок перед стартом</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -347,4 +396,14 @@ const st = StyleSheet.create({
   startBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
 
   hint: { fontSize: 12, color: COLORS.textSecondary, textAlign: 'center', marginTop: 10 },
+
+  // Photo preview screen
+  previewScreen: { flex: 1, padding: 20 },
+  previewImage: { flex: 1, borderRadius: RADII.lg, backgroundColor: '#000' },
+  previewActions: { flexDirection: 'row', gap: 12, marginTop: 16, paddingBottom: 16 },
+  retakeBtn: { flex: 1, flexDirection: 'row', height: 52, borderRadius: RADII.lg, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  retakeBtnText: { fontSize: 15, fontWeight: '600', color: COLORS.brand },
+  confirmBtn: { flex: 2 },
+  confirmBtnInner: { flexDirection: 'row', height: 52, borderRadius: RADII.lg, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  confirmBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 });
