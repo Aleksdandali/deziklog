@@ -371,7 +371,7 @@ function SessionCard({ sess, onPress, onShare }: { sess: SterilizationSession; o
               color={passed ? COLORS.success : COLORS.danger}
             />
             <Text style={[s.resultBadgeText, { color: passed ? COLORS.success : COLORS.danger }]}>
-              {passed ? 'OK' : 'Fail'}
+              {passed ? 'Успішно' : 'Невдало'}
             </Text>
           </View>
         </View>
