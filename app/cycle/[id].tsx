@@ -282,19 +282,20 @@ export default function CycleDetailScreen() {
               style={st.igBtnInner}
             >
               <View style={st.igIconWrap}>
-                <Feather name="instagram" size={20} color="#FFFFFF" />
+                <Feather name="instagram" size={18} color="#FFFFFF" />
               </View>
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={st.igBtnText}>{sharing ? 'Підготовка...' : 'Поділитись в Stories'}</Text>
                 <Text style={st.igBtnHint}>Покажіть клієнтам вашу відповідальність</Text>
               </View>
+              <Feather name="chevron-right" size={18} color="rgba(255,255,255,0.5)" />
             </LinearGradient>
           </TouchableOpacity>
         )}
 
         {/* Export button */}
         <TouchableOpacity style={st.exportBtn} onPress={handleExport} activeOpacity={0.85}>
-          <Feather name="share" size={18} color={COLORS.brand} />
+          <Feather name="upload" size={16} color={COLORS.brand} />
           <Text style={st.exportBtnText}>Експортувати</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -376,15 +377,15 @@ const st = StyleSheet.create({
   photoEmpty: { height: 160, borderRadius: RADII.lg, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center' },
 
   // Instagram
-  igBtnWrap: { marginTop: 24, borderRadius: RADII.lg + 2, shadowColor: '#C13584', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 14, elevation: 8 },
-  igBtnInner: { flexDirection: 'row', height: 60, borderRadius: RADII.lg + 2, alignItems: 'center', paddingHorizontal: 20, gap: 14 },
-  igIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  igBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-  igBtnHint: { fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 1 },
+  igBtnWrap: { marginTop: 28, borderRadius: 16, shadowColor: '#C13584', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8 },
+  igBtnInner: { flexDirection: 'row', height: 56, borderRadius: 16, alignItems: 'center', paddingHorizontal: 18, gap: 12 },
+  igIconWrap: { width: 34, height: 34, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  igBtnText: { fontSize: 15, fontWeight: '600', color: '#FFFFFF', letterSpacing: 0.2 },
+  igBtnHint: { fontSize: 11, color: 'rgba(255,255,255,0.65)', marginTop: 2, letterSpacing: 0.1 },
 
   // Export
-  exportBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 50, borderRadius: RADII.lg, borderWidth: 1.5, borderColor: COLORS.brand, marginTop: 12 },
-  exportBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.brand },
+  exportBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 52, borderRadius: 16, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white, marginTop: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
+  exportBtnText: { fontSize: 15, fontWeight: '600', color: COLORS.text, letterSpacing: 0.2 },
 
   // Modal
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
