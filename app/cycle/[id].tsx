@@ -82,7 +82,7 @@ export default function CycleDetailScreen() {
     if (!sess) return;
     const actual = actualMin ?? recommended;
     const lines = [
-      `Стерилізація — ${passed ? 'Успішно ✅' : 'Не пройшла ❌'}`,
+      `Стерилізація — ${passed ? 'Успішно' : 'Не пройшла'}`,
       ``,
       `Дата: ${fmt(sess.started_at || sess.created_at, 'date')}`,
       `Початок: ${fmt(sess.started_at, 'time')}`,
@@ -99,14 +99,20 @@ export default function CycleDetailScreen() {
     ].filter(Boolean).join('\n');
 
     try {
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert('Помилка', 'Функція поширення недоступна на цьому пристрої');
+        return;
+      }
       const fileUri = FileSystem.cacheDirectory + `sterilization-${sess.id}.txt`;
       await FileSystem.writeAsStringAsync(fileUri, lines, { encoding: FileSystem.EncodingType.UTF8 });
       await Sharing.shareAsync(fileUri, {
         mimeType: 'text/plain',
         dialogTitle: 'Експорт стерилізації',
-        UTI: 'public.utf8-plain-text',
       });
-    } catch {
+    } catch (err: any) {
+      // User cancelled share — not an error
+      if (err?.message?.includes('cancel') || err?.message?.includes('dismiss')) return;
       Alert.alert('Помилка', 'Не вдалось експортувати');
     }
   };
@@ -165,7 +171,13 @@ export default function CycleDetailScreen() {
 
         {/* Instruments */}
         <Text style={st.sectionLabel}>Інструменти</Text>
-        <Text style={st.sectionValue}>{sess.instrument_names}</Text>
+        <View style={st.instrumentTags}>
+          {sess.instrument_names.split(',').map((item, i) => (
+            <View key={i} style={st.instrumentTag}>
+              <Text style={st.instrumentTagText}>{item.trim()}</Text>
+            </View>
+          ))}
+        </View>
 
         {/* Employee */}
         {sess.employee_name && (
@@ -352,6 +364,10 @@ const st = StyleSheet.create({
   // Sections
   sectionLabel: { fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 20, marginBottom: 8 },
   sectionValue: { fontSize: 16, fontWeight: '600', color: COLORS.text, lineHeight: 22 },
+
+  instrumentTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  instrumentTag: { backgroundColor: COLORS.brandLight, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
+  instrumentTagText: { fontSize: 13, fontWeight: '600', color: COLORS.brand },
 
   // Info card
   infoCard: { backgroundColor: COLORS.cardBg, borderRadius: RADII.lg, padding: 14, gap: 10 },
