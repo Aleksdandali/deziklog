@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
 import LottieView from 'lottie-react-native';
 import Animated, {
@@ -36,9 +36,12 @@ function PulseDot({ delay }: { delay: number }) {
 }
 
 export default function AnimatedSplash() {
+  const lottieRef = useRef<LottieView>(null);
   const dotsOpacity = useSharedValue(0);
 
   useEffect(() => {
+    // Force play in case autoPlay doesn't trigger on some devices
+    lottieRef.current?.play();
     dotsOpacity.value = withDelay(2000, withTiming(1, { duration: 400 }));
   }, []);
 
@@ -49,11 +52,11 @@ export default function AnimatedSplash() {
   return (
     <View style={st.container}>
       <LottieView
+        ref={lottieRef}
         source={require('../assets/animations/dezik_star_loader.json')}
         autoPlay
         loop
         style={st.lottie}
-        resizeMode="contain"
       />
 
       <Animated.View style={[st.dotsRow, dotsStyle]}>
@@ -73,14 +76,13 @@ const st = StyleSheet.create({
     justifyContent: 'center',
   },
   lottie: {
-    width: SW,
-    height: SH * 0.5,
+    width: SW * 0.8,
+    height: SW * 0.8,
   },
   dotsRow: {
     flexDirection: 'row',
     gap: 8,
-    position: 'absolute',
-    bottom: SH * 0.12,
+    marginTop: 40,
   },
   dot: {
     width: 6,
