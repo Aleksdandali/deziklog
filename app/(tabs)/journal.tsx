@@ -15,7 +15,7 @@ import { COLORS } from '../../lib/constants';
 import { RADII } from '../../lib/theme';
 import { getCached, setCache } from '../../lib/cache';
 import { generateJournalPDF } from '../../lib/pdf-export';
-import { getProfile, type SterilizationSession } from '../../lib/api';
+import { getProfile, getPhotoUrl, type SterilizationSession } from '../../lib/api';
 import { SkeletonEntryCard } from '../../components/Skeleton';
 import { calcActualMinutes, getDurationStatus } from '../../lib/steri-config';
 import { shareToInstagramStory } from '../../lib/share-instagram';
@@ -76,6 +76,8 @@ export default function JournalScreen() {
   const [initialLoad, setInitialLoad] = useState(true);
   const [filter, setFilter] = useState<FilterType>('all');
   const [sharingCycle, setSharingCycle] = useState<SterilizationSession | null>(null);
+  const [sharingPhotoBefore, setSharingPhotoBefore] = useState<string | null>(null);
+  const [sharingPhotoAfter, setSharingPhotoAfter] = useState<string | null>(null);
   const [profileInfo, setProfileInfo] = useState<{ salon_name: string | null; city: string | null }>({ salon_name: null, city: null });
   const storyRef = useRef<ViewShot>(null);
 
@@ -153,7 +155,22 @@ export default function JournalScreen() {
     }
   };
 
-  // Share cycle to Instagram
+  // Start share: load photos first, then set sharingCycle to trigger render
+  const handleStartShare = async (sess: SterilizationSession) => {
+    let before: string | null = null;
+    let after: string | null = null;
+    try {
+      if (sess.photo_before_path) before = await getPhotoUrl(sess.photo_before_path);
+      if (sess.photo_after_path) after = await getPhotoUrl(sess.photo_after_path);
+    } catch (err) {
+      console.warn('Failed to load share photos:', err);
+    }
+    setSharingPhotoBefore(before);
+    setSharingPhotoAfter(after);
+    setSharingCycle(sess);
+  };
+
+  // Share cycle to Instagram (once StoryCard renders with photos)
   React.useEffect(() => {
     if (!sharingCycle || !storyRef.current) return;
     const timer = setTimeout(async () => {
@@ -164,8 +181,10 @@ export default function JournalScreen() {
         console.error('Share error:', err);
       } finally {
         setSharingCycle(null);
+        setSharingPhotoBefore(null);
+        setSharingPhotoAfter(null);
       }
-    }, 300); // small delay for ViewShot to render
+    }, 500); // delay for photos to load in Image components
     return () => clearTimeout(timer);
   }, [sharingCycle]);
 
@@ -275,7 +294,7 @@ export default function JournalScreen() {
                   </View>
                 </View>
                 {group.data.map((sess) => (
-                  <SessionCard key={sess.id} sess={sess} onPress={() => router.push(`/cycle/${sess.id}`)} onShare={() => setSharingCycle(sess)} />
+                  <SessionCard key={sess.id} sess={sess} onPress={() => router.push(`/cycle/${sess.id}`)} onShare={() => handleStartShare(sess)} />
                 ))}
               </View>
             )}
@@ -291,6 +310,8 @@ export default function JournalScreen() {
               sterilizer={sharingCycle.sterilizer_name}
               duration={formatDuration(calcActualMinutes(sharingCycle.started_at, sharingCycle.ended_at) ?? sharingCycle.duration_minutes)}
               packType={sharingCycle.pouch_size && sharingCycle.pouch_size !== 'none' ? sharingCycle.pouch_size : ''}
+              photoBefore={sharingPhotoBefore}
+              photoAfter={sharingPhotoAfter}
               salonName={profileInfo.salon_name}
               city={profileInfo.city}
               date={new Date(sharingCycle.created_at).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}
