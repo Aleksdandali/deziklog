@@ -603,97 +603,30 @@ export default function ProfileScreen() {
         </View>
 
         {/* ── Orders ── */}
-        <SectionHeader title="Мої замовлення" count={orders.length} />
-        {loadingOrders ? (
-          <View style={s.emptyBlock}>
-            <ActivityIndicator color={COLORS.brand} />
-          </View>
-        ) : orders.length === 0 ? (
-          <View style={s.emptyBlock}>
-            <Feather name="shopping-bag" size={32} color={COLORS.textTertiary} />
-            <Text style={s.emptyTitle}>Замовлень поки немає</Text>
-            <Text style={s.emptySubtitle}>Ваші замовлення з магазину з'являться тут</Text>
-          </View>
-        ) : (
-          <View style={s.section}>
-            {orders.map((o) => {
-              const st = STATUS_LABELS[o.status] ?? STATUS_LABELS.pending;
-              const items = o.order_items ?? [];
-              const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
-              const itemNames = items.slice(0, 2).map((i) => i.product_name);
-              const moreCount = items.length - 2;
-              return (
-                <TouchableOpacity
-                  key={o.id}
-                  style={s.orderCard}
-                  activeOpacity={0.7}
-                  onPress={() => router.push(`/order/${o.id}` as any)}
-                >
-                  {/* Top row: date + status */}
-                  <View style={s.orderTopRow}>
-                    <View style={s.orderDateRow}>
-                      <View style={[s.orderStatusDot, { backgroundColor: st.bg }]}>
-                        <Feather name={st.icon as any} size={12} color={st.color} />
-                      </View>
-                      <Text style={s.orderDate}>{formatOrderDate(o.created_at)}</Text>
-                    </View>
-                    <View style={[s.orderBadge, { backgroundColor: st.bg }]}>
-                      <Text style={[s.orderBadgeText, { color: st.color }]}>{st.label}</Text>
-                    </View>
-                  </View>
-
-                  {/* Item names */}
-                  {itemNames.length > 0 && (
-                    <View style={s.orderItemsList}>
-                      {itemNames.map((name, idx) => (
-                        <Text key={idx} style={s.orderItemName} numberOfLines={1}>
-                          {name}
-                        </Text>
-                      ))}
-                      {moreCount > 0 && (
-                        <Text style={s.orderMoreItems}>+ ще {moreCount} поз.</Text>
-                      )}
-                    </View>
-                  )}
-
-                  {/* Bottom row: amount + meta */}
-                  <View style={s.orderBottomRow}>
-                    <Text style={s.orderAmount}>{formatPrice(o.total_amount)}</Text>
-                    <View style={s.orderMeta}>
-                      {totalItems > 0 && (
-                        <View style={s.orderMetaChip}>
-                          <Feather name="package" size={11} color={COLORS.textTertiary} />
-                          <Text style={s.orderMetaText}>{totalItems} шт</Text>
-                        </View>
-                      )}
-                      {o.np_ttn && (
-                        <View style={s.orderMetaChip}>
-                          <Feather name="truck" size={11} color={COLORS.textTertiary} />
-                          <Text style={s.orderMetaText}>ТТН</Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-
-                  {/* City + chevron */}
-                  {o.city_name && (
-                    <View style={s.orderFooter}>
-                      <Feather name="map-pin" size={11} color={COLORS.textTertiary} />
-                      <Text style={s.orderCity} numberOfLines={1}>{o.city_name}</Text>
-                      <Feather name="chevron-right" size={14} color={COLORS.textTertiary} />
-                    </View>
-                  )}
-                  {!o.city_name && (
-                    <View style={s.orderFooter}>
-                      <View style={{ flex: 1 }} />
-                      <Feather name="chevron-right" size={14} color={COLORS.textTertiary} />
-                    </View>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
+        <SectionHeader title="Замовлення" />
+        <View style={s.section}>
+          <TouchableOpacity
+            style={s.ordersBtn}
+            activeOpacity={0.7}
+            onPress={() => router.push('/orders' as any)}
+          >
+            <View style={[s.menuIcon, { backgroundColor: '#FFF3E0' }]}>
+              <Feather name="shopping-bag" size={18} color="#E65100" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.ordersBtnTitle}>Мої замовлення</Text>
+              <Text style={s.ordersBtnSub}>
+                {loadingOrders ? 'Завантаження...' : orders.length === 0 ? 'Немає замовлень' : `${orders.length} ${orders.length === 1 ? 'замовлення' : orders.length <= 4 ? 'замовлення' : 'замовлень'}`}
+              </Text>
+            </View>
+            {orders.length > 0 && (
+              <View style={s.ordersBtnBadge}>
+                <Text style={s.ordersBtnBadgeText}>{orders.length}</Text>
+              </View>
+            )}
+            <Feather name="chevron-right" size={16} color={COLORS.textTertiary} />
+          </TouchableOpacity>
+        </View>
 
         {/* ── Staff ── */}
         <SectionHeader title="Персонал" />
@@ -1000,7 +933,22 @@ const s = StyleSheet.create({
 
   section: { paddingHorizontal: 24, gap: 8 },
 
-  // Orders
+  // Orders button
+  ordersBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: COLORS.white, borderRadius: 16,
+    borderWidth: 1, borderColor: COLORS.border, padding: 14,
+  },
+  ordersBtnTitle: { fontSize: 15, fontWeight: '600', color: COLORS.text },
+  ordersBtnSub: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  ordersBtnBadge: {
+    minWidth: 24, height: 24, borderRadius: 12,
+    backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  ordersBtnBadgeText: { fontSize: 12, fontWeight: '700', color: '#fff' },
+
+  // Orders (used on orders screen)
   orderCard: {
     backgroundColor: COLORS.white, borderRadius: 16,
     borderWidth: 1, borderColor: COLORS.border,
