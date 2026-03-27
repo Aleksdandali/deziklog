@@ -58,7 +58,9 @@ const ROLE_ICONS: Record<UserRole, string> = {
 
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string; icon: string }> = {
   pending: { label: 'Нове', color: COLORS.warning, bg: COLORS.warningBg, icon: 'clock' },
+  processing: { label: 'Збирається', color: '#2563EB', bg: '#EFF6FF', icon: 'package' },
   confirmed: { label: 'Підтверджено', color: COLORS.success, bg: COLORS.successBg, icon: 'check-circle' },
+  delivered: { label: 'Доставлено', color: COLORS.success, bg: COLORS.successBg, icon: 'truck' },
   canceled: { label: 'Скасовано', color: COLORS.danger, bg: COLORS.dangerBg, icon: 'x-circle' },
 };
 

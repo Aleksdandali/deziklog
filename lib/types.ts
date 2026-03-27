@@ -123,7 +123,7 @@ export interface NPWarehouse {
 export interface Order {
   id: string;
   user_id: string;
-  status: 'pending' | 'confirmed' | 'canceled';
+  status: 'pending' | 'processing' | 'confirmed' | 'delivered' | 'canceled';
   total_amount: number;
   delivery_address: string;
   delivery_type: DeliveryType;
