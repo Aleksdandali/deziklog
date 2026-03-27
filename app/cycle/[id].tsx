@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView,
-  Image, Modal, Alert,
+  Image, Modal, Alert, Share,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
 import ViewShot from 'react-native-view-shot';
 import { getSessionById, getPhotoUrl, type SterilizationSession } from '../../lib/api';
 import { useAuth } from '../../lib/auth-context';
@@ -99,11 +98,11 @@ export default function CycleDetailScreen() {
     ].filter(Boolean).join('\n');
 
     try {
-      const fileUri = `${FileSystem.cacheDirectory}sterilization-${sess.id.slice(0, 8)}.txt`;
-      await FileSystem.writeAsStringAsync(fileUri, lines, { encoding: 'utf8' });
-      await Sharing.shareAsync(fileUri, { mimeType: 'text/plain', dialogTitle: 'Експорт стерилізації' });
+      await Share.share({
+        message: lines,
+        title: 'Стерилізація — Dezik SteriLog',
+      });
     } catch (err: any) {
-      // User cancelled share — not an error
       const msg = err?.message ?? '';
       if (msg.includes('cancel') || msg.includes('dismiss') || msg.includes('aborted')) return;
       Alert.alert('Помилка', `Не вдалось експортувати: ${msg.slice(0, 100)}`);
