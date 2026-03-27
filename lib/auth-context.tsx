@@ -31,7 +31,9 @@ export function useSessionGuard(): () => Promise<string | null> {
     try {
       const { data } = await supabase.auth.getSession();
       if (data?.session?.user?.id) return data.session.user.id;
-    } catch {}
+    } catch (err) {
+      console.warn('Session guard: refresh failed:', err);
+    }
     // No valid session — offer sign out
     Alert.alert(
       'Сесія закінчилась',

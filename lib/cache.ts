@@ -14,5 +14,7 @@ export async function getCached<T>(key: string): Promise<T | null> {
 export async function setCache<T>(key: string, data: T): Promise<void> {
   try {
     await AsyncStorage.setItem(PREFIX + key, JSON.stringify(data));
-  } catch {}
+  } catch (err) {
+    console.warn('Cache: failed to write:', key, err);
+  }
 }

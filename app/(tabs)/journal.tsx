@@ -105,7 +105,9 @@ export default function JournalScreen() {
       const result = data ?? [];
       setSessions(result);
       setCache(`journal_${userId}`, result);
-    } catch {} finally {
+    } catch (err) {
+      console.warn('Journal: failed to load sessions:', err);
+    } finally {
       setRefreshing(false);
       setInitialLoad(false);
     }

@@ -14,21 +14,19 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { sendExpoPush, buildPushMessage } from "../_shared/expo-push.ts";
 
-const CRON_SECRET = Deno.env.get("CRON_SECRET");
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    // Auth check
-    const authHeader = req.headers.get("authorization") || "";
-    const cronSecret = req.headers.get("x-cron-secret") || "";
+    // Auth: ONLY cron secret (consistent with other cron jobs)
+    const cronSecret = req.headers.get("x-cron-secret");
+    const expectedSecret = Deno.env.get("CRON_SECRET");
 
-    if (CRON_SECRET && cronSecret !== CRON_SECRET && !authHeader.includes(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "___")) {
+    if (!cronSecret || !expectedSecret || cronSecret !== expectedSecret) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
+        status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

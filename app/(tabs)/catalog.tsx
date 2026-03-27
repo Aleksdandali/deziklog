@@ -42,8 +42,8 @@ export default function CatalogScreen() {
       AsyncStorage.getItem(CACHE_KEY_PRODUCTS),
     ]).then(([cachedCats, cachedProds]) => {
       if (!mounted) return;
-      if (cachedCats) try { setCategories(JSON.parse(cachedCats)); } catch {}
-      if (cachedProds) try { setProducts(JSON.parse(cachedProds)); setLoading(false); } catch {}
+      if (cachedCats) try { setCategories(JSON.parse(cachedCats)); } catch (e) { console.warn('Catalog: cached categories parse error:', e); }
+      if (cachedProds) try { setProducts(JSON.parse(cachedProds)); setLoading(false); } catch (e) { console.warn('Catalog: cached products parse error:', e); }
     });
 
     (async () => {
@@ -62,7 +62,9 @@ export default function CatalogScreen() {
           AsyncStorage.setItem(CACHE_KEY_PRODUCTS, JSON.stringify(prodRes.data)).catch(() => {});
           // expo-image handles disk caching natively — no manual prefetch needed
         }
-      } catch {} finally { if (mounted) setLoading(false); }
+      } catch (err) {
+        console.warn('Catalog: failed to load products:', err);
+      } finally { if (mounted) setLoading(false); }
     })();
 
     return () => { mounted = false; };
@@ -144,7 +146,7 @@ export default function CatalogScreen() {
           maxToRenderPerBatch={8}
           windowSize={5}
           renderItem={({ item }) => {
-            const catName = (item.category as any)?.name;
+            const catName = item.category?.name;
             return (
               <TouchableOpacity
                 style={s.card}

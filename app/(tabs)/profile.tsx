@@ -176,11 +176,15 @@ export default function ProfileScreen() {
           applyProfile(p);
           setCache(`profile_${userId}`, p);
         }
-      } catch {}
+      } catch (err) {
+        console.warn('Profile: failed to load:', err);
+      }
       try {
         const o = await getOrders(userId);
         setOrders(o.slice(0, 10));
-      } catch {}
+      } catch (err) {
+        console.warn('Profile: failed to load orders:', err);
+      }
       setLoadingOrders(false);
     })();
   }, [userId]));
@@ -242,7 +246,9 @@ export default function ProfileScreen() {
       const updated = { ...profile, [field]: value };
       setProfile(updated);
       setCache(`profile_${userId}`, updated);
-    } catch {}
+    } catch (err) {
+      console.warn('Profile: failed to toggle notification:', err);
+    }
   };
 
   const handleExportPDF = async () => {

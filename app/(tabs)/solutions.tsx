@@ -90,7 +90,9 @@ export default function SolutionsScreen() {
       const result = data ?? [];
       setSolutions(result);
       setCache(`solutions_${userId}`, result);
-    } catch {} finally { setRefreshing(false); setInitialLoad(false); }
+    } catch (err) {
+      console.warn('Solutions: failed to load:', err);
+    } finally { setRefreshing(false); setInitialLoad(false); }
   }, [userId, initialLoad]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));

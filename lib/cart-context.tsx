@@ -41,7 +41,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
             if (Array.isArray(parsed) && parsed.length > 0) {
               setItems(parsed);
             }
-          } catch {}
+          } catch (err) {
+            console.warn('Cart: failed to parse stored cart:', err);
+          }
         }
       })
       .finally(() => { loaded.current = true; });

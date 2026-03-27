@@ -75,18 +75,25 @@ export default function TimerScreen() {
 
   const { minutes: elapsedMin, seconds: elapsedSec } = formatElapsed(elapsed);
 
+  const recommendedSecondsRef = useRef(recommendedSeconds);
+  recommendedSecondsRef.current = recommendedSeconds;
+
   useEffect(() => {
     if (!timerData) return;
+
+    // Clear any previous interval to prevent duplicates
+    if (timerRef.current) clearInterval(timerRef.current);
 
     timerRef.current = setInterval(() => {
       const newElapsed = Math.floor((Date.now() - timerData.startedAt) / 1000);
       setElapsed(newElapsed);
+      const recSec = recommendedSecondsRef.current;
       // Haptic every minute
       if (newElapsed > 0 && newElapsed % 60 === 0) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
       // Haptic + local notification when recommended time reached
-      if (newElapsed === recommendedSeconds && recommendedSeconds > 0) {
+      if (newElapsed === recSec && recSec > 0) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Notifications.scheduleNotificationAsync({
           identifier: `timer-done-${timerData.sessionId}`,
@@ -117,11 +124,14 @@ export default function TimerScreen() {
     dotAnim.start();
 
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
       colonAnim.stop();
       dotAnim.stop();
     };
-  }, [timerData, recommendedSeconds]);
+  }, [timerData]);
 
   const handleComplete = () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -145,7 +155,9 @@ export default function TimerScreen() {
               try {
                 const uid = await getUid();
                 if (uid) await updateSession(timerData.sessionId, uid, { status: 'canceled' });
-              } catch {}
+              } catch (err) {
+                console.warn('Timer: failed to cancel session:', err);
+              }
               await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
             }
             router.replace('/(tabs)');

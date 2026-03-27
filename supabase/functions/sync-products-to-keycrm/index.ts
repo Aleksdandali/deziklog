@@ -2,7 +2,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
-const KEYCRM_API_KEY = Deno.env.get("KEYCRM_API_KEY")!;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -17,6 +16,15 @@ Deno.serve(async (req) => {
     if (!cronSecret || !expectedSecret || cronSecret !== expectedSecret) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const KEYCRM_API_KEY = Deno.env.get("KEYCRM_API_KEY");
+    if (!KEYCRM_API_KEY) {
+      console.error("KEYCRM_API_KEY not set");
+      return new Response(JSON.stringify({ error: "KEYCRM_API_KEY not configured" }), {
+        status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

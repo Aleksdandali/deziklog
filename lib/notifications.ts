@@ -130,7 +130,9 @@ export async function notifyCycleDone(userId: string, instruments: string): Prom
       .eq('id', userId)
       .maybeSingle();
     if (data?.notification_cycle_done === false) return;
-  } catch {}
+  } catch (err) {
+    console.warn('Notifications: failed to check cycle_done pref:', err);
+  }
 
   await Notifications.scheduleNotificationAsync({
     identifier: `cycle-done-${Date.now()}`,
@@ -154,7 +156,9 @@ export async function notifyOrderStatusChange(userId: string, orderId: string, n
       .eq('id', userId)
       .maybeSingle();
     if (data?.notification_order_status === false) return;
-  } catch {}
+  } catch (err) {
+    console.warn('Notifications: failed to check order_status pref:', err);
+  }
 
   const statusLabels: Record<string, string> = {
     confirmed: 'підтверджено',

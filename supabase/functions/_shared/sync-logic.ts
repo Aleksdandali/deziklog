@@ -6,6 +6,9 @@
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
 const NP_API_URL = "https://api.novaposhta.ua/v2.0/json/";
 
+/** Orders >= this amount (UAH) get free shipping (sender pays) */
+export const FREE_SHIPPING_THRESHOLD = 2000;
+
 export async function syncOrderToKeyCRM(
   adminClient: any,
   orderId: string,
@@ -81,7 +84,9 @@ export async function syncOrderToKeyCRM(
       if (searchRes.ok && searchData.data?.length > 0) {
         buyerId = searchData.data[0].id;
       }
-    } catch {}
+    } catch (e) {
+      console.warn("KeyCRM buyer search failed:", e);
+    }
 
     // If not found — create
     if (!buyerId) {
@@ -156,7 +161,7 @@ export async function syncOrderToKeyCRM(
   let ttn: string | null = null;
   if (order.city_ref && NP_API_KEY && (deliveryType === "warehouse" ? order.warehouse_ref : order.address_street)) {
     try {
-      const payerType = order.total_amount >= 2000 ? "Sender" : "Recipient";
+      const payerType = order.total_amount >= FREE_SHIPPING_THRESHOLD ? "Sender" : "Recipient";
       const serviceType = deliveryType === "address" ? "WarehouseDoors" : "WarehouseWarehouse";
 
       const methodProperties: Record<string, string> = {

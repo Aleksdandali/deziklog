@@ -53,7 +53,9 @@ function RootNavigator() {
         } else if (data.screen === 'journal') {
           router.push('/(tabs)/journal' as any);
         }
-      } catch {}
+      } catch (err) {
+        console.warn('Notification navigation failed:', err);
+      }
     });
 
     return () => {

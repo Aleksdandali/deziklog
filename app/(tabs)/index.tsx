@@ -12,6 +12,7 @@ import { useAuth } from '../../lib/auth-context';
 import { COLORS, FONT, RADIUS, SHADOW, MS_PER_DAY } from '../../lib/constants';
 import { getCached, setCache } from '../../lib/cache';
 import type { SterilizationSession } from '../../lib/api';
+import type { Solution } from '../../lib/types';
 import { SkeletonEntryCard } from '../../components/Skeleton';
 import Skeleton from '../../components/Skeleton';
 import ActiveTimerWidget from '../../components/ActiveTimerWidget';
@@ -36,7 +37,7 @@ export default function HomeScreen() {
   const userId = session?.user?.id;
 
   const [sessions, setSessions] = useState<SterilizationSession[]>([]);
-  const [solutions, setSolutions] = useState<any[]>([]);
+  const [solutions, setSolutions] = useState<Solution[]>([]);
   const [profileName, setProfileName] = useState('');
   const [salonName, setSalonName] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -50,7 +51,7 @@ export default function HomeScreen() {
       const [cachedSessions, cachedProfile, cachedSolutions] = await Promise.all([
         getCached<SterilizationSession[]>(`home_sessions_${userId}`),
         getCached<{ name: string; salon_name: string }>(`home_profile_${userId}`),
-        getCached<any[]>(`home_solutions_${userId}`),
+        getCached<Solution[]>(`home_solutions_${userId}`),
       ]);
       if (cachedSessions) setSessions(cachedSessions);
       if (cachedProfile) { setProfileName(cachedProfile.name); setSalonName(cachedProfile.salon_name); }
@@ -91,7 +92,9 @@ export default function HomeScreen() {
       const newSolutions = solDetailRes.data ?? [];
       setSolutions(newSolutions);
       setCache(`home_solutions_${userId}`, newSolutions);
-    } catch {} finally {
+    } catch (err) {
+      console.warn('Home: failed to load data:', err);
+    } finally {
       setRefreshing(false);
       setInitialLoad(false);
     }
