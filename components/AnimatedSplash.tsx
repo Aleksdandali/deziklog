@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet, Dimensions } from 'react-native';
 import LottieView from 'lottie-react-native';
 import Animated, {
   useSharedValue,
@@ -12,14 +12,14 @@ import Animated, {
   interpolate,
 } from 'react-native-reanimated';
 
-const { width: SW } = Dimensions.get('window');
+const { width: SW, height: SH } = Dimensions.get('window');
 const BRAND = '#4b569e';
 
 function PulseDot({ delay }: { delay: number }) {
   const anim = useSharedValue(0);
 
   useEffect(() => {
-    anim.value = withDelay(1200 + delay, withRepeat(
+    anim.value = withDelay(2000 + delay, withRepeat(
       withSequence(
         withTiming(1, { duration: 500, easing: Easing.inOut(Easing.ease) }),
         withTiming(0, { duration: 500, easing: Easing.inOut(Easing.ease) }),
@@ -36,18 +36,11 @@ function PulseDot({ delay }: { delay: number }) {
 }
 
 export default function AnimatedSplash() {
-  const textOpacity = useSharedValue(0);
   const dotsOpacity = useSharedValue(0);
 
   useEffect(() => {
-    textOpacity.value = withDelay(600, withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) }));
-    dotsOpacity.value = withDelay(1200, withTiming(1, { duration: 400 }));
+    dotsOpacity.value = withDelay(2000, withTiming(1, { duration: 400 }));
   }, []);
-
-  const textStyle = useAnimatedStyle(() => ({
-    opacity: textOpacity.value,
-    transform: [{ translateY: interpolate(textOpacity.value, [0, 1], [10, 0]) }],
-  }));
 
   const dotsStyle = useAnimatedStyle(() => ({
     opacity: dotsOpacity.value,
@@ -60,12 +53,8 @@ export default function AnimatedSplash() {
         autoPlay
         loop
         style={st.lottie}
+        resizeMode="contain"
       />
-
-      <Animated.View style={[st.textWrap, textStyle]}>
-        <Text style={st.title}>DEZIK</Text>
-        <Text style={st.subtitle}>SteriLOG</Text>
-      </Animated.View>
 
       <Animated.View style={[st.dotsRow, dotsStyle]}>
         <PulseDot delay={0} />
@@ -84,32 +73,14 @@ const st = StyleSheet.create({
     justifyContent: 'center',
   },
   lottie: {
-    width: 120,
-    height: 120,
-  },
-  textWrap: {
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  title: {
-    fontSize: Math.min(SW * 0.13, 56),
-    fontWeight: '900',
-    color: '#1a1a1a',
-    letterSpacing: 2,
-    fontStyle: 'italic',
-  },
-  subtitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: BRAND,
-    letterSpacing: 6,
-    textTransform: 'uppercase',
-    marginTop: 4,
+    width: SW,
+    height: SH * 0.5,
   },
   dotsRow: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 40,
+    position: 'absolute',
+    bottom: SH * 0.12,
   },
   dot: {
     width: 6,
