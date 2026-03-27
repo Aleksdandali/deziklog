@@ -167,7 +167,7 @@ export default function SolutionsScreen() {
             data={solutions}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 32 }}
+            contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 100 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={COLORS.brand} />}
             renderItem={({ item }) => {
               const { status, daysLeft } = getStatus(item.expires_at);
@@ -359,7 +359,7 @@ export default function SolutionsScreen() {
 
       {/* ═══ TAB: Guides ═══ */}
       {tab === 'guides' && (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 32 }}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 100 }}>
           {/* AI Assistant card */}
           <TouchableOpacity style={s.aiCard} onPress={() => router.push('/ai-chat')} activeOpacity={0.8}>
             <View style={s.aiCardIcon}>
@@ -432,7 +432,7 @@ const s = StyleSheet.create({
   emptyBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.brand },
 
   // Calculator
-  calcBody: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 40 },
+  calcBody: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 100 },
   fieldLabel: { fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 18, marginBottom: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: RADII.pill, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white },
