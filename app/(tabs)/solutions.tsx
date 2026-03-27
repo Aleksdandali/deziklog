@@ -268,14 +268,6 @@ export default function SolutionsScreen() {
                       <Text style={[s.volumeChipText, volumeInput === v && s.chipTextActive]}>{v}</Text>
                     </TouchableOpacity>
                   ))}
-                  <TextInput
-                    style={s.volumeInput}
-                    value={volumeInput}
-                    onChangeText={setVolumeInput}
-                    keyboardType="number-pad"
-                    placeholder="мл"
-                    placeholderTextColor={COLORS.textTertiary}
-                  />
                 </View>
 
                 <TouchableOpacity
