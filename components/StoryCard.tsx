@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Stop, Circle, Rect } from 'react-native-svg';
@@ -105,7 +106,7 @@ export default function StoryCard({
                 {photoBefore && (
                   <View style={st.photoCol}>
                     <View style={st.photoFrame}>
-                      <Image source={{ uri: photoBefore }} style={st.photo} />
+                      <Image source={photoBefore} style={st.photo} cachePolicy="memory-disk" />
                     </View>
                     <Text style={st.photoLabel}>ДО</Text>
                   </View>
@@ -118,7 +119,7 @@ export default function StoryCard({
                 {photoAfter && (
                   <View style={st.photoCol}>
                     <View style={[st.photoFrame, st.photoFrameAfter]}>
-                      <Image source={{ uri: photoAfter }} style={st.photo} />
+                      <Image source={photoAfter} style={st.photo} cachePolicy="memory-disk" />
                     </View>
                     <Text style={[st.photoLabel, { color: '#22C55E' }]}>ПІСЛЯ</Text>
                   </View>

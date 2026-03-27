@@ -7,6 +7,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Image as ExpoImage } from 'expo-image';
 import * as Sharing from 'expo-sharing';
 import ViewShot from 'react-native-view-shot';
 import { supabase } from '../../lib/supabase';
@@ -155,13 +156,18 @@ export default function JournalScreen() {
     }
   };
 
-  // Start share: load photos first, then set sharingCycle to trigger render
+  // Start share: load & prefetch photos, then set sharingCycle to trigger render
   const handleStartShare = async (sess: SterilizationSession) => {
     let before: string | null = null;
     let after: string | null = null;
     try {
       if (sess.photo_before_path) before = await getPhotoUrl(sess.photo_before_path);
       if (sess.photo_after_path) after = await getPhotoUrl(sess.photo_after_path);
+      // Prefetch images so they're cached when Image renders
+      const prefetches: Promise<any>[] = [];
+      if (before) prefetches.push(ExpoImage.prefetch(before));
+      if (after) prefetches.push(ExpoImage.prefetch(after));
+      if (prefetches.length) await Promise.all(prefetches);
     } catch (err) {
       console.warn('Failed to load share photos:', err);
     }
@@ -184,7 +190,7 @@ export default function JournalScreen() {
         setSharingPhotoBefore(null);
         setSharingPhotoAfter(null);
       }
-    }, 500); // delay for photos to load in Image components
+    }, 1500); // longer delay — photos need to render after prefetch
     return () => clearTimeout(timer);
   }, [sharingCycle]);
 
