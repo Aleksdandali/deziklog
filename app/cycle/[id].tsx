@@ -99,17 +99,9 @@ export default function CycleDetailScreen() {
     ].filter(Boolean).join('\n');
 
     try {
-      const fileUri = `${FileSystem.cacheDirectory}sterilization-${sess.id}.txt`;
-      await FileSystem.writeAsStringAsync(fileUri, lines, { encoding: FileSystem.EncodingType.UTF8 });
-
-      // Verify file was written
-      const fileInfo = await FileSystem.getInfoAsync(fileUri);
-      if (!fileInfo.exists) {
-        Alert.alert('Помилка', 'Не вдалось зберегти файл');
-        return;
-      }
-
-      await Sharing.shareAsync(fileUri, { mimeType: 'text/plain' });
+      const fileUri = `${FileSystem.cacheDirectory}sterilization-${sess.id.slice(0, 8)}.txt`;
+      await FileSystem.writeAsStringAsync(fileUri, lines, { encoding: 'utf8' });
+      await Sharing.shareAsync(fileUri, { mimeType: 'text/plain', dialogTitle: 'Експорт стерилізації' });
     } catch (err: any) {
       // User cancelled share — not an error
       const msg = err?.message ?? '';
