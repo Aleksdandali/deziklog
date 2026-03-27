@@ -150,25 +150,31 @@ export async function calculateSolution(req: SolutionRequest): Promise<SolutionR
   const product = CONCENTRATE_PRODUCTS.find((p) => p.id === req.productId);
   if (!product) throw new Error('Продукт не знайдено');
 
-  // DEZIK Instrum — special case, no dilution
+  // DEZIK Instrum — 1:1 dilution with hot water
   if (req.productId === 'instrum') {
+    const instrumMl = Math.round(req.volumeMl / 2);
+    const waterMl = req.volumeMl - instrumMl;
     return {
       title: 'Очищення від нальоту — DEZIK Instrum',
       productName: product.name,
       finalVolumeMl: req.volumeMl,
-      concentrateMl: req.volumeMl,
-      waterMl: 0,
-      concentrationPercent: 100,
+      concentrateMl: instrumMl,
+      waterMl,
+      concentrationPercent: 50,
       minContactTimeMin: 20,
       steps: [
         { order: 1, text: 'Надягніть захисні рукавички.' },
-        { order: 2, text: `Налийте ${req.volumeMl} мл DEZIK Instrum у ємність.` },
-        { order: 3, text: 'Занурте інструменти у розчин на 15–20 хвилин.' },
-        { order: 4, text: 'Промийте під проточною водою.' },
-        { order: 5, text: 'Ретельно висушіть.' },
+        { order: 2, text: `Налийте в ємність ${waterMl} мл гарячої води (80–90°C, не окріп).` },
+        { order: 3, text: `Додайте ${instrumMl} мл засобу DEZIK Instrum.` },
+        { order: 4, text: 'Перемішайте.' },
+        { order: 5, text: 'Занурте інструменти у розчин на 15–20 хвилин.' },
+        { order: 6, text: 'Промийте під проточною водою.' },
+        { order: 7, text: 'Ретельно висушіть.' },
       ],
       warnings: [
         'DEZIK Instrum НЕ є дезінфектантом. Використовуйте ПІСЛЯ дезінфекції.',
+        'Пропорція 1:1 — спочатку вода, потім засіб.',
+        'Вода 80–90°C — гаряча, але не окріп.',
         'Допускається використання в ультразвуковій мийці.',
       ],
       shelfLifeDays: 0,
