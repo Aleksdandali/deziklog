@@ -282,8 +282,13 @@ export default function SolutionsScreen() {
               </>
             ) : (
               <>
-                {/* Recipe result */}
-                <Text style={s.recipeTitle}>{recipe.title}</Text>
+                {/* Header with back button */}
+                <View style={s.recipeHeader}>
+                  <TouchableOpacity style={s.recipeBackBtn} onPress={() => setRecipe(null)} activeOpacity={0.7}>
+                    <Feather name="arrow-left" size={18} color={COLORS.brand} />
+                  </TouchableOpacity>
+                  <Text style={s.recipeTitle} numberOfLines={2}>{recipe.title}</Text>
+                </View>
 
                 <View style={s.recipeCard}>
                   <View style={s.recipeRow}>
@@ -305,11 +310,15 @@ export default function SolutionsScreen() {
                     <Text style={s.recipeLabel}>Час дії</Text>
                     <Text style={s.recipeValue}>{recipe.minContactTimeMin} хв</Text>
                   </View>
-                  <View style={s.recipeDivider} />
-                  <View style={s.recipeRow}>
-                    <Text style={s.recipeLabel}>Термін придатності</Text>
-                    <Text style={s.recipeValue}>{recipe.shelfLifeDays} діб</Text>
-                  </View>
+                  {recipe.shelfLifeDays > 0 && (
+                    <>
+                      <View style={s.recipeDivider} />
+                      <View style={s.recipeRow}>
+                        <Text style={s.recipeLabel}>Термін придатності</Text>
+                        <Text style={s.recipeValue}>{recipe.shelfLifeDays} діб</Text>
+                      </View>
+                    </>
+                  )}
                 </View>
 
                 {/* After note */}
@@ -338,11 +347,6 @@ export default function SolutionsScreen() {
                     <Text style={s.warningText}>{w}</Text>
                   </View>
                 ))}
-
-                <TouchableOpacity style={s.newCalcBtn} onPress={() => setRecipe(null)} activeOpacity={0.7}>
-                  <Feather name="rotate-ccw" size={14} color={COLORS.textSecondary} />
-                  <Text style={s.newCalcBtnText}>Новий розрахунок</Text>
-                </TouchableOpacity>
               </>
             )}
           </ReAnimated.View>
@@ -441,7 +445,12 @@ const s = StyleSheet.create({
   calcBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
 
   // Recipe result
-  recipeTitle: { fontSize: 18, fontWeight: '800', color: COLORS.text, marginBottom: 16 },
+  recipeHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  recipeBackBtn: {
+    width: 36, height: 36, borderRadius: 12,
+    backgroundColor: COLORS.brandLight, alignItems: 'center', justifyContent: 'center',
+  },
+  recipeTitle: { fontSize: 17, fontWeight: '800', color: COLORS.text, flex: 1 },
   recipeCard: { backgroundColor: COLORS.white, borderRadius: RADII.lg, borderWidth: 1, borderColor: COLORS.border, padding: 14 },
   recipeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
   recipeLabel: { fontSize: 14, color: COLORS.textSecondary },
@@ -477,8 +486,7 @@ const s = StyleSheet.create({
   afterNoteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 12, padding: 12, backgroundColor: COLORS.brandLight, borderRadius: RADII.md },
   afterNoteText: { fontSize: 13, fontWeight: '500', color: COLORS.brand, flex: 1, lineHeight: 18 },
 
-  newCalcBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14, marginTop: 4 },
-  newCalcBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.textSecondary },
+  // (newCalcBtn removed — replaced by recipeBackBtn in header)
 
   // AI card
   aiCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: COLORS.brand, borderRadius: 14, padding: 16, marginBottom: 14 },
