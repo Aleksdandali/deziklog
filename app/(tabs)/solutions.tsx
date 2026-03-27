@@ -263,7 +263,7 @@ export default function SolutionsScreen() {
                 {/* Volume */}
                 <Text style={s.fieldLabel}>Об'єм розчину (мл)</Text>
                 <View style={s.volumeRow}>
-                  {['500', '1000', '2000', '5000'].map((v) => (
+                  {['500', '1000', '2000', '3000', '4000', '5000', '10000'].map((v) => (
                     <TouchableOpacity key={v} style={[s.volumeChip, volumeInput === v && s.chipActive]} onPress={() => setVolumeInput(v)} activeOpacity={0.8}>
                       <Text style={[s.volumeChipText, volumeInput === v && s.chipTextActive]}>{v}</Text>
                     </TouchableOpacity>
