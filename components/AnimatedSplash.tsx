@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import LottieView from 'lottie-react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -13,34 +14,12 @@ import Animated, {
 
 const { width: SW } = Dimensions.get('window');
 const BRAND = '#4b569e';
-const BRAND_LIGHT = '#6b78c4';
 
-// ── Animated letter component ────────────────────────────
-function AnimatedLetter({ char, delay }: { char: string; delay: number }) {
-  const progress = useSharedValue(0);
-
-  useEffect(() => {
-    progress.value = withDelay(delay, withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) }));
-  }, []);
-
-  const style = useAnimatedStyle(() => ({
-    opacity: progress.value,
-    transform: [{ translateY: interpolate(progress.value, [0, 1], [20, 0]) }],
-  }));
-
-  return (
-    <Animated.Text style={[st.letter, style]}>
-      {char}
-    </Animated.Text>
-  );
-}
-
-// ── Animated dot component ───────────────────────────────
 function PulseDot({ delay }: { delay: number }) {
   const anim = useSharedValue(0);
 
   useEffect(() => {
-    anim.value = withDelay(1400 + delay, withRepeat(
+    anim.value = withDelay(1200 + delay, withRepeat(
       withSequence(
         withTiming(1, { duration: 500, easing: Easing.inOut(Easing.ease) }),
         withTiming(0, { duration: 500, easing: Easing.inOut(Easing.ease) }),
@@ -56,80 +35,39 @@ function PulseDot({ delay }: { delay: number }) {
   return <Animated.View style={[st.dot, style]} />;
 }
 
-// ── Main splash ──────────────────────────────────────────
 export default function AnimatedSplash() {
-  const starScale = useSharedValue(0);
-  const starRotate = useSharedValue(0);
-  const starGlow = useSharedValue(0);
-  const subtitleOpacity = useSharedValue(0);
+  const textOpacity = useSharedValue(0);
   const dotsOpacity = useSharedValue(0);
 
   useEffect(() => {
-    // Star
-    starScale.value = withDelay(200, withTiming(1, { duration: 700, easing: Easing.out(Easing.back(1.5)) }));
-    starRotate.value = withDelay(200, withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) }));
-    starGlow.value = withDelay(800, withRepeat(
-      withSequence(
-        withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
-      ), -1, true
-    ));
-
-    // Subtitle + dots
-    subtitleOpacity.value = withDelay(1100, withTiming(1, { duration: 600, easing: Easing.out(Easing.cubic) }));
-    dotsOpacity.value = withDelay(1400, withTiming(1, { duration: 400 }));
+    textOpacity.value = withDelay(600, withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) }));
+    dotsOpacity.value = withDelay(1200, withTiming(1, { duration: 400 }));
   }, []);
 
-  const starStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: starScale.value },
-      { rotate: `${interpolate(starRotate.value, [0, 1], [-90, 0])}deg` },
-    ],
-    opacity: starScale.value,
+  const textStyle = useAnimatedStyle(() => ({
+    opacity: textOpacity.value,
+    transform: [{ translateY: interpolate(textOpacity.value, [0, 1], [10, 0]) }],
   }));
 
-  const starGlowStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(starGlow.value, [0, 1], [0, 0.3]),
-    transform: [{ scale: interpolate(starGlow.value, [0, 1], [1, 1.6]) }],
-  }));
-
-  const subtitleStyle = useAnimatedStyle(() => ({
-    opacity: subtitleOpacity.value,
-    transform: [{ translateY: interpolate(subtitleOpacity.value, [0, 1], [8, 0]) }],
-  }));
-
-  const dotsContainerStyle = useAnimatedStyle(() => ({
+  const dotsStyle = useAnimatedStyle(() => ({
     opacity: dotsOpacity.value,
   }));
 
   return (
     <View style={st.container}>
-      {/* Star with glow */}
-      <View style={st.starArea}>
-        <Animated.View style={[st.starGlow, starGlowStyle]} />
-        <Animated.View style={[st.starWrap, starStyle]}>
-          <View style={[st.starBar, { transform: [{ rotate: '0deg' }] }]} />
-          <View style={[st.starBar, { transform: [{ rotate: '60deg' }] }]} />
-          <View style={[st.starBar, { transform: [{ rotate: '120deg' }] }]} />
-        </Animated.View>
-      </View>
+      <LottieView
+        source={require('../assets/animations/dezik_star_loader.json')}
+        autoPlay
+        loop
+        style={st.lottie}
+      />
 
-      {/* DEZIK letters — each is its own component with proper hooks */}
-      <View style={st.wordRow}>
-        <AnimatedLetter char="D" delay={500} />
-        <AnimatedLetter char="E" delay={580} />
-        <AnimatedLetter char="Z" delay={660} />
-        <AnimatedLetter char="I" delay={740} />
-        <AnimatedLetter char="K" delay={820} />
-      </View>
+      <Animated.View style={[st.textWrap, textStyle]}>
+        <Text style={st.title}>DEZIK</Text>
+        <Text style={st.subtitle}>SteriLOG</Text>
+      </Animated.View>
 
-      {/* SteriLOG subtitle */}
-      <Animated.Text style={[st.subtitle, subtitleStyle]}>
-        SteriLOG
-      </Animated.Text>
-
-      {/* Loading dots — each is its own component */}
-      <Animated.View style={[st.dotsRow, dotsContainerStyle]}>
+      <Animated.View style={[st.dotsRow, dotsStyle]}>
         <PulseDot delay={0} />
         <PulseDot delay={150} />
         <PulseDot delay={300} />
@@ -145,38 +83,15 @@ const st = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  starArea: {
-    width: 64,
-    height: 64,
+  lottie: {
+    width: 120,
+    height: 120,
+  },
+  textWrap: {
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 18,
+    marginTop: 12,
   },
-  starGlow: {
-    position: 'absolute',
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: BRAND_LIGHT,
-  },
-  starWrap: {
-    width: 48,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  starBar: {
-    position: 'absolute',
-    width: 48 * 0.22,
-    height: 48,
-    borderRadius: 48 * 0.11,
-    backgroundColor: BRAND,
-  },
-  wordRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  letter: {
+  title: {
     fontSize: Math.min(SW * 0.13, 56),
     fontWeight: '900',
     color: '#1a1a1a',

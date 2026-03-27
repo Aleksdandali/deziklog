@@ -18,7 +18,8 @@ import { cancelSolutionNotifications } from '../../lib/notifications';
 import { SkeletonCard } from '../../components/Skeleton';
 import {
   CONCENTRATE_PRODUCTS,
-  PURPOSE_LABELS,
+  PURPOSE_SHORT_LABELS,
+  PRODUCT_PURPOSES,
   calculateSolution,
   type SolutionPurpose,
   type SolutionRecipe,
@@ -74,6 +75,7 @@ export default function SolutionsScreen() {
   // Calculator state
   const [purpose, setPurpose] = useState<SolutionPurpose | null>(null);
   const [productId, setProductId] = useState<string | null>(null);
+  const [speed, setSpeed] = useState<'standard' | 'fast'>('standard');
   const [volumeInput, setVolumeInput] = useState('1000');
   const [recipe, setRecipe] = useState<SolutionRecipe | null>(null);
   const [calculating, setCalculating] = useState(false);
@@ -115,7 +117,7 @@ export default function SolutionsScreen() {
     if (!vol || vol < 100 || vol > 50000) { Alert.alert('Об\'єм: 100–50000 мл'); return; }
     setCalculating(true);
     try {
-      const r = await calculateSolution({ purpose, productId, volumeMl: vol });
+      const r = await calculateSolution({ purpose, productId, volumeMl: vol, speed });
       setRecipe(r);
     } catch (err: any) {
       Alert.alert('Помилка', err.message);
@@ -172,7 +174,7 @@ export default function SolutionsScreen() {
               const color = statusColor(status);
               const bg = color + '18';
               return (
-                <View style={s.card}>
+                <TouchableOpacity style={s.card} activeOpacity={0.7} onPress={() => router.push(`/solution/${item.id}`)}>
                   <View style={s.cardTop}>
                     <Text style={s.cardName}>{item.name}</Text>
                     <View style={[s.cardStatusIcon, { backgroundColor: bg }]}>
@@ -188,11 +190,9 @@ export default function SolutionsScreen() {
                       <Clock size={14} color={color} />
                       <Text style={[s.cardBadgeText, { color }]}>{statusText(status, daysLeft)}</Text>
                     </View>
-                    <TouchableOpacity onPress={() => handleDelete(item.id)} hitSlop={12}>
-                      <Feather name="trash-2" size={16} color={COLORS.textSecondary} />
-                    </TouchableOpacity>
+                    <Feather name="chevron-right" size={16} color={COLORS.textTertiary} />
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             }}
           />
@@ -205,28 +205,63 @@ export default function SolutionsScreen() {
           <ReAnimated.View entering={FadeIn.duration(200)}>
             {!recipe ? (
               <>
-                {/* Purpose */}
-                <Text style={s.fieldLabel}>Для чого готуєте розчин?</Text>
-                <View style={s.chips}>
-                  {(Object.keys(PURPOSE_LABELS) as SolutionPurpose[]).map((p) => (
-                    <TouchableOpacity key={p} style={[s.chip, purpose === p && s.chipActive]} onPress={() => setPurpose(p)} activeOpacity={0.8}>
-                      <Text style={[s.chipText, purpose === p && s.chipTextActive]}>{PURPOSE_LABELS[p]}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
                 {/* Product */}
-                <Text style={s.fieldLabel}>Концентрат Dezik</Text>
+                <Text style={s.fieldLabel}>Концентрат</Text>
                 <View style={s.chips}>
                   {CONCENTRATE_PRODUCTS.map((p) => (
-                    <TouchableOpacity key={p.id} style={[s.chip, productId === p.id && s.chipActive]} onPress={() => setProductId(p.id)} activeOpacity={0.8}>
+                    <TouchableOpacity key={p.id} style={[s.chip, productId === p.id && s.chipActive]} onPress={() => { setProductId(p.id); setPurpose(null); }} activeOpacity={0.8}>
                       <Text style={[s.chipText, productId === p.id && s.chipTextActive]}>{p.name}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
 
+                {/* Purpose — filtered by selected product */}
+                {productId && (
+                  <>
+                    <Text style={s.fieldLabel}>Призначення</Text>
+                    <View style={s.chips}>
+                      {(PRODUCT_PURPOSES[productId] || []).map((p) => (
+                        <TouchableOpacity key={p} style={[s.chip, purpose === p && s.chipActive]} onPress={() => setPurpose(p)} activeOpacity={0.8}>
+                          <Text style={[s.chipText, purpose === p && s.chipTextActive]}>{PURPOSE_SHORT_LABELS[p]}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
+                )}
+
+                {/* Speed — only for disinfectants, not Instrum */}
+                {productId && productId !== 'instrum' && (
+                <>
+                <Text style={s.fieldLabel}>Режим</Text>
+                <View style={s.speedRow}>
+                  <TouchableOpacity
+                    style={[s.speedOption, speed === 'standard' && s.speedActive]}
+                    onPress={() => setSpeed('standard')}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="clock" size={14} color={speed === 'standard' ? '#fff' : COLORS.textSecondary} />
+                    <View>
+                      <Text style={[s.speedTitle, speed === 'standard' && s.speedTitleActive]}>Стандартний</Text>
+                      <Text style={[s.speedDesc, speed === 'standard' && s.speedDescActive]}>Менше концентрату, довша експозиція</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.speedOption, speed === 'fast' && s.speedActiveFast]}
+                    onPress={() => setSpeed('fast')}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="zap" size={14} color={speed === 'fast' ? '#fff' : COLORS.textSecondary} />
+                    <View>
+                      <Text style={[s.speedTitle, speed === 'fast' && s.speedTitleActive]}>Швидкий</Text>
+                      <Text style={[s.speedDesc, speed === 'fast' && s.speedDescActive]}>Більше концентрату, менше часу</Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+                </>
+                )}
+
                 {/* Volume */}
-                <Text style={s.fieldLabel}>Скільки готового розчину (мл)?</Text>
+                <Text style={s.fieldLabel}>Об'єм розчину (мл)</Text>
                 <View style={s.volumeRow}>
                   {['500', '1000', '2000', '5000'].map((v) => (
                     <TouchableOpacity key={v} style={[s.volumeChip, volumeInput === v && s.chipActive]} onPress={() => setVolumeInput(v)} activeOpacity={0.8}>
@@ -273,19 +308,28 @@ export default function SolutionsScreen() {
                     <Text style={s.recipeLabel}>Концентрація</Text>
                     <Text style={s.recipeValue}>{recipe.concentrationPercent}%</Text>
                   </View>
-                  {recipe.minContactTimeMin && (
-                    <>
-                      <View style={s.recipeDivider} />
-                      <View style={s.recipeRow}>
-                        <Text style={s.recipeLabel}>Час дії</Text>
-                        <Text style={s.recipeValue}>{recipe.minContactTimeMin} хв</Text>
-                      </View>
-                    </>
-                  )}
+                  <View style={s.recipeDivider} />
+                  <View style={s.recipeRow}>
+                    <Text style={s.recipeLabel}>Час дії</Text>
+                    <Text style={s.recipeValue}>{recipe.minContactTimeMin} хв</Text>
+                  </View>
+                  <View style={s.recipeDivider} />
+                  <View style={s.recipeRow}>
+                    <Text style={s.recipeLabel}>Термін придатності</Text>
+                    <Text style={s.recipeValue}>{recipe.shelfLifeDays} діб</Text>
+                  </View>
                 </View>
 
+                {/* After note */}
+                {recipe.afterNote && (
+                  <View style={s.afterNoteRow}>
+                    <Feather name="info" size={14} color={COLORS.brand} />
+                    <Text style={s.afterNoteText}>{recipe.afterNote}</Text>
+                  </View>
+                )}
+
                 {/* Steps */}
-                <Text style={s.fieldLabel}>Кроки</Text>
+                <Text style={s.fieldLabel}>Покрокова інструкція</Text>
                 <View style={s.stepsCard}>
                   {recipe.steps.map((step) => (
                     <View key={step.order} style={s.stepRow}>
@@ -302,16 +346,6 @@ export default function SolutionsScreen() {
                     <Text style={s.warningText}>{w}</Text>
                   </View>
                 ))}
-
-                {/* Actions */}
-                <TouchableOpacity style={s.saveRecipeBtn} onPress={() => {
-                  // TODO: Save recipe to journal
-                  console.log('Save recipe:', recipe);
-                  Alert.alert('Збережено', 'Рецепт буде додано в журнал (в розробці)');
-                }} activeOpacity={0.85}>
-                  <Feather name="bookmark" size={16} color={COLORS.brand} />
-                  <Text style={s.saveRecipeBtnText}>Зберегти рецепт</Text>
-                </TouchableOpacity>
 
                 <TouchableOpacity style={s.newCalcBtn} onPress={() => setRecipe(null)} activeOpacity={0.7}>
                   <Feather name="rotate-ccw" size={14} color={COLORS.textSecondary} />
@@ -432,8 +466,25 @@ const s = StyleSheet.create({
   warningRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 10, paddingHorizontal: 4 },
   warningText: { fontSize: 12, color: COLORS.warning, flex: 1, lineHeight: 17 },
 
-  saveRecipeBtn: { flexDirection: 'row', height: 48, borderRadius: RADII.lg, borderWidth: 1.5, borderColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 20 },
-  saveRecipeBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.brand },
+  // Speed toggle
+  speedRow: { gap: 8 },
+  speedOption: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 12,
+    borderRadius: RADII.md, borderWidth: 1.5, borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
+  },
+  speedActive: { borderColor: COLORS.brand, backgroundColor: COLORS.brand },
+  speedActiveFast: { borderColor: COLORS.warning, backgroundColor: COLORS.warning },
+  speedTitle: { fontSize: 13, fontWeight: '700', color: COLORS.text },
+  speedTitleActive: { color: '#fff' },
+  speedDesc: { fontSize: 11, fontWeight: '400', color: COLORS.textSecondary, marginTop: 1 },
+  speedDescActive: { color: 'rgba(255,255,255,0.8)' },
+
+  // After note
+  afterNoteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 12, padding: 12, backgroundColor: COLORS.brandLight, borderRadius: RADII.md },
+  afterNoteText: { fontSize: 13, fontWeight: '500', color: COLORS.brand, flex: 1, lineHeight: 18 },
+
   newCalcBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14, marginTop: 4 },
   newCalcBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.textSecondary },
 

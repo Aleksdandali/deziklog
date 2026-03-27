@@ -100,6 +100,7 @@ function RootNavigator() {
         <Stack.Screen name="timer" options={{ presentation: 'modal', animation: 'slide_from_bottom', gestureEnabled: false }} />
         <Stack.Screen name="complete-cycle" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="solution/add" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="solution/[id]" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="cabinet/sterilizers" options={{ presentation: 'modal' }} />
         <Stack.Screen name="cabinet/instruments" options={{ presentation: 'modal' }} />
         <Stack.Screen name="cabinet/solutions" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
