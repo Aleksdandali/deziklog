@@ -232,17 +232,25 @@ export default function SolutionDetailScreen() {
           )}
         </View>
 
-        {/* Actions */}
-        {status === 'expired' && (
-          <TouchableOpacity
-            style={st.newSolutionBtn}
-            onPress={() => { router.back(); setTimeout(() => router.push('/solution/add'), 300); }}
-            activeOpacity={0.85}
-          >
-            <Feather name="plus" size={18} color="#fff" />
-            <Text style={st.newSolutionBtnText}>Приготувати новий розчин</Text>
-          </TouchableOpacity>
-        )}
+        {/* Replace button */}
+        <TouchableOpacity
+          style={[st.replaceBtn, status === 'expired' && { backgroundColor: COLORS.brand }]}
+          onPress={async () => {
+            if (status === 'expired' || status === 'warning') {
+              // Delete old and create new with same product
+              await supabase.from('solutions').delete().eq('id', id).eq('user_id', userId);
+              cancelSolutionNotifications(id);
+            }
+            router.back();
+            setTimeout(() => router.push(`/solution/add?product=${encodeURIComponent(solution.name)}`), 300);
+          }}
+          activeOpacity={0.85}
+        >
+          <Feather name="refresh-cw" size={16} color={status === 'expired' ? '#fff' : COLORS.brand} />
+          <Text style={[st.replaceBtnText, status === 'expired' && { color: '#fff' }]}>
+            {status === 'expired' ? 'Замінити розчин' : 'Приготувати новий'}
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -343,10 +351,11 @@ const st = StyleSheet.create({
   tipRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   tipText: { fontSize: 13, fontWeight: '400', color: COLORS.textSecondary, flex: 1, lineHeight: 18 },
 
-  // New solution button
-  newSolutionBtn: {
+  // Replace button
+  replaceBtn: {
     flexDirection: 'row', height: 52, borderRadius: RADII.lg,
-    backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderWidth: 1.5, borderColor: COLORS.brand,
+    backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center', gap: 8,
   },
-  newSolutionBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  replaceBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.brand },
 });

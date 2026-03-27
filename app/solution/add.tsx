@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, Alert, Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
@@ -165,12 +165,24 @@ function InlineCalendar({
 
 export default function AddSolutionScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ product?: string }>();
   const { session } = useAuth();
   const userId = session?.user?.id;
 
-  const [productId, setProductId] = useState<string | null>(null);
+  // Pre-select product if passed from "Замінити"
+  const preselectedId = params.product
+    ? PRODUCTS.find((p) => p.name === params.product)?.id ?? null
+    : null;
+
+  const [productId, setProductId] = useState<string | null>(preselectedId);
   const [date, setDate] = useState(toDateStr(new Date()));
-  const [expiryDate, setExpiryDate] = useState('');
+  const [expiryDate, setExpiryDate] = useState(() => {
+    if (preselectedId) {
+      const p = PRODUCTS.find((pr) => pr.id === preselectedId);
+      return p ? addDays(toDateStr(new Date()), p.shelfDays) : '';
+    }
+    return '';
+  });
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
