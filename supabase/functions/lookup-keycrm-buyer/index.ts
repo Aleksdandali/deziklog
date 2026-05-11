@@ -7,6 +7,8 @@ import { corsHeaders } from "../_shared/cors.ts";
 
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
 const TIMEOUT_MS = 5000;
+/** Onboarding lookups are usually 1-2 per user. Anything above is abuse/loops. */
+const DAILY_LOOKUP_LIMIT = 10;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -28,6 +30,17 @@ Deno.serve(async (req) => {
 
     const KEYCRM_API_KEY = Deno.env.get("KEYCRM_API_KEY");
     if (!KEYCRM_API_KEY) return jsonRes({ found: false });
+
+    // Per-user daily lookup cap (protects KeyCRM API quota).
+    const adminClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const { data: usageCount } = await adminClient
+      .rpc("increment_keycrm_lookup_usage", { p_user_id: user.id });
+    if (typeof usageCount === "number" && usageCount > DAILY_LOOKUP_LIMIT) {
+      return jsonRes({ found: false });
+    }
 
     // KeyCRM may store phones in mixed formats; try E.164, 380…, 0… variants.
     const phoneE164 = user.phone.startsWith("+") ? user.phone : `+${user.phone}`;
@@ -74,10 +87,6 @@ Deno.serve(async (req) => {
 
     // Cache buyer_id on profile so the first order skips the phone search entirely.
     if (buyer.id) {
-      const adminClient = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      );
       await adminClient.from("profiles")
         .update({ keycrm_buyer_id: buyer.id })
         .eq("id", user.id);

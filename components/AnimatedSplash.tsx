@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet, Dimensions, Platform } from 'react-native';
 import LottieView from 'lottie-react-native';
 import Animated, {
   useSharedValue,
@@ -52,7 +52,9 @@ export default function AnimatedSplash() {
         source={require('../assets/animations/dezik_star_loader.json')}
         autoPlay
         loop
-        renderMode="SOFTWARE"
+        // SOFTWARE mode works around an Android skia/HW-accel crash;
+        // iOS uses native Core Animation (HARDWARE) which is fine.
+        renderMode={Platform.OS === 'android' ? 'SOFTWARE' : 'HARDWARE'}
         resizeMode="contain"
         style={st.lottie}
       />
