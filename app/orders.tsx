@@ -10,9 +10,11 @@ import { useAuth } from '../lib/auth-context';
 import { getOrders } from '../lib/api';
 import { COLORS } from '../lib/constants';
 import { RADII } from '../lib/theme';
-import type { Order } from '../lib/types';
+import type { Order, OrderItem } from '../lib/types';
+import { formatPrice, formatDate, formatDateShort } from '../lib/formatters';
 
-const STATUS_CFG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
+type FeatherIcon = 'clock' | 'package' | 'check-circle' | 'truck' | 'x-circle';
+const STATUS_CFG: Record<string, { label: string; color: string; bg: string; icon: FeatherIcon }> = {
   pending: { label: 'Нове', color: COLORS.warning, bg: COLORS.warningBg, icon: 'clock' },
   processing: { label: 'Збирається', color: '#2563EB', bg: '#EFF6FF', icon: 'package' },
   confirmed: { label: 'Підтверджено', color: COLORS.success, bg: COLORS.successBg, icon: 'check-circle' },
@@ -20,21 +22,6 @@ const STATUS_CFG: Record<string, { label: string; color: string; bg: string; ico
   canceled: { label: 'Скасовано', color: COLORS.danger, bg: COLORS.dangerBg, icon: 'x-circle' },
 };
 
-function formatPrice(price: number): string {
-  return price.toLocaleString('uk-UA') + ' ₴';
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' });
-  } catch { return '--'; }
-}
-
-function formatDateShort(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
-  } catch { return '--'; }
-}
 
 export default function OrdersScreen() {
   const router = useRouter();
@@ -114,16 +101,16 @@ export default function OrdersScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={COLORS.brand} />}
           renderItem={({ item: o }) => {
             const cfg = STATUS_CFG[o.status] ?? STATUS_CFG.pending;
-            const items = (o as any).order_items ?? [];
-            const totalItems = items.reduce((sum: number, i: any) => sum + i.quantity, 0);
-            const itemNames: string[] = items.slice(0, 2).map((i: any) => i.product_name);
-            const moreCount = items.length - 2;
+            const orderItems: OrderItem[] = (o as Order & { order_items?: OrderItem[] }).order_items ?? [];
+            const totalItems = orderItems.reduce((sum, i) => sum + i.quantity, 0);
+            const itemNames = orderItems.slice(0, 2).map((i) => i.product_name);
+            const moreCount = orderItems.length - 2;
 
             return (
               <TouchableOpacity
                 style={st.card}
                 activeOpacity={0.7}
-                onPress={() => router.push(`/order/${o.id}` as any)}
+                onPress={() => router.push(`/order/${o.id}` as `/${string}`)}
               >
                 {/* Status bar */}
                 <View style={[st.cardStatusBar, { backgroundColor: cfg.color }]} />
@@ -132,7 +119,7 @@ export default function OrdersScreen() {
                   {/* Top: date + status */}
                   <View style={st.cardTop}>
                     <View style={st.cardDateRow}>
-                      <Feather name={cfg.icon as any} size={14} color={cfg.color} />
+                      <Feather name={cfg.icon} size={14} color={cfg.color} />
                       <Text style={st.cardDate}>{formatDateShort(o.created_at)}</Text>
                     </View>
                     <View style={[st.cardBadge, { backgroundColor: cfg.bg }]}>

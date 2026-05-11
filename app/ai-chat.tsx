@@ -247,12 +247,12 @@ export default function AIChatScreen() {
       if (!error && data?.reply) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[AI Assistant]', err);
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `Помилка: ${err?.message || 'невідома помилка'}`,
+        content: `Помилка: ${err instanceof Error ? err.message : 'невідома помилка'}`,
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMsg]);

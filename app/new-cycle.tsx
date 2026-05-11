@@ -115,28 +115,32 @@ export default function NewCycleScreen() {
   useEffect(() => {
     if (!userId) return;
     (async () => {
-      const { data } = await supabase.from('sterilizers').select('*').eq('user_id', userId);
-      const list = data ?? [];
-      setSterilizers(list);
-      if (list.length >= 1) {
-        const s = list[0];
-        setSterilizerName(s.name);
-        setSterilizerId(s.id);
-        const type = (s.type as SteriType) ?? null;
-        setSterilizerType(type);
-        const preset = getDefaultPreset(type);
-        if (preset) {
-          setTemperature(String(preset.temperature));
-          setDurationInput(String(preset.duration));
+      try {
+        const { data } = await supabase.from('sterilizers').select('*').eq('user_id', userId);
+        const list = data ?? [];
+        setSterilizers(list);
+        if (list.length >= 1) {
+          const s = list[0];
+          setSterilizerName(s.name);
+          setSterilizerId(s.id);
+          const type = (s.type as SteriType) ?? null;
+          setSterilizerType(type);
+          const preset = getDefaultPreset(type);
+          if (preset) {
+            setTemperature(String(preset.temperature));
+            setDurationInput(String(preset.duration));
+          }
         }
-      }
 
-      const { data: empData } = await supabase.from('employees').select('id, name').eq('user_id', userId).order('created_at');
-      const empList = empData ?? [];
-      setEmployees(empList);
-      if (empList.length >= 1) {
-        setEmployeeId(empList[0].id);
-        setEmployeeName(empList[0].name);
+        const { data: empData } = await supabase.from('employees').select('id, name').eq('user_id', userId).order('created_at');
+        const empList = empData ?? [];
+        setEmployees(empList);
+        if (empList.length >= 1) {
+          setEmployeeId(empList[0].id);
+          setEmployeeName(empList[0].name);
+        }
+      } catch (err) {
+        if (__DEV__) console.error('Failed to load sterilizers/employees:', err);
       }
     })();
   }, [userId]);
@@ -224,8 +228,8 @@ export default function NewCycleScreen() {
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       router.replace(`/timer?sessionId=${sess.id}&duration=${dur}`);
-    } catch (err: any) {
-      Alert.alert('Помилка', err.message || 'Не вдалось створити сесію');
+    } catch (err: unknown) {
+      Alert.alert('Помилка', err instanceof Error ? err.message : 'Не вдалось створити сесію');
     } finally {
       setSaving(false);
     }

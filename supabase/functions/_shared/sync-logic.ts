@@ -3,6 +3,8 @@
  * Buyer dedup: find-or-create by cached keycrm_buyer_id, then by phone.
  */
 
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
 const NP_API_URL = "https://api.novaposhta.ua/v2.0/json/";
 
@@ -10,7 +12,7 @@ const NP_API_URL = "https://api.novaposhta.ua/v2.0/json/";
 export const FREE_SHIPPING_THRESHOLD = 2000;
 
 export async function syncOrderToKeyCRM(
-  adminClient: any,
+  adminClient: SupabaseClient,
   orderId: string,
   userId: string,
   userEmail?: string,
@@ -116,7 +118,7 @@ export async function syncOrderToKeyCRM(
   const deliveryType = order.delivery_type || "warehouse";
 
   // 4. Create order in KeyCRM
-  const keycrmPayload: Record<string, any> = {
+  const keycrmPayload: Record<string, unknown> = {
     source_id: KEYCRM_SOURCE_ID,
     buyer_id: buyerId || undefined,
     buyer: { full_name: buyerName, phone: order.phone, email: userEmail || undefined },
@@ -134,7 +136,7 @@ export async function syncOrderToKeyCRM(
             shipping_receive_point: `${order.address_street || ""} ${order.address_building || ""}${order.address_apartment ? ", кв. " + order.address_apartment : ""}`.trim() || order.delivery_address,
           }),
     },
-    products: (items || []).map((item: any) => ({
+    products: (items || []).map((item: { product_name: string; product_id: string; price_at_order: number; quantity: number }) => ({
       name: item.product_name, sku: item.product_id,
       price: item.price_at_order, quantity: item.quantity,
     })),
@@ -219,7 +221,7 @@ export async function syncOrderToKeyCRM(
   return { success: true, keycrm_order_id: keycrmOrderId, np_ttn: ttn };
 }
 
-async function markFailed(client: any, orderId: string, error: string) {
+async function markFailed(client: SupabaseClient, orderId: string, error: string) {
   await client.from("orders").update({
     keycrm_sync_status: "failed",
     keycrm_sync_error: error.slice(0, 1000),

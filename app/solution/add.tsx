@@ -291,8 +291,8 @@ export default function AddSolutionScreen() {
         scheduleSolutionReminder(solData.id, selectedProduct.name, expiryDateObj.toISOString());
       }
       router.back();
-    } catch (err: any) {
-      Alert.alert('Помилка', err.message || 'Не вдалось зберегти');
+    } catch (err: unknown) {
+      Alert.alert('Помилка', err instanceof Error ? err.message : 'Не вдалось зберегти');
     } finally {
       setSaving(false);
     }

@@ -156,8 +156,8 @@ export default function CompleteCycleScreen() {
         notifyCycleDone(uid, timerData.instruments).catch(() => {});
       }
       setDone(true);
-    } catch (err: any) {
-      Alert.alert('Помилка', err.message || 'Не вдалось зберегти');
+    } catch (err: unknown) {
+      Alert.alert('Помилка', err instanceof Error ? err.message : 'Не вдалось зберегти');
     } finally {
       setSaving(false);
     }

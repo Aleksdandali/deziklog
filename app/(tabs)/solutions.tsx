@@ -11,7 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import ReAnimated, { FadeIn } from 'react-native-reanimated';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth-context';
-import { COLORS, MS_PER_DAY } from '../../lib/constants';
+import { COLORS } from '../../lib/constants';
 import { RADII } from '../../lib/theme';
 import { getCached, setCache } from '../../lib/cache';
 import { cancelSolutionNotifications } from '../../lib/notifications';
@@ -25,37 +25,13 @@ import {
   type SolutionRecipe,
 } from '../../lib/solutions-ai';
 
+import { getSolutionStatus, solutionStatusColor, solutionStatusText } from '../../lib/solution-utils';
+import { formatDate } from '../../lib/formatters';
+
 // ── Shared types ────────────────────────────────────────
 
 interface SolutionRow { id: string; name: string; opened_at: string; expires_at: string; }
-type Status = 'active' | 'warning' | 'expired';
 type Tab = 'tracker' | 'calculator' | 'guides';
-
-function getStatus(expiresAt: string): { status: Status; daysLeft: number } {
-  const expires = new Date(expiresAt);
-  if (isNaN(expires.getTime())) return { status: 'expired', daysLeft: 0 };
-  const daysLeft = Math.ceil((expires.getTime() - Date.now()) / MS_PER_DAY);
-  if (daysLeft <= 0) return { status: 'expired', daysLeft };
-  if (daysLeft <= 3) return { status: 'warning', daysLeft };
-  return { status: 'active', daysLeft };
-}
-
-function statusColor(status: Status) {
-  if (status === 'expired') return COLORS.danger;
-  if (status === 'warning') return COLORS.warning;
-  return COLORS.success;
-}
-
-function statusText(status: Status, daysLeft: number) {
-  if (status === 'expired') return 'Термін вийшов';
-  if (status === 'warning') return `${daysLeft} дні до закінчення`;
-  return `${daysLeft} днів залишилось`;
-}
-
-function formatDate(iso: string): string {
-  try { return new Date(iso).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' }); }
-  catch { return iso; }
-}
 
 import { GUIDES } from '../../lib/guides-data';
 
@@ -119,8 +95,8 @@ export default function SolutionsScreen() {
     try {
       const r = await calculateSolution({ purpose, productId, volumeMl: vol, speed });
       setRecipe(r);
-    } catch (err: any) {
-      Alert.alert('Помилка', err.message);
+    } catch (err: unknown) {
+      Alert.alert('Помилка', err instanceof Error ? err.message : 'Щось пішло не так');
     } finally { setCalculating(false); }
   };
 
@@ -170,8 +146,8 @@ export default function SolutionsScreen() {
             contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 100 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={COLORS.brand} />}
             renderItem={({ item }) => {
-              const { status, daysLeft } = getStatus(item.expires_at);
-              const color = statusColor(status);
+              const { status, daysLeft } = getSolutionStatus(item.expires_at);
+              const color = solutionStatusColor(status);
               const bg = color + '18';
               return (
                 <TouchableOpacity style={s.card} activeOpacity={0.7} onPress={() => router.push(`/solution/${item.id}`)}>
@@ -188,7 +164,7 @@ export default function SolutionsScreen() {
                   <View style={s.cardBottom}>
                     <View style={[s.cardBadge, { backgroundColor: bg }]}>
                       <Clock size={14} color={color} />
-                      <Text style={[s.cardBadgeText, { color }]}>{statusText(status, daysLeft)}</Text>
+                      <Text style={[s.cardBadgeText, { color }]}>{solutionStatusText(status, daysLeft)}</Text>
                     </View>
                     <Feather name="chevron-right" size={16} color={COLORS.textTertiary} />
                   </View>

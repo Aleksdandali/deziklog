@@ -54,6 +54,17 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    // Phone-first auth: auth.users.email is usually empty.
+    // Use profile.email if user filled it during onboarding.
+    if (!userEmail) {
+      const { data: prof } = await adminClient
+        .from("profiles")
+        .select("email")
+        .eq("id", userId)
+        .maybeSingle();
+      if (prof?.email) userEmail = prof.email;
+    }
+
     const result = await syncOrderToKeyCRM(adminClient, orderId, userId, userEmail);
 
     if (!result.success) {

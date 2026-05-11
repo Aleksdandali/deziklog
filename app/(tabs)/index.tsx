@@ -10,26 +10,13 @@ import * as Haptics from 'expo-haptics';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth-context';
 import { COLORS, FONT, RADIUS, SHADOW, MS_PER_DAY } from '../../lib/constants';
+import { formatDuration, formatTime } from '../../lib/formatters';
 import { getCached, setCache } from '../../lib/cache';
 import type { SterilizationSession } from '../../lib/api';
 import type { Solution } from '../../lib/types';
 import { SkeletonEntryCard } from '../../components/Skeleton';
 import Skeleton from '../../components/Skeleton';
 import ActiveTimerWidget from '../../components/ActiveTimerWidget';
-
-function formatDuration(minutes: number | null): string {
-  if (minutes == null) return '--';
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h > 0) return `${h}г ${m}хв`;
-  return `${m} хв`;
-}
-
-function formatTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
-  } catch { return ''; }
-}
 
 export default function HomeScreen() {
   const router = useRouter();

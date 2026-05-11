@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   SafeAreaView, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView,
@@ -13,17 +13,64 @@ interface Props {
   onComplete: () => void;
 }
 
+/** Format E.164 +380XXXXXXXXX to display string */
+function formatPhoneDisplay(raw?: string | null): string {
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  let d = digits;
+  if (d.startsWith('380')) d = d.slice(3);
+  let out = '+380';
+  if (d.length > 0) out += ' ' + d.slice(0, 2);
+  if (d.length > 2) out += ' ' + d.slice(2, 5);
+  if (d.length > 5) out += ' ' + d.slice(5, 7);
+  if (d.length > 7) out += ' ' + d.slice(7, 9);
+  return out;
+}
+
 export default function OnboardingScreen({ onComplete }: Props) {
   const { session } = useAuth();
   const userId = session?.user?.id;
-  const userEmail = session?.user?.email;
+  const userPhone = session?.user?.phone;
   const meta = session?.user?.user_metadata;
 
   const [name, setName] = useState(meta?.name ?? '');
+  const [lastName, setLastName] = useState(meta?.last_name ?? '');
   const [salonName, setSalonName] = useState(meta?.salon_name ?? '');
-  const [phone, setPhone] = useState(meta?.phone ?? '');
+  const [email, setEmail] = useState(meta?.email ?? '');
   const [city, setCity] = useState(meta?.city ?? '');
   const [saving, setSaving] = useState(false);
+  const [lookupLoading, setLookupLoading] = useState(true);
+  const [autofilled, setAutofilled] = useState(false);
+
+  // Best-effort KeyCRM buyer lookup to prefill the form
+  useEffect(() => {
+    if (!userId) { setLookupLoading(false); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('lookup-keycrm-buyer');
+        if (cancelled) return;
+        if (!error && data?.found) {
+          if (data.full_name) {
+            const parts = String(data.full_name).trim().split(/\s+/);
+            // Treat the first token as last name (Ukrainian convention varies; keep flexible)
+            // KeyCRM stores full_name as "First Last" typically — we split first/rest as name/last_name.
+            if (!name.trim()) setName(parts[0] || '');
+            if (parts.length > 1 && !lastName.trim()) setLastName(parts.slice(1).join(' '));
+          }
+          if (data.email && !email.trim()) setEmail(String(data.email));
+          if (data.address && !city.trim()) setCity(String(data.address));
+          setAutofilled(true);
+        }
+      } catch {
+        // best-effort — never block onboarding
+      } finally {
+        if (!cancelled) setLookupLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   const handleSave = async () => {
     if (!name.trim()) { Alert.alert("Введіть ваше ім'я"); return; }
@@ -44,8 +91,10 @@ export default function OnboardingScreen({ onComplete }: Props) {
         salon_name: salonName.trim(),
         updated_at: new Date().toISOString(),
       };
-      if (phone.trim()) profileData.phone = phone.trim();
+      if (lastName.trim()) profileData.last_name = lastName.trim();
+      if (email.trim()) profileData.email = email.trim();
       if (city.trim()) profileData.city = city.trim();
+      if (userPhone) profileData.phone = userPhone;
 
       const { error } = await supabase
         .from('profiles')
@@ -53,12 +102,21 @@ export default function OnboardingScreen({ onComplete }: Props) {
       if (error) throw error;
       if (__DEV__) console.log('[Onboarding] profile saved OK');
       onComplete();
-    } catch (err: any) {
-      Alert.alert('Помилка', err.message || 'Не вдалось зберегти');
+    } catch (err: unknown) {
+      Alert.alert('Помилка', err instanceof Error ? err.message : 'Не вдалось зберегти');
     } finally {
       setSaving(false);
     }
   };
+
+  if (lookupLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator color={COLORS.brand} />
+        <Text style={{ marginTop: 12, color: '#6B7280' }}>Завантаження профілю…</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -85,10 +143,17 @@ export default function OnboardingScreen({ onComplete }: Props) {
           </View>
 
           <View style={styles.card}>
-            {userEmail ? (
-              <View style={styles.emailRow}>
-                <Feather name="mail" size={14} color={COLORS.textSecondary} />
-                <Text style={styles.emailText}>{userEmail}</Text>
+            {userPhone ? (
+              <View style={styles.phoneRow}>
+                <Feather name="phone" size={14} color={COLORS.textSecondary} />
+                <Text style={styles.phoneText}>{formatPhoneDisplay(userPhone)}</Text>
+              </View>
+            ) : null}
+
+            {autofilled ? (
+              <View style={styles.autofillBadge}>
+                <Feather name="zap" size={12} color={COLORS.brand} />
+                <Text style={styles.autofillBadgeText}>Дані заповнено з вашого замовлення</Text>
               </View>
             ) : null}
 
@@ -99,10 +164,25 @@ export default function OnboardingScreen({ onComplete }: Props) {
               </View>
               <TextInput
                 style={styles.input}
-                placeholder="Олена Коваленко"
+                placeholder="Олена"
                 placeholderTextColor="#A0A4B8"
                 value={name}
                 onChangeText={setName}
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <View style={styles.labelRow}>
+                <Feather name="user" size={14} color={COLORS.textSecondary} />
+                <Text style={styles.inputLabel}>Прізвище</Text>
+              </View>
+              <TextInput
+                style={styles.input}
+                placeholder="Коваленко"
+                placeholderTextColor="#A0A4B8"
+                value={lastName}
+                onChangeText={setLastName}
                 autoCapitalize="words"
               />
             </View>
@@ -123,16 +203,20 @@ export default function OnboardingScreen({ onComplete }: Props) {
 
             <View style={styles.inputGroup}>
               <View style={styles.labelRow}>
-                <Feather name="phone" size={14} color={COLORS.textSecondary} />
-                <Text style={styles.inputLabel}>Телефон</Text>
+                <Feather name="mail" size={14} color={COLORS.textSecondary} />
+                <Text style={styles.inputLabel}>Email</Text>
               </View>
               <TextInput
                 style={styles.input}
-                placeholder="+380 XX XXX XX XX"
+                placeholder="your@email.com"
                 placeholderTextColor="#A0A4B8"
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                textContentType="emailAddress"
               />
             </View>
 
@@ -200,12 +284,20 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06, shadowRadius: 16, elevation: 4,
   },
-  emailRow: {
+  phoneRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingVertical: 10, paddingHorizontal: 14, marginBottom: 16,
+    paddingVertical: 10, paddingHorizontal: 14, marginBottom: 12,
     backgroundColor: COLORS.cardBg, borderRadius: 10,
   },
-  emailText: { fontSize: 14, color: COLORS.textSecondary },
+  phoneText: { fontSize: 14, color: COLORS.textSecondary, fontWeight: '600' },
+
+  autofillBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingVertical: 8, paddingHorizontal: 12, marginBottom: 14,
+    backgroundColor: '#F0F4FF', borderRadius: 8,
+    borderWidth: 1, borderColor: '#DCE3FF',
+  },
+  autofillBadgeText: { fontSize: 12, color: COLORS.brand, fontWeight: '600' },
 
   inputGroup: { marginBottom: 14 },
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 5, marginLeft: 2 },

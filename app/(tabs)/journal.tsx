@@ -21,16 +21,9 @@ import { SkeletonEntryCard } from '../../components/Skeleton';
 import { calcActualMinutes, getDurationStatus } from '../../lib/steri-config';
 import { shareToInstagramStory } from '../../lib/share-instagram';
 import StoryCard from '../../components/StoryCard';
+import { formatDuration, formatTime } from '../../lib/formatters';
 
 type FilterType = 'all' | 'success' | 'fail';
-
-function formatDuration(minutes: number | null): string {
-  if (minutes == null) return '--';
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h > 0) return `${h}г ${m}хв`;
-  return `${m} хв`;
-}
 
 function formatDateGroup(iso: string): string {
   try {
@@ -43,12 +36,6 @@ function formatDateGroup(iso: string): string {
     if (diff === 0) return 'Сьогодні';
     if (diff === 1) return 'Вчора';
     return d.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' });
-  } catch { return ''; }
-}
-
-function formatTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
   } catch { return ''; }
 }
 
@@ -164,7 +151,7 @@ export default function JournalScreen() {
       if (sess.photo_before_path) before = await getPhotoUrl(sess.photo_before_path);
       if (sess.photo_after_path) after = await getPhotoUrl(sess.photo_after_path);
       // Prefetch images so they're cached when Image renders
-      const prefetches: Promise<any>[] = [];
+      const prefetches: Promise<void>[] = [];
       if (before) prefetches.push(ExpoImage.prefetch(before));
       if (after) prefetches.push(ExpoImage.prefetch(after));
       if (prefetches.length) await Promise.all(prefetches);
@@ -262,7 +249,7 @@ export default function JournalScreen() {
           <Text style={s.emptyText}>Після завершення стерилізації{'\n'}записи з'являться тут</Text>
           <TouchableOpacity
             style={s.emptyBtn}
-            onPress={() => router.push('/new-cycle' as any)}
+            onPress={() => router.push('/new-cycle' as `/${string}`)}
             activeOpacity={0.85}
           >
             <Feather name="plus" size={16} color={COLORS.brand} />
@@ -338,7 +325,7 @@ function StatCard({ value, label, icon, color, bg }: {
   return (
     <View style={[s.statCard, { backgroundColor: bg }]}>
       <View style={s.statTop}>
-        <Feather name={icon as any} size={14} color={color} />
+        <Feather name={icon as 'check-circle' | 'x-circle' | 'clock'} size={14} color={color} />
         <Text style={[s.statValue, { color }]}>{value}</Text>
       </View>
       <Text style={s.statLabel}>{label}</Text>

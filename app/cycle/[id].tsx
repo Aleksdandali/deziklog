@@ -102,8 +102,8 @@ export default function CycleDetailScreen() {
         message: lines,
         title: 'Стерилізація — Dezik SteriLog',
       });
-    } catch (err: any) {
-      const msg = err?.message ?? '';
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '';
       if (msg.includes('cancel') || msg.includes('dismiss') || msg.includes('aborted')) return;
       Alert.alert('Помилка', `Не вдалось експортувати: ${msg.slice(0, 100)}`);
     }

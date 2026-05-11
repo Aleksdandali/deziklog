@@ -46,6 +46,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           }
         }
       })
+      .catch((err) => { console.warn('Cart: failed to load:', err); })
       .finally(() => { loaded.current = true; });
   }, []);
 

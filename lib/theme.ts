@@ -28,7 +28,7 @@ export const TYPOGRAPHY = {
   bodyBold: { fontSize: 14, fontWeight: '600' as const, color: COLORS.text },
   caption: { fontSize: 12, fontWeight: '400' as const, color: COLORS.textSecondary },
   label: { fontSize: 11, fontWeight: '600' as const, textTransform: 'uppercase' as const, letterSpacing: 0.5, color: COLORS.textSecondary },
-  timer: { fontSize: 48, fontWeight: '200' as const, color: COLORS.text, fontVariant: ['tabular-nums'] as any },
+  timer: { fontSize: 48, fontWeight: '200' as const, color: COLORS.text, fontVariant: ['tabular-nums' as const] },
   fieldLabel: { fontSize: 12, fontWeight: '700' as const, color: COLORS.textSecondary, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
   hint: { fontSize: 13, fontWeight: '400' as const, color: COLORS.textSecondary, lineHeight: 19 },
 } as const;
@@ -49,9 +49,6 @@ export const SHADOWS = {
     elevation: 6,
   },
 } as const;
-
-/** @deprecated Use STERI_PRESETS from lib/steri-config.ts instead */
-export { STERI_PRESETS as CYCLE_PRESETS } from './steri-config';
 
 /** Shared component styles reused across screens */
 export const SHARED = StyleSheet.create({

@@ -5,8 +5,10 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth-context';
-import { COLORS, MS_PER_DAY } from '../../lib/constants';
+import { COLORS } from '../../lib/constants';
 import { cancelSolutionNotifications } from '../../lib/notifications';
+import { getSolutionStatus, solutionStatusColor, solutionStatusText, solutionProgress } from '../../lib/solution-utils';
+import { formatDateCompact as formatDate } from '../../lib/formatters';
 
 interface SolutionRow {
   id: string;
@@ -14,45 +16,6 @@ interface SolutionRow {
   opened_at: string;
   expires_at: string;
   status: string | null;
-}
-
-type SolutionStatus = 'active' | 'expiring' | 'expired';
-
-function getStatus(expiresAt: string): { status: SolutionStatus; daysLeft: number } {
-  const expires = new Date(expiresAt);
-  if (isNaN(expires.getTime())) return { status: 'expired', daysLeft: 0 };
-  const daysLeft = Math.ceil((expires.getTime() - Date.now()) / MS_PER_DAY);
-  if (daysLeft <= 0) return { status: 'expired', daysLeft };
-  if (daysLeft <= 3) return { status: 'expiring', daysLeft };
-  return { status: 'active', daysLeft };
-}
-
-function getStatusColor(status: SolutionStatus): string {
-  if (status === 'expired') return COLORS.danger;
-  if (status === 'expiring') return COLORS.warning;
-  return COLORS.success;
-}
-
-function getStatusLabel(status: SolutionStatus, daysLeft: number): string {
-  if (status === 'expired') return 'Прострочений';
-  if (status === 'expiring') return `Закінчується через ${daysLeft} дн.`;
-  return `${daysLeft} дн. залишилось`;
-}
-
-function getProgress(openedAt: string, expiresAt: string): number {
-  const start = new Date(openedAt).getTime();
-  const end = new Date(expiresAt).getTime();
-  if (isNaN(start) || isNaN(end)) return 1;
-  const total = end - start;
-  if (total <= 0) return 1;
-  const elapsed = Date.now() - start;
-  return Math.min(1, Math.max(0, elapsed / total));
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  } catch { return iso; }
 }
 
 export default function SolutionsScreen() {
@@ -135,9 +98,9 @@ export default function SolutionsScreen() {
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadSolutions(true)} tintColor={COLORS.brand} />}
           renderItem={({ item }) => {
-            const { status, daysLeft } = getStatus(item.expires_at);
-            const statusColor = getStatusColor(status);
-            const progress = getProgress(item.opened_at, item.expires_at);
+            const { status, daysLeft } = getSolutionStatus(item.expires_at);
+            const statusColor = solutionStatusColor(status);
+            const progress = solutionProgress(item.opened_at, item.expires_at);
             const isExpired = status === 'expired';
 
             return (
@@ -149,7 +112,7 @@ export default function SolutionsScreen() {
                     <View style={styles.statusRow}>
                       {isExpired && <Ionicons name="alert-circle" size={13} color={COLORS.danger} />}
                       <Text style={[styles.statusText, { color: statusColor }]}>
-                        {getStatusLabel(status, daysLeft)}
+                        {solutionStatusText(status, daysLeft)}
                       </Text>
                     </View>
                   </View>

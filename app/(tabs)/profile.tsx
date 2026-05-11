@@ -85,7 +85,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { session } = useAuth();
   const userId = session?.user?.id;
-  const userEmail = session?.user?.email;
+  const userPhone = session?.user?.phone;
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [editing, setEditing] = useState(false);
@@ -168,7 +168,7 @@ export default function ProfileScreen() {
             address_street: data.address_street ?? null,
             address_building: data.address_building ?? null,
             address_apartment: data.address_apartment ?? null,
-            email: userEmail ?? null,
+            email: data.email ?? null,
             role: data.role ?? 'owner',
             keycrm_buyer_id: data.keycrm_buyer_id ?? null,
             notification_cycle_done: data.notification_cycle_done ?? true,
@@ -221,8 +221,8 @@ export default function ProfileScreen() {
       await supabase.from('profiles').update(updates).eq('id', userId);
       setProfile((p) => p ? { ...p, ...updates } as ProfileData : p);
       setEditing(false);
-    } catch (err: any) {
-      Alert.alert('Помилка', err.message);
+    } catch (err: unknown) {
+      Alert.alert('Помилка', err instanceof Error ? err.message : 'Щось пішло не так');
     } finally {
       setSaving(false);
     }
@@ -236,8 +236,8 @@ export default function ProfileScreen() {
       const updated = { ...profile, role: newRole };
       setProfile(updated);
       setCache(`profile_${userId}`, updated);
-    } catch (err: any) {
-      Alert.alert('Помилка', err.message);
+    } catch (err: unknown) {
+      Alert.alert('Помилка', err instanceof Error ? err.message : 'Щось пішло не так');
     }
   };
 
@@ -329,8 +329,8 @@ export default function ProfileScreen() {
       if (resp.error) throw new Error(resp.error.message);
 
       await supabase.auth.signOut();
-    } catch (err: any) {
-      Alert.alert('Помилка', err.message || 'Не вдалось видалити акаунт');
+    } catch (err: unknown) {
+      Alert.alert('Помилка', err instanceof Error ? err.message : 'Не вдалось видалити акаунт');
     } finally {
       setDeleting(false);
     }
@@ -575,7 +575,7 @@ export default function ProfileScreen() {
               <View style={s.profileDivider} />
 
               <View style={s.contactGrid}>
-                <ContactItem icon="phone" label="Телефон" value={profile?.phone} />
+                <ContactItem icon="phone" label="Телефон" value={profile?.phone ?? userPhone ?? null} />
                 <ContactItem icon="map-pin" label="Місто" value={profile?.city} />
                 {profile?.delivery_type === 'warehouse' && profile?.warehouse_name && (
                   <ContactItem icon="package" label="Відділення НП" value={profile.warehouse_name} />
@@ -583,7 +583,9 @@ export default function ProfileScreen() {
                 {profile?.delivery_type === 'address' && profile?.address_street && (
                   <ContactItem icon="home" label="Адреса доставки" value={`${profile.address_street} ${profile.address_building || ''}${profile.address_apartment ? ', кв. ' + profile.address_apartment : ''}`} />
                 )}
-                <ContactItem icon="mail" label="Email" value={userEmail} />
+                {profile?.email ? (
+                  <ContactItem icon="mail" label="Email" value={profile.email} />
+                ) : null}
               </View>
 
               <TouchableOpacity style={s.editProfileBtn} onPress={() => {

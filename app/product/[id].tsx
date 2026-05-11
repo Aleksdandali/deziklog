@@ -3,7 +3,6 @@ import {
   View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity,
   Dimensions,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -12,6 +11,7 @@ import { COLORS } from '../../lib/constants';
 import { getCached } from '../../lib/cache';
 import { useCart } from '../../lib/cart-context';
 import Skeleton from '../../components/Skeleton';
+import { ProductImage } from '../../components/ProductImage';
 import type { Product } from '../../lib/types';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -116,13 +116,14 @@ export default function ProductDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
         {/* Image */}
         <View style={s.imageWrap}>
-          {product.image_path ? (
-            <Image source={{ uri: product.image_path }} style={s.image} contentFit="contain" cachePolicy="disk" transition={300} />
-          ) : (
-            <View style={[s.image, s.imagePlaceholder]}>
-              <Feather name="package" size={64} color={COLORS.textSecondary} />
-            </View>
-          )}
+          <ProductImage
+            uri={product.image_path}
+            style={s.image}
+            placeholderStyle={s.imagePlaceholder}
+            iconSize={64}
+            iconColor={COLORS.textSecondary}
+            transition={300}
+          />
         </View>
 
         {/* Info */}

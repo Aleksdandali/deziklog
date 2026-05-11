@@ -49,7 +49,7 @@ export function useSessionGuard(): () => Promise<string | null> {
 
 // ── Debug logging ─────────────────────────────────────────
 const AUTH_DEBUG = __DEV__;
-function authLog(label: string, data?: any) {
+function authLog(label: string, data?: unknown) {
   if (!AUTH_DEBUG) return;
   console.log(`[Auth] ${label}`, data !== undefined ? data : '');
 }

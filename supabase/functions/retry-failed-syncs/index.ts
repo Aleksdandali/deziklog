@@ -48,11 +48,19 @@ Deno.serve(async (req) => {
         .update({ keycrm_sync_attempts: (order.keycrm_sync_attempts || 0) + 1 })
         .eq("id", order.id);
 
-      // Get user email
+      // Get user email (phone-first auth: prefer profile.email, fall back to auth.users.email for legacy)
       let userEmail: string | undefined;
       try {
-        const { data: authUser } = await adminClient.auth.admin.getUserById(order.user_id);
-        userEmail = authUser?.user?.email;
+        const { data: prof } = await adminClient
+          .from("profiles")
+          .select("email")
+          .eq("id", order.user_id)
+          .maybeSingle();
+        if (prof?.email) userEmail = prof.email;
+        if (!userEmail) {
+          const { data: authUser } = await adminClient.auth.admin.getUserById(order.user_id);
+          userEmail = authUser?.user?.email ?? undefined;
+        }
       } catch { /* ok */ }
 
       try {

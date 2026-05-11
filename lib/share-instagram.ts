@@ -18,8 +18,8 @@ export async function shareToInstagramStory(imageUri: string): Promise<void> {
     } else {
       await saveToGalleryFallback(imageUri);
     }
-  } catch (error: any) {
-    if (error?.message?.includes('User did not share')) {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message?.includes('User did not share')) {
       return;
     }
     await saveToGalleryFallback(imageUri);

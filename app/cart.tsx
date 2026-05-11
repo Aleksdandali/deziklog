@@ -11,16 +11,13 @@ import * as Haptics from 'expo-haptics';
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
-import { Image } from 'expo-image';
+import { ProductImage } from '../components/ProductImage';
 import { useCart, CartItem } from '../lib/cart-context';
 import { useAuth, useSessionGuard } from '../lib/auth-context';
 import { createOrder, searchNPCities, getNPWarehouses, getProfile } from '../lib/api';
 import { COLORS, FONT, RADIUS } from '../lib/constants';
-import type { NPCity, NPWarehouse, DeliveryType } from '../lib/types';
-
-function formatPrice(price: number): string {
-  return price.toLocaleString('uk-UA') + ' ₴';
-}
+import type { NPCity, NPWarehouse, DeliveryType, Profile } from '../lib/types';
+import { formatPrice } from '../lib/formatters';
 
 /** Format raw digits to +380 XX XXX XX XX */
 function formatPhone(raw: string): string {
@@ -75,7 +72,7 @@ export default function CartScreen() {
   const [loadingWarehouses, setLoadingWarehouses] = useState(false);
 
   // Buyer + recipient
-  const [buyerProfile, setBuyerProfile] = useState<any>(null);
+  const [buyerProfile, setBuyerProfile] = useState<Profile | null>(null);
   const [otherRecipient, setOtherRecipient] = useState(false);
   const [recipientFirstName, setRecipientFirstName] = useState('');
   const [recipientLastName, setRecipientLastName] = useState('');
@@ -99,18 +96,18 @@ export default function CartScreen() {
       if (p.name) setFirstName(p.name);
       if (p.last_name) setLastName(p.last_name);
       if (p.phone) setPhone(formatPhone(p.phone));
-      setDeliveryType((p as any).delivery_type || 'warehouse');
-      if (p.city && (p as any).city_ref) {
-        setSelectedCity({ ref: (p as any).city_ref, name: p.city, region: '' });
+      setDeliveryType(p.delivery_type || 'warehouse');
+      if (p.city && p.city_ref) {
+        setSelectedCity({ ref: p.city_ref, name: p.city, region: '' });
         setCityQuery(p.city);
       }
-      if ((p as any).delivery_type !== 'address' && (p as any).warehouse_ref && (p as any).warehouse_name) {
-        setSelectedWarehouse({ ref: (p as any).warehouse_ref, description: (p as any).warehouse_name, number: '' });
-        setWarehouseQuery((p as any).warehouse_name);
+      if (p.delivery_type !== 'address' && p.warehouse_ref && p.warehouse_name) {
+        setSelectedWarehouse({ ref: p.warehouse_ref, description: p.warehouse_name, number: '' });
+        setWarehouseQuery(p.warehouse_name);
       }
-      if ((p as any).address_street) setAddressStreet((p as any).address_street);
-      if ((p as any).address_building) setAddressBuilding((p as any).address_building);
-      if ((p as any).address_apartment) setAddressApartment((p as any).address_apartment);
+      if (p.address_street) setAddressStreet(p.address_street);
+      if (p.address_building) setAddressBuilding(p.address_building);
+      if (p.address_apartment) setAddressApartment(p.address_apartment);
     })();
   }, [session?.user?.id]);
 
@@ -217,8 +214,8 @@ export default function CartScreen() {
       setConfirmedTotal(total);
       clearCart();
       setOrderSuccess(true);
-    } catch (err: any) {
-      Alert.alert('Помилка', err.message || 'Не вдалось оформити замовлення');
+    } catch (err: unknown) {
+      Alert.alert('Помилка', err instanceof Error ? err.message : 'Не вдалось оформити замовлення');
     } finally {
       setOrdering(false);
     }
@@ -489,13 +486,13 @@ export default function CartScreen() {
         contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 16 }}
         renderItem={({ item }: { item: CartItem }) => (
           <View style={s.itemCard}>
-            {item.product.image_path ? (
-              <Image source={{ uri: item.product.image_path }} style={s.itemImage} contentFit="contain" cachePolicy="disk" />
-            ) : (
-              <View style={[s.itemImage, s.itemImageEmpty]}>
-                <Feather name="package" size={20} color={COLORS.textSecondary} />
-              </View>
-            )}
+            <ProductImage
+              uri={item.product.image_path}
+              style={s.itemImage}
+              placeholderStyle={s.itemImageEmpty}
+              iconSize={20}
+              iconColor={COLORS.textSecondary}
+            />
             <View style={s.itemBody}>
               <Text style={s.itemName} numberOfLines={2}>{item.product.name}</Text>
               <Text style={s.itemPrice}>{formatPrice(item.product.price)}</Text>

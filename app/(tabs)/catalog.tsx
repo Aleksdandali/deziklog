@@ -3,7 +3,6 @@ import {
   View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity,
   Dimensions, ScrollView,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -12,6 +11,7 @@ import { supabase } from '../../lib/supabase';
 import { useCart } from '../../lib/cart-context';
 import { COLORS, FONT, RADIUS, SHADOW } from '../../lib/constants';
 import { SkeletonProductCard } from '../../components/Skeleton';
+import { ProductImage } from '../../components/ProductImage';
 import type { Product, ProductCategory } from '../../lib/types';
 
 const CACHE_KEY_PRODUCTS = 'dezik_cache_products';
@@ -153,20 +153,14 @@ export default function CatalogScreen() {
                 activeOpacity={0.95}
                 onPress={() => router.push(`/product/${item.id}`)}
               >
-                {item.image_path ? (
-                  <Image
-                    source={{ uri: item.image_path }}
-                    style={s.cardImage}
-                    contentFit="contain"
-                    cachePolicy="disk"
-                    transition={200}
-                    recyclingKey={item.id}
-                  />
-                ) : (
-                  <View style={[s.cardImage, s.cardImagePlaceholder]}>
-                    <Feather name="package" size={28} color={COLORS.textTertiary} />
-                  </View>
-                )}
+                <ProductImage
+                  uri={item.image_path}
+                  style={s.cardImage}
+                  placeholderStyle={s.cardImagePlaceholder}
+                  iconSize={28}
+                  transition={200}
+                  recyclingKey={item.id}
+                />
 
                 <View style={s.cardBody}>
                   {catName && <Text style={s.cardCategory}>{catName}</Text>}
