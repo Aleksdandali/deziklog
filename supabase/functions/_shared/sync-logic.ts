@@ -11,6 +11,40 @@ const NP_API_URL = "https://api.novaposhta.ua/v2.0/json/";
 /** Orders >= this amount (UAH) get free shipping (sender pays) */
 export const FREE_SHIPPING_THRESHOLD = 2000;
 
+/** Normalize any phone string to E.164 (+380XXXXXXXXX). */
+function toE164(phone: string | null | undefined): string {
+  const d = String(phone || "").replace(/\D/g, "");
+  if (!d) return "";
+  if (d.startsWith("380")) return `+${d}`;
+  if (d.startsWith("0") && d.length === 10) return `+38${d}`;
+  if (d.length === 9) return `+380${d}`;
+  return d.startsWith("+") ? d : `+${d}`;
+}
+
+/** Search KeyCRM buyer by phone, trying multiple historical formats. */
+async function findBuyerByPhone(
+  phone: string,
+  kcHeaders: Record<string, string>,
+): Promise<number | undefined> {
+  const e164 = toE164(phone);
+  const digits = e164.replace(/\D/g, "");
+  const variants = Array.from(new Set([e164, digits, digits.slice(2)])); // +380…, 380…, 0XXXXXXXXX
+
+  for (const v of variants) {
+    if (!v) continue;
+    try {
+      const res = await fetch(
+        `${KEYCRM_API_URL}/buyer?filter[phone]=${encodeURIComponent(v)}&limit=1`,
+        { headers: kcHeaders },
+      );
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data?.data?.length > 0) return data.data[0].id;
+    } catch (_) { /* try next */ }
+  }
+  return undefined;
+}
+
 export async function syncOrderToKeyCRM(
   adminClient: SupabaseClient,
   orderId: string,
@@ -54,6 +88,9 @@ export async function syncOrderToKeyCRM(
   const { data: items } = await adminClient.from("order_items").select("*").eq("order_id", orderId);
   const buyerName = `${order.first_name || ""} ${order.last_name || ""}`.trim() || "Клієнт";
 
+  // Always send phones in E.164 to KeyCRM so dedup search is deterministic.
+  const buyerPhone = toE164(order.phone);
+
   // 2. Find or create buyer (DEDUP)
   const { data: profile } = await adminClient
     .from("profiles")
@@ -70,25 +107,14 @@ export async function syncOrderToKeyCRM(
       await fetch(`${KEYCRM_API_URL}/buyer/${buyerId}`, {
         method: "PUT",
         headers: kcHeaders,
-        body: JSON.stringify({ full_name: buyerName, phone: order.phone, email: userEmail || undefined }),
+        body: JSON.stringify({ full_name: buyerName, phone: buyerPhone, email: userEmail || undefined }),
       });
     } catch (e) {
       console.warn("KeyCRM buyer update failed:", e);
     }
   } else {
-    // Try find by phone
-    try {
-      const searchRes = await fetch(
-        `${KEYCRM_API_URL}/buyer?filter[phone]=${encodeURIComponent(order.phone)}&limit=1`,
-        { headers: kcHeaders },
-      );
-      const searchData = await searchRes.json();
-      if (searchRes.ok && searchData.data?.length > 0) {
-        buyerId = searchData.data[0].id;
-      }
-    } catch (e) {
-      console.warn("KeyCRM buyer search failed:", e);
-    }
+    // Try find by phone — checks E.164, 380…, 0… variants for legacy buyers
+    buyerId = await findBuyerByPhone(buyerPhone, kcHeaders);
 
     // If not found — create
     if (!buyerId) {
@@ -96,7 +122,7 @@ export async function syncOrderToKeyCRM(
         const buyerRes = await fetch(`${KEYCRM_API_URL}/buyer`, {
           method: "POST",
           headers: kcHeaders,
-          body: JSON.stringify({ full_name: buyerName, phone: order.phone, email: userEmail || undefined }),
+          body: JSON.stringify({ full_name: buyerName, phone: buyerPhone, email: userEmail || undefined }),
         });
         const buyerData = await buyerRes.json();
         if (buyerRes.ok && buyerData.id) buyerId = buyerData.id;
@@ -114,14 +140,14 @@ export async function syncOrderToKeyCRM(
 
   // 3. Build recipient name (may differ from buyer)
   const recipientName = `${order.recipient_first_name || order.first_name || ""} ${order.recipient_last_name || order.last_name || ""}`.trim() || buyerName;
-  const recipientPhone = order.recipient_phone || order.phone;
+  const recipientPhone = toE164(order.recipient_phone || order.phone);
   const deliveryType = order.delivery_type || "warehouse";
 
   // 4. Create order in KeyCRM
   const keycrmPayload: Record<string, unknown> = {
     source_id: KEYCRM_SOURCE_ID,
     buyer_id: buyerId || undefined,
-    buyer: { full_name: buyerName, phone: order.phone, email: userEmail || undefined },
+    buyer: { full_name: buyerName, phone: buyerPhone, email: userEmail || undefined },
     shipping: {
       delivery_service_id: 1,
       shipping_address_city: order.city_name || "",

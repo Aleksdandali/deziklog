@@ -29,33 +29,39 @@ Deno.serve(async (req) => {
     const KEYCRM_API_KEY = Deno.env.get("KEYCRM_API_KEY");
     if (!KEYCRM_API_KEY) return jsonRes({ found: false });
 
-    // KeyCRM stores phones in various formats; try the exact phone first.
+    // KeyCRM may store phones in mixed formats; try E.164, 380…, 0… variants.
     const phoneE164 = user.phone.startsWith("+") ? user.phone : `+${user.phone}`;
+    const digits = phoneE164.replace(/\D/g, "");
+    const variants = Array.from(new Set([phoneE164, digits, digits.slice(2)]));
 
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
 
-    let buyer: { full_name?: string; email?: string; address?: string } | null = null;
+    let buyer: { id?: number; full_name?: string; email?: string; address?: string } | null = null;
     try {
-      const res = await fetch(
-        `${KEYCRM_API_URL}/buyer?filter[phone]=${encodeURIComponent(phoneE164)}&limit=1&include=addresses`,
-        {
-          headers: {
-            Authorization: `Bearer ${KEYCRM_API_KEY}`,
-            Accept: "application/json",
+      for (const v of variants) {
+        if (!v) continue;
+        const res = await fetch(
+          `${KEYCRM_API_URL}/buyer?filter[phone]=${encodeURIComponent(v)}&limit=1&include=addresses`,
+          {
+            headers: {
+              Authorization: `Bearer ${KEYCRM_API_KEY}`,
+              Accept: "application/json",
+            },
+            signal: ctrl.signal,
           },
-          signal: ctrl.signal,
-        },
-      );
-      if (res.ok) {
+        );
+        if (!res.ok) continue;
         const data = await res.json();
         if (data?.data?.length > 0) {
           const b = data.data[0];
           buyer = {
+            id: b.id,
             full_name: b.full_name || undefined,
             email: b.email || undefined,
             address: b.addresses?.[0]?.address || b.addresses?.[0]?.city || undefined,
           };
+          break;
         }
       }
     } catch (e) {
@@ -65,6 +71,17 @@ Deno.serve(async (req) => {
     }
 
     if (!buyer) return jsonRes({ found: false });
+
+    // Cache buyer_id on profile so the first order skips the phone search entirely.
+    if (buyer.id) {
+      const adminClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      await adminClient.from("profiles")
+        .update({ keycrm_buyer_id: buyer.id })
+        .eq("id", user.id);
+    }
 
     return jsonRes({
       found: true,
