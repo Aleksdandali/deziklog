@@ -12,6 +12,9 @@ import { SYSTEM_PROMPT } from "../_shared/system-prompt.ts";
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
+/** Daily per-user cap. Counter resets at UTC midnight via DATE column. */
+const DAILY_LIMIT = 30;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -41,6 +44,20 @@ Deno.serve(async (req) => {
     if (authError || !user) {
       return new Response(
         JSON.stringify({ reply: "Сесія закінчилась. Увійдіть в акаунт та спробуйте знову." }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // Per-user daily rate limit (caps Claude API spend per account).
+    const adminClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const { data: usageCount, error: usageErr } = await adminClient
+      .rpc("increment_ai_chat_usage", { p_user_id: user.id });
+    if (!usageErr && typeof usageCount === "number" && usageCount > DAILY_LIMIT) {
+      return new Response(
+        JSON.stringify({ reply: `Ви вичерпали денний ліміт запитів до ШІ-асистента (${DAILY_LIMIT}). Спробуйте завтра.` }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }

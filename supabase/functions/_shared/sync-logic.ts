@@ -186,8 +186,9 @@ export async function syncOrderToKeyCRM(
   const keycrmOrderId = keycrmData.id;
 
   // 5. NP TTN (optional — only for warehouse delivery with NP refs)
-  let ttn: string | null = null;
-  if (order.city_ref && NP_API_KEY && (deliveryType === "warehouse" ? order.warehouse_ref : order.address_street)) {
+  // Skip if already created on a previous attempt to avoid duplicate shipping labels.
+  let ttn: string | null = order.np_ttn ?? null;
+  if (!ttn && order.city_ref && NP_API_KEY && (deliveryType === "warehouse" ? order.warehouse_ref : order.address_street)) {
     try {
       const payerType = order.total_amount >= FREE_SHIPPING_THRESHOLD ? "Sender" : "Recipient";
       const serviceType = deliveryType === "address" ? "WarehouseDoors" : "WarehouseWarehouse";
