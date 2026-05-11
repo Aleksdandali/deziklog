@@ -264,11 +264,20 @@ max_frequency = "5s"
 # enabled = true
 # uri = "pg-functions://<database>/<schema>/<hook_name>"
 
+# Send SMS Hook: routes OTPs through SMSFly via the send-sms-hook edge function.
+[auth.hook.send_sms]
+enabled = true
+uri = "https://csshbetufyocutdislkn.supabase.co/functions/v1/send-sms-hook"
+secrets = "env(SEND_SMS_HOOK_SECRET)"
+
 # Configure one of the supported SMS providers: `twilio`, `twilio_verify`, `messagebird`, `textlocal`, `vonage`.
+# NOTE: real SMS is sent via the SMSFly hook (auth.hook.send_sms). Twilio is enabled
+# here with placeholder creds because Supabase Auth requires at least one provider
+# to flip on the phone signup path. The hook intercepts before Twilio is contacted.
 [auth.sms.twilio]
-enabled = false
-account_sid = ""
-message_service_sid = ""
+enabled = true
+account_sid = "ACplaceholderplaceholderplaceholder0"
+message_service_sid = "MGplaceholderplaceholderplaceholder0"
 # DO NOT commit your Twilio auth token to git. Use environment variable substitution instead:
 auth_token = "env(SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN)"
 
