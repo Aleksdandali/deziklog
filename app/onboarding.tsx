@@ -39,37 +39,35 @@ export default function OnboardingScreen({ onComplete }: Props) {
   const [email, setEmail] = useState(meta?.email ?? '');
   const [city, setCity] = useState(meta?.city ?? '');
   const [saving, setSaving] = useState(false);
-  const [lookupLoading, setLookupLoading] = useState(true);
   const [autofilled, setAutofilled] = useState(false);
 
-  // Best-effort KeyCRM buyer lookup to prefill the form
+  // Best-effort KeyCRM buyer lookup runs in background — form shows immediately.
+  // If the lookup returns before the user starts typing, fields prefill.
   useEffect(() => {
-    if (!userId) { setLookupLoading(false); return; }
+    if (!userId) return;
     let cancelled = false;
     (async () => {
       try {
         const { data, error } = await supabase.functions.invoke('lookup-keycrm-buyer');
         if (cancelled) return;
         if (!error && data?.found) {
+          // KeyCRM stores full_name as "First Last"; first token → name, rest → last_name.
           if (data.full_name) {
             const parts = String(data.full_name).trim().split(/\s+/);
-            // Treat the first token as last name (Ukrainian convention varies; keep flexible)
-            // KeyCRM stores full_name as "First Last" typically — we split first/rest as name/last_name.
-            if (!name.trim()) setName(parts[0] || '');
-            if (parts.length > 1 && !lastName.trim()) setLastName(parts.slice(1).join(' '));
+            setName((prev: string) => prev.trim() ? prev : (parts[0] || ''));
+            if (parts.length > 1) {
+              setLastName((prev: string) => prev.trim() ? prev : parts.slice(1).join(' '));
+            }
           }
-          if (data.email && !email.trim()) setEmail(String(data.email));
-          if (data.address && !city.trim()) setCity(String(data.address));
+          if (data.email) setEmail((prev: string) => prev.trim() ? prev : String(data.email));
+          if (data.address) setCity((prev: string) => prev.trim() ? prev : String(data.address));
           setAutofilled(true);
         }
       } catch {
         // best-effort — never block onboarding
-      } finally {
-        if (!cancelled) setLookupLoading(false);
       }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
   const handleSave = async () => {
@@ -108,15 +106,6 @@ export default function OnboardingScreen({ onComplete }: Props) {
       setSaving(false);
     }
   };
-
-  if (lookupLoading) {
-    return (
-      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator color={COLORS.brand} />
-        <Text style={{ marginTop: 12, color: '#6B7280' }}>Завантаження профілю…</Text>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.container}>
