@@ -2,7 +2,7 @@
   "expo": {
     "name": "Dezik Log",
     "slug": "dezik-log",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "deziklog",
@@ -14,9 +14,9 @@
     },
     "description": "Цифровий журнал стерилізації для б'юті-майстрів",
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "com.shineshopb2b.deziklog",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Dezik Log потребує доступ до камери для фотографування індикаторів стерилізації",
