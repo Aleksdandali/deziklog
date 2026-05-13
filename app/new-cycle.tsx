@@ -191,9 +191,19 @@ export default function NewCycleScreen() {
 
   const startCycle = async (photoUri: string) => {
     setSaving(true);
+    let createdSessionId: string | null = null;
+    let createdUid: string | null = null;
     try {
       const uid = await getUid();
-      if (!uid) { Alert.alert('Сесія закінчилась'); setSaving(false); return; }
+      if (!uid) {
+        Alert.alert('Сесія закінчилась', 'Потрібно увійти знову.', [
+          { text: 'Скасувати', style: 'cancel' },
+          { text: 'Увійти', onPress: () => { supabase.auth.signOut(); } },
+        ]);
+        setSaving(false);
+        return;
+      }
+      createdUid = uid;
 
       const temp = parseInt(temperature, 10);
       const dur = parseInt(durationInput, 10);
@@ -211,6 +221,7 @@ export default function NewCycleScreen() {
         employee_id: employeeId ?? undefined,
         employee_name: employeeName.trim() || undefined,
       });
+      createdSessionId = sess.id;
 
       const path = await uploadSessionPhoto(uid, sess.id, 'before', photoUri);
       const now = new Date().toISOString();
@@ -229,6 +240,17 @@ export default function NewCycleScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       router.replace(`/timer?sessionId=${sess.id}&duration=${dur}`);
     } catch (err: unknown) {
+      // Rollback orphan draft session if photo upload / status update failed after createSession
+      if (createdSessionId && createdUid) {
+        try {
+          await supabase
+            .from('sterilization_sessions')
+            .delete()
+            .eq('id', createdSessionId)
+            .eq('user_id', createdUid)
+            .eq('status', 'draft');
+        } catch {}
+      }
       Alert.alert('Помилка', err instanceof Error ? err.message : 'Не вдалось створити сесію');
     } finally {
       setSaving(false);

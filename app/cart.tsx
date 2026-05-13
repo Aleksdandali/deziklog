@@ -15,6 +15,7 @@ import { ProductImage } from '../components/ProductImage';
 import { useCart, CartItem } from '../lib/cart-context';
 import { useAuth, useSessionGuard } from '../lib/auth-context';
 import { createOrder, searchNPCities, getNPWarehouses, getProfile } from '../lib/api';
+import { supabase } from '../lib/supabase';
 import { COLORS, FONT, RADIUS } from '../lib/constants';
 import type { NPCity, NPWarehouse, DeliveryType, Profile } from '../lib/types';
 import { formatPrice } from '../lib/formatters';
@@ -164,6 +165,7 @@ export default function CartScreen() {
     : warehouses;
 
   const handleOrder = async () => {
+    if (items.length === 0) { Alert.alert('Кошик порожній'); return; }
     if (!firstName.trim()) { Alert.alert("Вкажіть ім'я в профілі"); return; }
     if (!selectedCity) { Alert.alert('Оберіть місто'); return; }
     if (deliveryType === 'warehouse' && !selectedWarehouse) { Alert.alert('Оберіть відділення'); return; }
@@ -184,7 +186,13 @@ export default function CartScreen() {
     setOrdering(true);
     try {
       const uid = await getUid();
-      if (!uid) { Alert.alert('Сесія закінчилась', 'Потрібно увійти знову.'); return; }
+      if (!uid) {
+        Alert.alert('Сесія закінчилась', 'Потрібно увійти знову.', [
+          { text: 'Скасувати', style: 'cancel' },
+          { text: 'Увійти', onPress: () => { supabase.auth.signOut(); } },
+        ]);
+        return;
+      }
 
       await createOrder(uid, {
         total_amount: total,

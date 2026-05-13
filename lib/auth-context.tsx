@@ -151,7 +151,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (error) {
           setProfileComplete(false);
-        } else if (!data || !data.name || !data.name.trim()) {
+        } else if (
+          !data ||
+          !data.name || !data.name.trim() ||
+          !data.salon_name || !data.salon_name.trim()
+        ) {
           setProfileComplete(false);
         } else {
           setProfileComplete(true);

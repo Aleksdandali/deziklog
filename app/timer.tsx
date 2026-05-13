@@ -8,7 +8,7 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Circle as SvgCircle } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
-import { updateSession } from '../lib/api';
+import { updateSession, getSessionById } from '../lib/api';
 import { useSessionGuard } from '../lib/auth-context';
 import { COLORS } from '../lib/constants';
 import { RADII } from '../lib/theme';
@@ -49,6 +49,19 @@ export default function TimerScreen() {
       if (stored) {
         try {
           const data: TimerData = JSON.parse(stored);
+          // Validate against DB: AsyncStorage may be stale if session was completed/aborted on another device.
+          const uid = await getUid();
+          if (!uid) {
+            await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
+            router.replace('/(tabs)');
+            return;
+          }
+          const sess = await getSessionById(data.sessionId, uid);
+          if (!sess || sess.status !== 'in_progress') {
+            await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
+            router.replace('/(tabs)');
+            return;
+          }
           setTimerData(data);
           setElapsed(Math.floor((Date.now() - data.startedAt) / 1000));
         } catch {
