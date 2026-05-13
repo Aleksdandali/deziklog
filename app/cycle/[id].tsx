@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView,
-  Image, Modal, Alert, Share,
+  Image, Modal, Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -15,6 +15,7 @@ import { COLORS } from '../../lib/constants';
 import { RADII } from '../../lib/theme';
 import { calcActualMinutes, getDurationStatus } from '../../lib/steri-config';
 import { shareToInstagramStory } from '../../lib/share-instagram';
+import { generateCyclePDF } from '../../lib/pdf-export';
 import StoryCard from '../../components/StoryCard';
 
 function fmt(iso: string | null, mode: 'time' | 'date' | 'datetime'): string {
@@ -79,28 +80,17 @@ export default function CycleDetailScreen() {
 
   const handleExport = async () => {
     if (!sess) return;
-    const actual = actualMin ?? recommended;
-    const lines = [
-      `Стерилізація — ${passed ? 'Успішно' : 'Не пройшла'}`,
-      ``,
-      `Дата: ${fmt(sess.started_at || sess.created_at, 'date')}`,
-      `Початок: ${fmt(sess.started_at, 'time')}`,
-      `Кінець: ${fmt(sess.ended_at, 'time')}`,
-      `Тривалість: ${fmtDuration(actual)}${recommended ? ` (рекомендовано ${recommended} хв)` : ''}`,
-      ``,
-      sess.employee_name ? `Хто стерилізував: ${sess.employee_name}` : null,
-      `Інструменти: ${sess.instrument_names}`,
-      `Стерилізатор: ${sess.sterilizer_name}`,
-      `Режим: ${sess.temperature}°C · ${sess.duration_minutes} хв`,
-      sess.pouch_size ? `Пакет: ${sess.pouch_size}` : null,
-      ``,
-      `— Dezik SteriLog`,
-    ].filter(Boolean).join('\n');
-
     try {
-      await Share.share({
-        message: lines,
-        title: 'Стерилізація — Dezik SteriLog',
+      const uri = await generateCyclePDF(sess, profileData.salon_name ?? undefined);
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert('Помилка', 'Шерінг недоступний на цьому пристрої');
+        return;
+      }
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Протокол стерилізації',
+        UTI: 'com.adobe.pdf',
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '';

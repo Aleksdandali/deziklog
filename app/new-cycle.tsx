@@ -439,7 +439,7 @@ export default function NewCycleScreen() {
         {/* Photo preview if retaking */}
         {photoBefore && (
           <View style={st.previewWrap}>
-            <Image source={{ uri: photoBefore }} style={st.preview} />
+            <Image source={{ uri: photoBefore }} style={st.preview} resizeMode="cover" />
           </View>
         )}
 
@@ -490,7 +490,7 @@ const st = StyleSheet.create({
   modeInput: { height: 48, borderRadius: RADII.md, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, fontSize: 18, fontWeight: '700', color: COLORS.text, backgroundColor: COLORS.bg, textAlign: 'center' },
 
   previewWrap: { marginTop: 16 },
-  preview: { width: '100%', height: 160, borderRadius: RADII.lg },
+  preview: { width: '100%', aspectRatio: 3 / 4, borderRadius: RADII.lg, backgroundColor: COLORS.cardBg },
 
   startBtn: { marginTop: 24 },
   startBtnInner: { flexDirection: 'row', height: 56, borderRadius: RADII.lg, alignItems: 'center', justifyContent: 'center', gap: 10 },

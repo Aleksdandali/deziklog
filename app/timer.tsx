@@ -203,7 +203,15 @@ export default function TimerScreen() {
           <Text style={s.cancelText}>Скасувати</Text>
         </TouchableOpacity>
         <Text style={s.headerTitle}>Стерилізація</Text>
-        <View style={{ width: 70 }} />
+        <TouchableOpacity
+          onPress={() => router.replace('/(tabs)')}
+          hitSlop={12}
+          style={s.minimizeBtn}
+          activeOpacity={0.7}
+        >
+          <Feather name="home" size={18} color={COLORS.brand} />
+          <Text style={s.minimizeText}>Згорнути</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={s.content}>
@@ -298,6 +306,8 @@ const s = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
   cancelText: { fontSize: 14, fontWeight: '600', color: COLORS.danger },
+  minimizeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  minimizeText: { fontSize: 14, fontWeight: '600', color: COLORS.brand },
   content: { flex: 1, alignItems: 'center', paddingHorizontal: 20, paddingTop: 12 },
 
   statusPill: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADII.pill, marginBottom: 16 },
