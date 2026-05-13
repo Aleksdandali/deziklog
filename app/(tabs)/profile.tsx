@@ -228,19 +228,6 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleToggleRole = async () => {
-    if (!userId || !profile) return;
-    const newRole: UserRole = profile.role === 'owner' ? 'staff' : 'owner';
-    try {
-      await supabase.from('profiles').update({ role: newRole }).eq('id', userId);
-      const updated = { ...profile, role: newRole };
-      setProfile(updated);
-      setCache(`profile_${userId}`, updated);
-    } catch (err: unknown) {
-      Alert.alert('Помилка', err instanceof Error ? err.message : 'Щось пішло не так');
-    }
-  };
-
   const handleToggleNotification = async (field: 'notification_cycle_done' | 'notification_cycle_idle' | 'notification_order_status', value: boolean) => {
     if (!userId || !profile) return;
     try {
@@ -565,10 +552,10 @@ export default function ProfileScreen() {
                   {profile?.salon_name ? (
                     <Text style={s.profileSalon}>{profile.salon_name}</Text>
                   ) : null}
-                  <TouchableOpacity style={s.roleBadge} onPress={handleToggleRole} activeOpacity={0.7}>
+                  <View style={s.roleBadge}>
                     <Feather name={ROLE_ICONS[profile?.role ?? 'owner'] as any} size={12} color={COLORS.brand} />
                     <Text style={s.roleText}>{ROLE_LABELS[profile?.role ?? 'owner']}</Text>
-                  </TouchableOpacity>
+                  </View>
                 </View>
               </View>
 
