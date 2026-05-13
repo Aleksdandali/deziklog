@@ -74,10 +74,16 @@ Deno.serve(async (req) => {
     }
 
     // 3. All user-owned tables
+    // Apple §5.1.1(v) and GDPR Art.17 require complete erasure of personal data.
+    // Tables without ON DELETE CASCADE to auth.users must be deleted explicitly.
     await adminClient.from("orders").delete().eq("user_id", userId);
     await adminClient.from("sterilization_sessions").delete().eq("user_id", userId);
     await adminClient.from("sterilizers").delete().eq("user_id", userId);
     await adminClient.from("instruments").delete().eq("user_id", userId);
+    await adminClient.from("solutions").delete().eq("user_id", userId);
+    await adminClient.from("employees").delete().eq("user_id", userId);
+    await adminClient.from("ai_chat_usage").delete().eq("user_id", userId);
+    await adminClient.from("keycrm_lookup_usage").delete().eq("user_id", userId);
     await adminClient.from("profiles").delete().eq("id", userId);
 
     // 4. Delete auth user

@@ -630,6 +630,21 @@ export default function ProfileScreen() {
             )}
             <Feather name="chevron-right" size={16} color={COLORS.textTertiary} />
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[s.ordersBtn, { marginTop: 8 }]}
+            activeOpacity={0.7}
+            onPress={() => router.push('/keycrm-history' as any)}
+          >
+            <View style={[s.menuIcon, { backgroundColor: COLORS.brandLight }]}>
+              <Feather name="archive" size={18} color={COLORS.brand} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.ordersBtnTitle}>Історія з KeyCRM</Text>
+              <Text style={s.ordersBtnSub}>Замовлення до встановлення додатку</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={COLORS.textTertiary} />
+          </TouchableOpacity>
         </View>
 
         {/* ── Staff ── */}

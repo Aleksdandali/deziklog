@@ -70,6 +70,19 @@ export default function OnboardingScreen({ onComplete }: Props) {
     return () => { cancelled = true; };
   }, [userId]);
 
+  // Escape hatch: user landed in onboarding with the wrong phone / a stale account
+  // and needs to sign out without filling the form.
+  const handleSignOut = () => {
+    Alert.alert(
+      'Вийти з акаунту?',
+      'Ви зможете увійти знову з іншим номером телефону.',
+      [
+        { text: 'Скасувати', style: 'cancel' },
+        { text: 'Вийти', style: 'destructive', onPress: () => supabase.auth.signOut().catch(() => {}) },
+      ],
+    );
+  };
+
   const handleSave = async () => {
     if (!name.trim()) { Alert.alert("Введіть ваше ім'я"); return; }
     if (!salonName.trim()) { Alert.alert('Введіть назву салону'); return; }
@@ -109,6 +122,12 @@ export default function OnboardingScreen({ onComplete }: Props) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={styles.topBar}>
+        <TouchableOpacity onPress={handleSignOut} hitSlop={12} style={styles.signOutBtn}>
+          <Feather name="log-out" size={14} color={COLORS.textSecondary} />
+          <Text style={styles.signOutText}>Вийти</Text>
+        </TouchableOpacity>
+      </View>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}
@@ -295,6 +314,10 @@ const styles = StyleSheet.create({
     height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#e2e4ed',
     backgroundColor: '#f5f6fa', paddingHorizontal: 14, fontSize: 15, color: '#1B1B1B',
   },
+
+  topBar: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingTop: 4 },
+  signOutBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 10 },
+  signOutText: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
 
   saveBtn: { marginTop: 6, borderRadius: 14, overflow: 'hidden' },
   saveGradient: {

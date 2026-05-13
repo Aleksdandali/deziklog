@@ -144,9 +144,16 @@ export default function CompleteCycleScreen() {
         return;
       }
 
-      // Validate session is still in_progress (not already completed/failed/deleted)
-      const existing = await getSessionById(sessionId, uid);
-      if (!existing) {
+      // Validate session is still in_progress (not already completed/failed/deleted).
+      // On network/DB error we skip the pre-check and let the update path surface a real error,
+      // instead of falsely telling the master "session not found".
+      let existing: Awaited<ReturnType<typeof getSessionById>> | undefined;
+      try {
+        existing = await getSessionById(sessionId, uid);
+      } catch (err) {
+        if (__DEV__) console.warn('[complete-cycle] pre-validation failed:', err);
+      }
+      if (existing === null) {
         await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
         Alert.alert('Сесію не знайдено', 'Можливо, її було видалено.', [
           { text: 'OK', onPress: () => router.replace('/(tabs)') },
@@ -154,7 +161,7 @@ export default function CompleteCycleScreen() {
         setSaving(false);
         return;
       }
-      if (existing.status !== 'in_progress') {
+      if (existing && existing.status !== 'in_progress') {
         await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
         Alert.alert('Цикл вже завершено', 'Цей сеанс уже було збережено в журналі.', [
           { text: 'OK', onPress: () => router.replace('/(tabs)/journal') },

@@ -46,38 +46,52 @@ export default function TimerScreen() {
   useEffect(() => {
     (async () => {
       const stored = await AsyncStorage.getItem(ACTIVE_TIMER_KEY);
-      if (stored) {
-        try {
-          const data: TimerData = JSON.parse(stored);
-          // Validate against DB: AsyncStorage may be stale if session was completed/aborted on another device.
-          const uid = await getUid();
-          if (!uid) {
-            await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
-            router.replace('/(tabs)');
-            return;
-          }
-          const sess = await getSessionById(data.sessionId, uid);
-          if (!sess || sess.status !== 'in_progress') {
-            await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
-            router.replace('/(tabs)');
-            return;
-          }
-          setTimerData(data);
-          setElapsed(Math.floor((Date.now() - data.startedAt) / 1000));
-        } catch {
-          await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
+      if (!stored) {
+        if (params.sessionId && params.duration) {
+          setTimerData({
+            sessionId: params.sessionId,
+            duration: parseInt(params.duration, 10),
+            startedAt: Date.now(),
+            sterilizerName: '',
+            temperature: 0,
+            instruments: '',
+          });
         }
-      } else if (params.sessionId && params.duration) {
-        const data: TimerData = {
-          sessionId: params.sessionId,
-          duration: parseInt(params.duration, 10),
-          startedAt: Date.now(),
-          sterilizerName: '',
-          temperature: 0,
-          instruments: '',
-        };
-        setTimerData(data);
+        return;
       }
+
+      // Parse cached payload — only wipe if it's actually corrupted JSON.
+      let data: TimerData;
+      try {
+        data = JSON.parse(stored);
+      } catch {
+        await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
+        return;
+      }
+
+      const uid = await getUid();
+      if (!uid) {
+        await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
+        router.replace('/(tabs)');
+        return;
+      }
+
+      // Validate against DB: AsyncStorage may be stale if session was completed/aborted on another device.
+      // On network/DB failure we keep the cached state (do NOT wipe) — otherwise one offline blip
+      // would destroy the active cycle.
+      try {
+        const sess = await getSessionById(data.sessionId, uid);
+        if (!sess || sess.status !== 'in_progress') {
+          await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
+          router.replace('/(tabs)');
+          return;
+        }
+      } catch (err) {
+        if (__DEV__) console.warn('[timer] DB validation failed, using cached state:', err);
+      }
+
+      setTimerData(data);
+      setElapsed(Math.floor((Date.now() - data.startedAt) / 1000));
     })();
   }, []);
 

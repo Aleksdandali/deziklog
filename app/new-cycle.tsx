@@ -107,9 +107,6 @@ export default function NewCycleScreen() {
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   const [employeeName, setEmployeeName] = useState('');
 
-  // Solution (optional)
-  const [solutionNote, setSolutionNote] = useState('');
-
   // ── Load sterilizers ──────────────────────────────────
 
   useEffect(() => {
@@ -456,17 +453,6 @@ export default function NewCycleScreen() {
             <TextInput style={st.modeInput} keyboardType="number-pad" value={durationInput} onChangeText={setDurationInput} />
           </View>
         </View>
-
-        {/* Solution note (optional) */}
-        <Text style={st.label}>Розчин / концентрація <Text style={st.optional}>(необов'язково)</Text></Text>
-        <TextInput
-          style={st.input}
-          placeholder="Деланол 15%, 15 хв"
-          placeholderTextColor={COLORS.textTertiary}
-          value={solutionNote}
-          onChangeText={setSolutionNote}
-          maxLength={200}
-        />
 
         {/* Photo preview if retaking */}
         {photoBefore && (

@@ -156,3 +156,26 @@ export interface OrderItem {
   price_at_order: number;
   created_at: string;
 }
+
+// Legacy KeyCRM orders pulled live via get-keycrm-history edge function.
+// These are NOT in our DB — they were placed before the user installed the app.
+export interface KeyCRMHistoryItem {
+  id: number;
+  name: string;
+  quantity: number;
+  price: number;
+  sum: number;
+}
+
+export interface KeyCRMHistoryOrder {
+  keycrm_order_id: number;
+  number: string;
+  status: string | null;
+  status_group: string | null;
+  total: number;
+  currency: string | null;
+  created_at: string;
+  items: KeyCRMHistoryItem[];
+  ttn: string | null;
+  manager_comment: string | null;
+}

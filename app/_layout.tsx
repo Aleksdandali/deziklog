@@ -98,7 +98,7 @@ function RootNavigator() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="new-cycle" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="timer" options={{ presentation: 'modal', animation: 'slide_from_bottom', gestureEnabled: false }} />
-        <Stack.Screen name="complete-cycle" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="complete-cycle" options={{ presentation: 'modal', animation: 'slide_from_bottom', gestureEnabled: false }} />
         <Stack.Screen name="solution/add" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="solution/[id]" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="cabinet/sterilizers" options={{ presentation: 'modal' }} />
@@ -109,6 +109,7 @@ function RootNavigator() {
         <Stack.Screen name="product/[id]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="cart" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="orders" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="keycrm-history" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="ai-chat" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="legal/privacy" />
       </Stack>

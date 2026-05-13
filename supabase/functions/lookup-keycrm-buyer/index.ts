@@ -68,11 +68,15 @@ Deno.serve(async (req) => {
         const data = await res.json();
         if (data?.data?.length > 0) {
           const b = data.data[0];
+          // Prefer the explicit `city` field — full `address` may be the entire
+          // delivery line ("Київ, вул. Лесі Українки, 23, кв. 5") and would look
+          // wrong inside the form's "Місто" input.
+          const addr0 = b.addresses?.[0];
           buyer = {
             id: b.id,
             full_name: b.full_name || undefined,
             email: b.email || undefined,
-            address: b.addresses?.[0]?.address || b.addresses?.[0]?.city || undefined,
+            address: addr0?.city || addr0?.address || undefined,
           };
           break;
         }

@@ -71,7 +71,9 @@ export default function OrderDetailScreen() {
     })();
   }, [id, userId]);
 
-  // Realtime: listen for order status changes
+  // Realtime: listen for order status changes.
+  // IMPORTANT: deps must NOT include order.status — re-subscribing on every status
+  // change creates a brief window where server updates can be missed and burns realtime quota.
   useEffect(() => {
     if (!id) return;
     const channel = supabase
@@ -81,15 +83,14 @@ export default function OrderDetailScreen() {
         { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${id}` },
         (payload) => {
           const newStatus = payload.new?.status;
-          if (newStatus && order && newStatus !== order.status) {
-            setOrder((prev) => prev ? { ...prev, status: newStatus } : prev);
-          }
+          if (!newStatus) return;
+          setOrder((prev) => (prev && newStatus !== prev.status) ? { ...prev, status: newStatus } : prev);
         },
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [id, order?.status]);
+  }, [id]);
 
   const handleReorder = async () => {
     if (!items.length) return;

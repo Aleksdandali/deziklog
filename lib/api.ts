@@ -7,6 +7,7 @@ import type {
   Solution,
   NPCity,
   NPWarehouse,
+  KeyCRMHistoryOrder,
 } from './types';
 
 // ── Auth ──────────────────────────────────────────────────
@@ -258,13 +259,15 @@ export async function getPhotoUrl(storagePath: string): Promise<string> {
 }
 
 export async function getSessionById(sessionId: string, userId: string): Promise<SterilizationSession | null> {
+  // .maybeSingle() returns null when row is missing, throws on real DB/network errors.
+  // Callers can distinguish "not found" (null) from "couldn't reach DB" (throw).
   const { data, error } = await supabase
     .from('sterilization_sessions')
     .select('*')
     .eq('id', sessionId)
     .eq('user_id', userId)
-    .single();
-  if (error) return null;
+    .maybeSingle();
+  if (error) throw error;
   return data;
 }
 
@@ -378,7 +381,18 @@ export async function createOrder(userId: string, order: {
   const { error: itemsError } = await supabase
     .from('order_items')
     .insert(orderItems);
-  if (itemsError) throw itemsError;
+  if (itemsError) {
+    // Compensating delete to avoid orphan order with no items / wrong total.
+    // Best-effort; if it fails we still throw the original error.
+    try {
+      await supabase
+        .from('orders')
+        .delete()
+        .eq('id', orderData.id)
+        .eq('user_id', userId);
+    } catch {}
+    throw itemsError;
+  }
 
   // Sync to KeyCRM (fire-and-forget, don't block checkout)
   syncOrderToKeyCRM(orderData.id).catch((err) =>
@@ -397,6 +411,17 @@ async function syncOrderToKeyCRM(orderId: string) {
   });
   if (error) throw error;
   return data;
+}
+
+// Live-view of legacy KeyCRM orders (placed before the user installed the app).
+// Returns [] on any failure — this list is supplemental, never blocking.
+export async function getKeyCRMHistory(): Promise<KeyCRMHistoryOrder[]> {
+  const { data, error } = await supabase.functions.invoke('get-keycrm-history', {});
+  if (error) {
+    console.warn('[KeyCRM history] fetch failed:', error.message);
+    return [];
+  }
+  return (data?.orders as KeyCRMHistoryOrder[]) ?? [];
 }
 
 export async function getOrders(userId: string) {
