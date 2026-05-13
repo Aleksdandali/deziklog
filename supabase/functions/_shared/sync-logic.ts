@@ -50,7 +50,7 @@ export async function syncOrderToKeyCRM(
   orderId: string,
   userId: string,
   userEmail?: string,
-): Promise<{ success: boolean; keycrm_order_id?: number; error?: string; np_ttn?: string | null }> {
+): Promise<{ success: boolean; keycrm_order_id?: number; error?: string; np_ttn?: string | null; in_progress?: boolean }> {
   const KEYCRM_API_KEY = Deno.env.get("KEYCRM_API_KEY");
   const KEYCRM_SOURCE_ID = Number(Deno.env.get("KEYCRM_SOURCE_ID") || "10");
   const NP_API_KEY = Deno.env.get("NOVA_POSHTA_API_KEY") || "";
@@ -66,23 +66,41 @@ export async function syncOrderToKeyCRM(
     Accept: "application/json",
   };
 
-  // 1. Fetch order
-  const { data: order, error: orderErr } = await adminClient
-    .from("orders")
-    .select("*")
-    .eq("id", orderId)
-    .eq("user_id", userId)
-    .single();
+  // 1. Atomic claim — prevents race when multiple paths (DB trigger / client
+  //    fire-and-forget / retry cron) try to sync the same order. RPC does an
+  //    UPDATE … RETURNING under Postgres' row lock; only one worker wins.
+  //    Stale claims (>2 min, e.g. crashed worker) are re-claimable.
+  const { data: claimed, error: claimErr } = await adminClient
+    .rpc("claim_order_for_keycrm_sync", { p_order_id: orderId, p_user_id: userId });
 
-  if (orderErr || !order) {
-    await markFailed(adminClient, orderId, "Order not found");
-    return { success: false, error: "Order not found" };
+  if (claimErr) {
+    await markFailed(adminClient, orderId, `Claim failed: ${claimErr.message}`);
+    return { success: false, error: `Claim failed: ${claimErr.message}` };
   }
 
-  // Already synced
-  if (order.keycrm_order_id) {
-    await adminClient.from("orders").update({ keycrm_sync_status: "synced", keycrm_sync_error: null }).eq("id", orderId);
-    return { success: true, keycrm_order_id: order.keycrm_order_id };
+  const order = Array.isArray(claimed) && claimed.length > 0 ? claimed[0] : null;
+
+  if (!order) {
+    // No claim → re-read to find out why (already synced vs. another worker active).
+    const { data: existing } = await adminClient
+      .from("orders")
+      .select("id, keycrm_order_id, np_ttn")
+      .eq("id", orderId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!existing) {
+      await markFailed(adminClient, orderId, "Order not found");
+      return { success: false, error: "Order not found" };
+    }
+
+    if (existing.keycrm_order_id) {
+      // Already synced (possibly by another path). Treat as idempotent success.
+      return { success: true, keycrm_order_id: existing.keycrm_order_id, np_ttn: existing.np_ttn ?? null };
+    }
+
+    // Another worker holds an active claim. Don't mark failed — let it finish.
+    return { success: true, in_progress: true };
   }
 
   const { data: items } = await adminClient.from("order_items").select("*").eq("order_id", orderId);

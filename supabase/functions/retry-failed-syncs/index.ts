@@ -23,18 +23,34 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Find orders needing retry
-    const { data: orders, error } = await adminClient
+    // Find orders needing retry.
+    // Includes stale `syncing` claims (>2 min old) so a crashed worker
+    // doesn't leave an order permanently stuck. Fresh `syncing` rows are
+    // filtered out — the active worker will finish (or go stale) on its own.
+    // Atomic re-claim happens inside syncOrderToKeyCRM via the claim RPC.
+    const STALE_SYNC_MS = 2 * 60 * 1000;
+    const { data: candidates, error } = await adminClient
       .from("orders")
-      .select("id, user_id, keycrm_sync_attempts")
-      .in("keycrm_sync_status", ["pending", "failed"])
+      .select("id, user_id, keycrm_sync_attempts, keycrm_sync_status, keycrm_sync_started_at")
+      .in("keycrm_sync_status", ["pending", "failed", "syncing"])
       .is("keycrm_order_id", null)
       .lt("keycrm_sync_attempts", MAX_ATTEMPTS)
       .order("created_at", { ascending: true })
-      .limit(10);
+      .limit(20);
 
-    if (error || !orders?.length) {
-      return jsonRes({ success: true, retried: 0, message: orders ? "No orders to retry" : error?.message });
+    if (error) {
+      return jsonRes({ success: true, retried: 0, message: error.message });
+    }
+
+    const now = Date.now();
+    const orders = (candidates ?? []).filter((o) => {
+      if (o.keycrm_sync_status !== "syncing") return true;
+      if (!o.keycrm_sync_started_at) return true;
+      return now - new Date(o.keycrm_sync_started_at).getTime() > STALE_SYNC_MS;
+    }).slice(0, 10);
+
+    if (!orders.length) {
+      return jsonRes({ success: true, retried: 0, message: "No orders to retry" });
     }
 
     let retried = 0;
