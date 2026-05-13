@@ -27,8 +27,8 @@ export default function SolutionsScreen() {
 
   const loadSolutions = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
-    if (!userId) return;
     try {
+      if (!userId) return;
       const { data, error } = await supabase
         .from('solutions')
         .select('*')

@@ -23,12 +23,18 @@ export default function ActiveTimerWidget() {
   const [timerData, setTimerData] = useState<TimerData | null>(null);
   const [remaining, setRemaining] = useState(0);
 
-  // Re-check AsyncStorage every time Home tab gains focus
+  // Re-check AsyncStorage every time Home tab gains focus.
+  // `cancelled` guards against the race where focus is lost during the
+  // AsyncStorage await — without it, a setInterval would start after the
+  // cleanup function had already returned, leaking a 1Hz timer per focus
+  // cycle (battery drain).
   useFocusEffect(useCallback(() => {
+    let cancelled = false;
     let interval: ReturnType<typeof setInterval> | null = null;
 
     const check = async () => {
       const stored = await AsyncStorage.getItem(ACTIVE_TIMER_KEY);
+      if (cancelled) return;
       if (stored) {
         const data: TimerData = JSON.parse(stored);
         setTimerData(data);
@@ -47,7 +53,10 @@ export default function ActiveTimerWidget() {
     };
 
     check();
-    return () => { if (interval) clearInterval(interval); };
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+    };
   }, []));
 
   if (!timerData) return null;
