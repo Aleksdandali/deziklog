@@ -66,11 +66,13 @@ export default function CartScreen() {
   const [cities, setCities] = useState<NPCity[]>([]);
   const [selectedCity, setSelectedCity] = useState<NPCity | null>(null);
   const [loadingCities, setLoadingCities] = useState(false);
+  const [cityError, setCityError] = useState<string | null>(null);
 
   const [warehouseQuery, setWarehouseQuery] = useState('');
   const [warehouses, setWarehouses] = useState<NPWarehouse[]>([]);
   const [selectedWarehouse, setSelectedWarehouse] = useState<NPWarehouse | null>(null);
   const [loadingWarehouses, setLoadingWarehouses] = useState(false);
+  const [warehouseError, setWarehouseError] = useState<string | null>(null);
 
   // Buyer + recipient
   const [buyerProfile, setBuyerProfile] = useState<Profile | null>(null);
@@ -128,10 +130,14 @@ export default function CartScreen() {
 
     cityTimerRef.current = setTimeout(async () => {
       setLoadingCities(true);
+      setCityError(null);
       try {
         const result = await searchNPCities(text);
         setCities(result);
-      } catch { setCities([]); }
+      } catch (err) {
+        setCities([]);
+        setCityError('Не вдалось завантажити міста. Перевірте інтернет.');
+      }
       setLoadingCities(false);
     }, 300);
   }, []);
@@ -145,11 +151,15 @@ export default function CartScreen() {
     setSelectedWarehouse(null);
     setWarehouseQuery('');
     setLoadingWarehouses(true);
+    setWarehouseError(null);
     try {
       const result = await getNPWarehouses(city.ref);
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setWarehouses(result);
-    } catch { setWarehouses([]); }
+    } catch (err) {
+      setWarehouses([]);
+      setWarehouseError('Не вдалось завантажити відділення. Перевірте інтернет.');
+    }
     setLoadingWarehouses(false);
   }, []);
 
@@ -378,6 +388,9 @@ export default function CartScreen() {
               )}
             </View>
             {loadingCities && <ActivityIndicator style={s.dropdownLoader} color={COLORS.brand} />}
+            {cityError && !loadingCities && (
+              <Text style={s.npErrorText}>{cityError}</Text>
+            )}
             {cities.length > 0 && !selectedCity && (
               <View style={s.dropdown}>
                 {cities.map((city) => (
@@ -410,6 +423,9 @@ export default function CartScreen() {
                   )}
                 </View>
                 {loadingWarehouses && <ActivityIndicator style={s.dropdownLoader} color={COLORS.brand} />}
+                {warehouseError && !loadingWarehouses && (
+                  <Text style={s.npErrorText}>{warehouseError}</Text>
+                )}
                 {!selectedWarehouse && filteredWarehouses.length > 0 && (
                   <View style={s.dropdown}>
                     <ScrollView style={{ maxHeight: 220 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
@@ -619,6 +635,7 @@ const s = StyleSheet.create({
   dropdownText: { fontSize: 14, color: COLORS.text },
   dropdownHint: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   dropdownLoader: { marginTop: 8, marginBottom: 4 },
+  npErrorText: { fontSize: 13, color: COLORS.danger, marginTop: 8, marginBottom: 4, lineHeight: 18 },
 
   // Empty
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },

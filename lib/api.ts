@@ -228,15 +228,23 @@ export async function uploadSessionPhoto(
   const response = await fetch(uri);
   const blob = await response.blob();
   const arrayBuffer = await new Response(blob).arrayBuffer();
+  const contentType = `image/${ext === 'png' ? 'png' : 'jpeg'}`;
 
-  const { error: uploadError } = await supabase.storage
-    .from('cycle-photos')
-    .upload(fileName, arrayBuffer, {
-      contentType: `image/${ext === 'png' ? 'png' : 'jpeg'}`,
-      upsert: true,
-    });
-  if (uploadError) throw uploadError;
-  return fileName;
+  // Retry up to 3 times on transient network errors (network blip, 5xx).
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { error: uploadError } = await supabase.storage
+      .from('cycle-photos')
+      .upload(fileName, arrayBuffer, { contentType, upsert: true });
+    if (!uploadError) return fileName;
+    lastError = uploadError;
+    const msg = (uploadError as { message?: string })?.message ?? '';
+    const isTransient = /network|fetch|timeout|temporarily|5\d\d/i.test(msg);
+    if (!isTransient) throw uploadError;
+    // Exponential backoff: 400ms, 1200ms
+    await new Promise((r) => setTimeout(r, 400 * (attempt + 1) * (attempt + 1)));
+  }
+  throw lastError;
 }
 
 export async function getPhotoUrl(storagePath: string): Promise<string> {

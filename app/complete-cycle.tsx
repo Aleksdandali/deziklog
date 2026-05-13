@@ -10,7 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ReAnimated, { FadeIn } from 'react-native-reanimated';
 import ViewShot from 'react-native-view-shot';
-import { updateSession, uploadSessionPhoto } from '../lib/api';
+import { updateSession, uploadSessionPhoto, getSessionById } from '../lib/api';
 import { useAuth, useSessionGuard } from '../lib/auth-context';
 import { supabase } from '../lib/supabase';
 import { notifyCycleDone } from '../lib/notifications';
@@ -135,7 +135,33 @@ export default function CompleteCycleScreen() {
     setSaving(true);
     try {
       const uid = await getUid();
-      if (!uid) { Alert.alert('Сесія закінчилась', 'Потрібно увійти знову.'); setSaving(false); return; }
+      if (!uid) {
+        Alert.alert('Сесія закінчилась', 'Потрібно увійти знову.', [
+          { text: 'Скасувати', style: 'cancel' },
+          { text: 'Увійти', onPress: () => { supabase.auth.signOut(); } },
+        ]);
+        setSaving(false);
+        return;
+      }
+
+      // Validate session is still in_progress (not already completed/failed/deleted)
+      const existing = await getSessionById(sessionId, uid);
+      if (!existing) {
+        await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
+        Alert.alert('Сесію не знайдено', 'Можливо, її було видалено.', [
+          { text: 'OK', onPress: () => router.replace('/(tabs)') },
+        ]);
+        setSaving(false);
+        return;
+      }
+      if (existing.status !== 'in_progress') {
+        await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
+        Alert.alert('Цикл вже завершено', 'Цей сеанс уже було збережено в журналі.', [
+          { text: 'OK', onPress: () => router.replace('/(tabs)/journal') },
+        ]);
+        setSaving(false);
+        return;
+      }
 
       const path = await uploadSessionPhoto(uid, sessionId, 'after', photoAfter);
       const finalStatus = selectedResult === 'success' ? 'completed' : 'failed';
@@ -431,12 +457,16 @@ export default function CompleteCycleScreen() {
           <TouchableOpacity
             style={[
               s.primaryBtn,
-              (!selectedResult || !photoAfter || saving) && { opacity: 0.4 },
+              (!selectedResult || !photoAfter || saving) && { opacity: 0.55 },
               selectedResult === 'success' && { backgroundColor: COLORS.success },
               selectedResult === 'fail' && { backgroundColor: COLORS.danger },
             ]}
-            disabled={!selectedResult || !photoAfter || saving}
-            onPress={handleUploadAndConfirm}
+            disabled={saving}
+            onPress={() => {
+              if (!photoAfter) { Alert.alert('Зробіть фото індикатора ПІСЛЯ'); return; }
+              if (!selectedResult) { Alert.alert('Оберіть результат', 'Вкажіть, чи змінився індикатор.'); return; }
+              handleUploadAndConfirm();
+            }}
             activeOpacity={0.85}
           >
             <Feather name="check" size={18} color="#fff" />

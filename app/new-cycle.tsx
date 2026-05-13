@@ -346,7 +346,17 @@ export default function NewCycleScreen() {
             <Text style={st.readonlyText}>{sterilizerName}</Text>
           </View>
         ) : (
-          <TextInput style={st.input} placeholder="Назва стерилізатора" placeholderTextColor={COLORS.textTertiary} value={sterilizerName} onChangeText={setSterilizerName} maxLength={100} />
+          <>
+            <TextInput style={st.input} placeholder="Назва стерилізатора" placeholderTextColor={COLORS.textTertiary} value={sterilizerName} onChangeText={setSterilizerName} maxLength={100} />
+            <TouchableOpacity
+              onPress={() => router.push('/cabinet/sterilizers')}
+              activeOpacity={0.7}
+              style={st.addToCabinetHint}
+            >
+              <Feather name="plus-circle" size={14} color={COLORS.brand} />
+              <Text style={st.addToCabinetText}>Зберегти стерилізатор у кабінеті</Text>
+            </TouchableOpacity>
+          </>
         )}
 
         {/* Employee */}
@@ -499,6 +509,8 @@ const st = StyleSheet.create({
 
   readonlyField: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 48, borderRadius: RADII.md, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, backgroundColor: COLORS.bg },
   readonlyText: { fontSize: 15, fontWeight: '600', color: COLORS.text },
+  addToCabinetHint: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, paddingVertical: 4 },
+  addToCabinetText: { fontSize: 13, fontWeight: '600', color: COLORS.brand },
 
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: RADII.pill, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white },
