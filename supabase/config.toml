@@ -370,10 +370,12 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
-# Edge functions that handle auth internally must skip gateway JWT verification.
-# Deploy with: supabase functions deploy <name> --no-verify-jwt
+# ai-assistant validates the user JWT internally (auth.getUser) AND uses the
+# gateway JWT check as defense-in-depth. Rejecting invalid JWTs at the gateway
+# saves one auth.getUser() round-trip per bad request and prevents anonymous
+# burn of Claude API tokens.
 [functions.ai-assistant]
-verify_jwt = false
+verify_jwt = true
 
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"

@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { timingSafeEqual } from "../_shared/timing-safe.ts";
 
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
 
@@ -13,7 +14,7 @@ Deno.serve(async (req) => {
     const cronSecret = req.headers.get("x-cron-secret");
     const expectedSecret = Deno.env.get("CRON_SECRET");
 
-    if (!cronSecret || !expectedSecret || cronSecret !== expectedSecret) {
+    if (!cronSecret || !expectedSecret || !timingSafeEqual(cronSecret, expectedSecret)) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

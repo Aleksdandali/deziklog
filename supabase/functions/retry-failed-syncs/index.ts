@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { syncOrderToKeyCRM } from "../_shared/sync-logic.ts";
+import { timingSafeEqual } from "../_shared/timing-safe.ts";
 
 const MAX_ATTEMPTS = 5;
 
@@ -14,7 +15,7 @@ Deno.serve(async (req) => {
     const authSecret = req.headers.get("x-cron-secret");
     const expectedSecret = Deno.env.get("CRON_SECRET");
 
-    if (!authSecret || !expectedSecret || authSecret !== expectedSecret) {
+    if (!authSecret || !expectedSecret || !timingSafeEqual(authSecret, expectedSecret)) {
       return jsonRes({ error: "Unauthorized" }, 403);
     }
 

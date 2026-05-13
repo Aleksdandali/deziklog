@@ -12,6 +12,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { sendExpoPush, buildPushMessage } from "../_shared/expo-push.ts";
+import { timingSafeEqual } from "../_shared/timing-safe.ts";
 
 const WEBHOOK_SECRET = Deno.env.get("KEYCRM_WEBHOOK_SECRET");
 
@@ -40,7 +41,7 @@ Deno.serve(async (req) => {
   try {
     // Verify webhook secret (header only — never accept from URL params)
     const secret = req.headers.get("x-webhook-secret");
-    if (!WEBHOOK_SECRET || secret !== WEBHOOK_SECRET) {
+    if (!secret || !WEBHOOK_SECRET || !timingSafeEqual(secret, WEBHOOK_SECRET)) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
