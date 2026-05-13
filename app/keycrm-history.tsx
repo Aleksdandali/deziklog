@@ -6,18 +6,46 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity,
-  RefreshControl, Animated, Easing,
+  RefreshControl, Animated, Easing, Alert, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { getKeyCRMHistory } from '../lib/api';
+import { supabase } from '../lib/supabase';
+import { useCart } from '../lib/cart-context';
 import { COLORS } from '../lib/constants';
 import { RADII } from '../lib/theme';
-import type { KeyCRMHistoryOrder } from '../lib/types';
+import type { KeyCRMHistoryOrder, KeyCRMHistoryItem, Product } from '../lib/types';
 import { formatPrice, formatDateShort } from '../lib/formatters';
 
 type FeatherIcon = 'clock' | 'package' | 'check-circle' | 'truck' | 'x-circle' | 'archive';
+
+// Match historical item names to current in-stock products.
+// Strategy: exact normalized match first, then bidirectional substring fallback.
+// Products renamed in the catalog will gracefully end up in `unmatched`.
+function matchProducts(
+  items: KeyCRMHistoryItem[],
+  products: Product[],
+): { matched: Array<{ product: Product; quantity: number }>; unmatched: string[] } {
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+  const matched: Array<{ product: Product; quantity: number }> = [];
+  const unmatched: string[] = [];
+  for (const item of items) {
+    const iname = norm(item.name);
+    if (!iname) continue;
+    let p = products.find((pr) => norm(pr.name) === iname);
+    if (!p) {
+      p = products.find((pr) => {
+        const pname = norm(pr.name);
+        return iname.includes(pname) || pname.includes(iname);
+      });
+    }
+    if (p) matched.push({ product: p, quantity: Math.max(1, Math.floor(item.quantity)) });
+    else unmatched.push(item.name);
+  }
+  return { matched, unmatched };
+}
 
 // KeyCRM status groups are arbitrary per-account; we keep a sane default and
 // only colorize the ones that map cleanly to our palette.
@@ -46,15 +74,23 @@ function statusVisual(group: string | null | undefined): { color: string; bg: st
 
 export default function KeyCRMHistoryScreen() {
   const router = useRouter();
+  const { addItems } = useCart();
   const [orders, setOrders] = useState<KeyCRMHistoryOrder[] | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
   const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [repeatingId, setRepeatingId] = useState<number | null>(null);
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     try {
-      const data = await getKeyCRMHistory();
+      // History + products load in parallel so "Повторити" works instantly.
+      const [data, prodRes] = await Promise.all([
+        getKeyCRMHistory(),
+        supabase.from('products').select('*').eq('in_stock', true),
+      ]);
       setOrders(data);
+      setProducts((prodRes.data ?? []) as Product[]);
       setError(false);
     } catch (err) {
       console.warn('KeyCRM history: failed to load:', err);
@@ -71,6 +107,51 @@ export default function KeyCRMHistoryScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     load(true);
   };
+
+  const handleRepeat = useCallback((order: KeyCRMHistoryOrder) => {
+    if (repeatingId !== null) return;
+    setRepeatingId(order.keycrm_order_id);
+    // Small delay lets the spinner render before the Alert pops.
+    setTimeout(() => {
+      const { matched, unmatched } = matchProducts(order.items, products);
+
+      if (matched.length === 0) {
+        setRepeatingId(null);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+        Alert.alert(
+          'Товари більше не доступні',
+          'Жоден товар з цього замовлення зараз не продається. Подивіться актуальний каталог.',
+          [
+            { text: 'Скасувати', style: 'cancel' },
+            { text: 'У каталог', onPress: () => { router.back(); setTimeout(() => router.push('/(tabs)/catalog' as never), 250); } },
+          ],
+        );
+        return;
+      }
+
+      const addAndGo = () => {
+        addItems(matched);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        setRepeatingId(null);
+        router.push('/cart' as never);
+      };
+
+      if (unmatched.length > 0) {
+        const preview = unmatched.slice(0, 3).join('\n• ');
+        const moreNote = unmatched.length > 3 ? `\n…і ще ${unmatched.length - 3}` : '';
+        Alert.alert(
+          `Додано ${matched.length} з ${matched.length + unmatched.length}`,
+          `Не знайдено в каталозі:\n• ${preview}${moreNote}`,
+          [
+            { text: 'Скасувати', style: 'cancel', onPress: () => setRepeatingId(null) },
+            { text: 'Додати знайдені', onPress: addAndGo },
+          ],
+        );
+      } else {
+        addAndGo();
+      }
+    }, 0);
+  }, [products, addItems, router, repeatingId]);
 
   const totalAmount = (orders ?? []).reduce((sum, o) => sum + (o.total || 0), 0);
   const isLoading = orders === null;
@@ -195,6 +276,25 @@ export default function KeyCRMHistoryScreen() {
                       )}
                     </View>
                   </View>
+
+                  {o.items.length > 0 && (
+                    <TouchableOpacity
+                      style={[st.repeatBtn, repeatingId === o.keycrm_order_id && st.repeatBtnBusy]}
+                      activeOpacity={0.8}
+                      hitSlop={8}
+                      disabled={repeatingId !== null}
+                      onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); handleRepeat(o); }}
+                    >
+                      {repeatingId === o.keycrm_order_id ? (
+                        <ActivityIndicator size="small" color={COLORS.brand} />
+                      ) : (
+                        <>
+                          <Feather name="repeat" size={14} color={COLORS.brand} />
+                          <Text style={st.repeatBtnText}>Повторити замовлення</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             );
@@ -327,6 +427,15 @@ const st = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 3,
   },
   metaText: { fontSize: 11, fontWeight: '500', color: COLORS.textSecondary },
+
+  // Repeat button
+  repeatBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    marginTop: 4, paddingVertical: 10, borderRadius: 10,
+    backgroundColor: COLORS.brandLight, minHeight: 38,
+  },
+  repeatBtnBusy: { opacity: 0.7 },
+  repeatBtnText: { fontSize: 13, fontWeight: '600', color: COLORS.brand },
 
   // Skeleton
   skelCard: {

@@ -12,6 +12,7 @@ export interface CartItem {
 interface CartContextType {
   items: CartItem[];
   addItem: (product: Product) => void;
+  addItems: (entries: Array<{ product: Product; quantity: number }>) => void;
   removeItem: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
@@ -68,6 +69,22 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Bulk add — used by "repeat order from history". Sums quantities for
+  // duplicates so the user can repeat the same order twice in a row.
+  const addItems = useCallback((entries: Array<{ product: Product; quantity: number }>) => {
+    if (!entries.length) return;
+    setItems((prev) => {
+      const next = [...prev];
+      for (const { product, quantity } of entries) {
+        if (quantity <= 0) continue;
+        const idx = next.findIndex((i) => i.product.id === product.id);
+        if (idx >= 0) next[idx] = { ...next[idx], quantity: next[idx].quantity + quantity };
+        else next.push({ product, quantity });
+      }
+      return next;
+    });
+  }, []);
+
   const removeItem = useCallback((productId: string) => {
     setItems((prev) => prev.filter((i) => i.product.id !== productId));
   }, []);
@@ -88,7 +105,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, updateQuantity, clearCart, total, itemCount }}>
+    <CartContext.Provider value={{ items, addItem, addItems, removeItem, updateQuantity, clearCart, total, itemCount }}>
       {children}
     </CartContext.Provider>
   );
