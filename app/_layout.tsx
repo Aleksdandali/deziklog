@@ -42,6 +42,18 @@ function RootNavigator() {
     }
   }, [status, fontsLoaded]);
 
+  // Force navigation to /auth on logout. Without this, expo-router can keep
+  // the previous URL (e.g. /(tabs)/profile) in its history while the root
+  // Stack re-renders with only the `auth` screen declared — leaving the user
+  // looking at a blank or stale screen instead of the phone-input form.
+  useEffect(() => {
+    if (status === 'guest') {
+      // `replace` (not `push`) — wipes any authed-area screens from history
+      // so the back gesture can't reveal them.
+      router.replace('/auth' as any);
+    }
+  }, [status]);
+
   // Handle notification taps — navigate to relevant screen
   useEffect(() => {
     notifResponseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
