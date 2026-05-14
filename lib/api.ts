@@ -328,6 +328,28 @@ export async function getNPWarehouses(cityRef: string): Promise<NPWarehouse[]> {
 
 // ── Orders ────────────────────────────────────────────────
 
+/**
+ * Check current stock state for the given product IDs.
+ * Returns one row per product that still exists in the catalog.
+ * Missing IDs (product deleted) are NOT in the result — caller must compare
+ * against the input list to detect them.
+ *
+ * Mirrors the BEFORE INSERT trigger `enforce_order_item_price` so we can
+ * surface "out of stock" / "discontinued" to the user in their language
+ * before hitting the DB.
+ */
+export async function getProductsStockStatus(
+  ids: string[],
+): Promise<Array<{ id: string; name: string; in_stock: boolean }>> {
+  if (!ids.length) return [];
+  const { data, error } = await supabase
+    .from('products')
+    .select('id, name, in_stock')
+    .in('id', ids);
+  if (error) throw error;
+  return (data ?? []) as Array<{ id: string; name: string; in_stock: boolean }>;
+}
+
 export async function createOrder(userId: string, order: {
   total_amount: number;
   delivery_address: string;

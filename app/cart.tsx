@@ -14,7 +14,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 import { ProductImage } from '../components/ProductImage';
 import { useCart, CartItem } from '../lib/cart-context';
 import { useAuth, useSessionGuard } from '../lib/auth-context';
-import { createOrder, searchNPCities, getNPWarehouses, getProfile } from '../lib/api';
+import { createOrder, searchNPCities, getNPWarehouses, getProfile, getProductsStockStatus } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { COLORS, FONT, RADIUS } from '../lib/constants';
 import type { NPCity, NPWarehouse, DeliveryType, Profile } from '../lib/types';
@@ -204,6 +204,45 @@ export default function CartScreen() {
         return;
       }
 
+      // ── Pre-flight stock check ──
+      // The DB trigger `enforce_order_item_price` rejects out-of-stock or
+      // deleted products with a generic PostgrestError. Catalog filters
+      // `in_stock=true`, but locally-persisted cart items can drift after a
+      // product is taken out of stock or discontinued. We surface a clear
+      // Ukrainian message and offer to drop the offending items, instead of
+      // failing the whole checkout with an opaque error.
+      const cartIds = items.map((i) => i.product.id);
+      const live = await getProductsStockStatus(cartIds);
+      const liveById = new Map(live.map((p) => [p.id, p]));
+      const unavailable = items.filter((i) => {
+        const p = liveById.get(i.product.id);
+        return !p || p.in_stock !== true;
+      });
+      if (unavailable.length > 0) {
+        const names = unavailable.map((i) => `• ${i.product.name}`).join('\n');
+        const removeUnavailable = () => {
+          unavailable.forEach((i) => removeItem(i.product.id));
+        };
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        if (unavailable.length === items.length) {
+          Alert.alert(
+            'Товари більше не доступні',
+            `Жоден з товарів у кошику більше не доступний:\n\n${names}`,
+            [{ text: 'Очистити кошик', style: 'destructive', onPress: removeUnavailable }],
+          );
+        } else {
+          Alert.alert(
+            'Деякі товари недоступні',
+            `Ці позиції більше не доступні і будуть видалені з кошика:\n\n${names}\n\nОформити замовлення без них?`,
+            [
+              { text: 'Скасувати', style: 'cancel' },
+              { text: 'Видалити та продовжити', onPress: removeUnavailable },
+            ],
+          );
+        }
+        return;
+      }
+
       await createOrder(uid, {
         total_amount: total,
         delivery_address: deliveryAddr,
@@ -233,7 +272,26 @@ export default function CartScreen() {
       clearCart();
       setOrderSuccess(true);
     } catch (err: unknown) {
-      Alert.alert('Помилка', err instanceof Error ? err.message : 'Не вдалось оформити замовлення');
+      // Supabase PostgrestError is a plain object, not an Error instance, so
+      // `err instanceof Error` is false and `err.message` was previously
+      // swallowed. Extract message defensively from any shape we might get.
+      console.warn('[cart] order failed:', err);
+      const raw = err && typeof err === 'object' && 'message' in err
+        ? (err as { message?: unknown }).message
+        : undefined;
+      const msg = typeof raw === 'string' && raw.trim().length > 0
+        ? raw
+        : 'Не вдалось оформити замовлення';
+      // Translate the most common trigger messages to Ukrainian. The DB
+      // triggers raise English text (e.g. `Product "X" is out of stock`),
+      // which would otherwise hit the end-user as-is.
+      let userMsg = msg;
+      const oosMatch = /Product "(.+?)" is out of stock/i.exec(msg);
+      if (oosMatch) userMsg = `Товар "${oosMatch[1]}" більше не в наявності. Видаліть його з кошика.`;
+      else if (/does not exist/i.test(msg)) userMsg = 'Деяких товарів у кошику більше не існує. Оновіть кошик.';
+      else if (/Quantity must be/i.test(msg)) userMsg = 'Невірна кількість товару.';
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Помилка', userMsg);
     } finally {
       setOrdering(false);
     }
