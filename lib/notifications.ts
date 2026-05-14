@@ -39,13 +39,19 @@ export async function registerPushToken(userId: string): Promise<string | null> 
       return null;
     }
 
-    // Android needs a notification channel
+    // Android needs a notification channel.
+    // IMPORTANT: on API 26+ sound is a CHANNEL property — setting `sound`
+    // on the notification payload alone is silently ignored. We must declare
+    // `sound: 'default'` here so cycle/order/solution notifications actually
+    // ring. Channel settings are immutable after first creation, so users
+    // who installed an older silent build keep silent until they reinstall.
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
         name: 'default',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#4b569e',
+        sound: 'default',
       });
     }
 
@@ -92,7 +98,7 @@ export async function scheduleSolutionReminder(
       content: {
         title: 'Розчин закінчується',
         body: `${solutionName} — залишилось 2 дні. Підготуйте заміну.`,
-        sound: true,
+        sound: 'default',
       },
       trigger: { type: 'date', date: twoDaysBefore } as any,
     });
@@ -107,7 +113,7 @@ export async function scheduleSolutionReminder(
       content: {
         title: 'Розчин прострочений!',
         body: `${solutionName} — термін вийшов. Замініть розчин.`,
-        sound: true,
+        sound: 'default',
       },
       trigger: { type: 'date', date: expiryDay } as any,
     });
@@ -139,7 +145,12 @@ export async function notifyCycleDone(userId: string, instruments: string): Prom
     content: {
       title: 'Цикл завершено',
       body: `Стерилізація завершена: ${instruments}.`,
-      sound: true,
+      // 'default' (not `true`) is the canonical form: it maps to the system
+      // default sound on iOS and tells expo-notifications to use the channel
+      // sound on Android. Plain `true` is silently dropped on some devices.
+      sound: 'default',
+      // iOS: breaks through Focus / DND for safety-critical events.
+      interruptionLevel: 'timeSensitive',
     },
     trigger: null,
   });
@@ -170,7 +181,7 @@ export async function notifyOrderStatusChange(userId: string, orderId: string, n
     content: {
       title: 'Статус замовлення змінено',
       body: `Ваше замовлення ${label}.`,
-      sound: true,
+      sound: 'default',
     },
     trigger: null,
   });
