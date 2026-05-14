@@ -20,6 +20,11 @@ const RING_CY = RING_SIZE / 2;
 const RING_R = 95;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_R;
 const ACTIVE_TIMER_KEY = 'active_timer';
+// Hard upper bound on any sterilization cycle. Dry-heat at 180°C beyond
+// 60 min damages instruments / blunts blades; autoclave never needs that
+// long either. Past this point the timer freezes and we push a strong
+// sound notification so the user finalizes the cycle.
+const MAX_CYCLE_SECONDS = 60 * 60;
 
 interface TimerData {
   sessionId: string;
@@ -91,7 +96,9 @@ export default function TimerScreen() {
       }
 
       setTimerData(data);
-      setElapsed(Math.floor((Date.now() - data.startedAt) / 1000));
+      // Clamp at mount too — covers the case where the user minimized the
+      // app well past the cap and came back later.
+      setElapsed(Math.min(MAX_CYCLE_SECONDS, Math.floor((Date.now() - data.startedAt) / 1000)));
     })();
   }, []);
 
@@ -99,6 +106,7 @@ export default function TimerScreen() {
   const progress = recommendedSeconds > 0 ? Math.min(1, elapsed / recommendedSeconds) : 0;
   const isReached = elapsed >= recommendedSeconds && recommendedSeconds > 0;
   const almostDone = !isReached && recommendedSeconds > 0 && (recommendedSeconds - elapsed) <= 60;
+  const isCapped = elapsed >= MAX_CYCLE_SECONDS;
 
   const { minutes: elapsedMin, seconds: elapsedSec } = formatElapsed(elapsed);
 
@@ -112,7 +120,11 @@ export default function TimerScreen() {
     if (timerRef.current) clearInterval(timerRef.current);
 
     timerRef.current = setInterval(() => {
-      const newElapsed = Math.floor((Date.now() - timerData.startedAt) / 1000);
+      const rawElapsed = Math.floor((Date.now() - timerData.startedAt) / 1000);
+      // Clamp at the hard upper bound — past this we stop counting AND stop
+      // the interval (overheat protection).
+      const capped = rawElapsed >= MAX_CYCLE_SECONDS;
+      const newElapsed = capped ? MAX_CYCLE_SECONDS : rawElapsed;
       setElapsed(newElapsed);
       const recSec = recommendedSecondsRef.current;
       // Haptic every minute
@@ -127,10 +139,34 @@ export default function TimerScreen() {
           content: {
             title: 'Час стерилізації досягнуто',
             body: 'Мінімальний час пройшов. Можна завершувати цикл.',
-            sound: true,
+            // See notifications.ts: 'default' (not true) is the canonical
+            // form that actually rings on iOS + uses the channel sound on
+            // Android.
+            sound: 'default',
+            interruptionLevel: 'timeSensitive',
           },
           trigger: null,
         }).catch(() => {});
+      }
+      // Hard cap: fire a stronger "stop the cycle" notification once and
+      // stop the interval entirely. `identifier` is deterministic so retries
+      // dedup; `setInterval` is cleared so we don't spam.
+      if (capped) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        Notifications.scheduleNotificationAsync({
+          identifier: `timer-cap-${timerData.sessionId}`,
+          content: {
+            title: 'Завершіть цикл',
+            body: 'Минула 1 година. Подальший нагрів може пошкодити інструменти.',
+            sound: 'default',
+            interruptionLevel: 'timeSensitive',
+          },
+          trigger: null,
+        }).catch(() => {});
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
       }
     }, 1000);
 
@@ -199,7 +235,7 @@ export default function TimerScreen() {
   const dotX = RING_CX + RING_R * Math.cos(progressAngle);
   const dotY = RING_CY + RING_R * Math.sin(progressAngle);
 
-  const ringColor = isReached ? COLORS.success : almostDone ? COLORS.warning : COLORS.brand;
+  const ringColor = isCapped ? COLORS.danger : isReached ? COLORS.success : almostDone ? COLORS.warning : COLORS.brand;
 
   if (!timerData) {
     return (
@@ -243,10 +279,10 @@ export default function TimerScreen() {
 
       <View style={s.content}>
         {/* Status label */}
-        <View style={[s.statusPill, { backgroundColor: isReached ? COLORS.success + '18' : almostDone ? COLORS.warning + '18' : COLORS.brand + '12' }]}>
+        <View style={[s.statusPill, { backgroundColor: isCapped ? COLORS.danger + '18' : isReached ? COLORS.success + '18' : almostDone ? COLORS.warning + '18' : COLORS.brand + '12' }]}>
           <View style={[s.statusDot, { backgroundColor: ringColor }]} />
           <Text style={[s.statusText, { color: ringColor }]}>
-            {isReached ? 'Мінімальний час досягнуто' : almostDone ? 'Майже готово' : 'Йде стерилізація'}
+            {isCapped ? 'Завершіть цикл — 1 година' : isReached ? 'Мінімальний час досягнуто' : almostDone ? 'Майже готово' : 'Йде стерилізація'}
           </Text>
         </View>
 
@@ -310,7 +346,9 @@ export default function TimerScreen() {
         )}
 
         <Text style={s.nextHint}>
-          {isReached
+          {isCapped
+            ? 'Минула 1 година — максимальний час циклу. Завершіть цикл, щоб не пошкодити інструменти.'
+            : isReached
             ? 'Час достатній. Зробіть фото індикатора ПІСЛЯ для завершення.'
             : 'Після досягнення мінімального часу зробите фото для порівняння'}
         </Text>
