@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet } from 'react-native';
@@ -17,7 +17,6 @@ import ErrorBoundary from '../components/ErrorBoundary';
 import DebugAuthBanner from '../components/DebugAuthBanner';
 import OnboardingScreen from './onboarding';
 import AnimatedSplash from '../components/AnimatedSplash';
-import IntroSplash from '../components/IntroSplash';
 import { COLORS } from '../lib/constants';
 
 // Import to initialize notification handler (side effect)
@@ -25,18 +24,10 @@ import '../lib/notifications';
 
 SplashScreen.preventAutoHideAsync();
 
-// Plays only on cold start — survives re-renders, resets when the JS bundle
-// reloads (Fast Refresh / app re-launch). Intro Lottie is ~2.5s; we gate the
-// rest of the tree behind it so any flash of native splash → other UI is
-// hidden during that window.
-const INTRO_DURATION_MS = 2500;
-let introPlayed = false;
-
 function RootNavigator() {
   const { session, status, profileComplete, setProfileComplete } = useAuth();
   const router = useRouter();
   const notifResponseListener = useRef<ReturnType<typeof Notifications.addNotificationResponseReceivedListener>>();
-  const [introDone, setIntroDone] = useState(introPlayed);
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -45,24 +36,11 @@ function RootNavigator() {
     Inter_700Bold,
   });
 
-  // Hide native splash as soon as fonts are ready so the JS-rendered intro
-  // (or AnimatedSplash) can take over. Don't wait for auth status — auth can
-  // take a moment and we want the intro to start playing immediately.
   useEffect(() => {
-    if (fontsLoaded) {
+    if (status !== 'loading' && fontsLoaded) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded]);
-
-  // Cold-start intro: play once, then mark done globally.
-  useEffect(() => {
-    if (introPlayed) return;
-    const t = setTimeout(() => {
-      introPlayed = true;
-      setIntroDone(true);
-    }, INTRO_DURATION_MS);
-    return () => clearTimeout(t);
-  }, []);
+  }, [status, fontsLoaded]);
 
   // Force navigation to /auth on logout. Without this, expo-router can keep
   // the previous URL (e.g. /(tabs)/profile) in its history while the root
@@ -96,11 +74,6 @@ function RootNavigator() {
       notifResponseListener.current?.remove();
     };
   }, []);
-
-  // Intro splash overrides everything on cold start.
-  if (!introDone && fontsLoaded) {
-    return <IntroSplash />;
-  }
 
   if (status === 'loading' || !fontsLoaded) {
     return <AnimatedSplash />;
