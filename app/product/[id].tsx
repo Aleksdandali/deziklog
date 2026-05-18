@@ -20,8 +20,22 @@ function formatPrice(price: number): string {
   return price.toLocaleString('uk-UA') + ' ₴';
 }
 
+// Strip tags + decode common entities, preserving paragraph breaks.
 function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').replace(/\s+/g, ' ').trim();
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&[a-z#0-9]+;/gi, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{2,}/g, '\n\n')
+    .trim();
 }
 
 export default function ProductDetailScreen() {
@@ -133,8 +147,10 @@ export default function ProductDetailScreen() {
           {product.volume && <Text style={s.volume}>{product.volume}</Text>}
 
           {/* Stock */}
-          <View style={s.stockBadge}>
-            <Text style={s.stockBadgeText}>В наявності</Text>
+          <View style={[s.stockBadge, !product.in_stock && s.stockBadgeOut]}>
+            <Text style={[s.stockBadgeText, !product.in_stock && s.stockBadgeTextOut]}>
+              {product.in_stock ? 'В наявності' : 'Немає в наявності'}
+            </Text>
           </View>
 
           {/* Price */}
@@ -145,7 +161,9 @@ export default function ProductDetailScreen() {
         {description && (
           <View style={s.descSection}>
             <Text style={s.descTitle}>Опис</Text>
-            <Text style={s.descText}>{description}</Text>
+            {description.split('\n\n').map((para, i) => (
+              <Text key={i} style={[s.descText, i > 0 && { marginTop: 10 }]}>{para}</Text>
+            ))}
           </View>
         )}
 
@@ -178,9 +196,14 @@ export default function ProductDetailScreen() {
 
       {/* Add to cart button */}
       <View style={s.addBarWrap}>
-        <TouchableOpacity style={s.addBar} onPress={handleAdd} activeOpacity={0.9}>
+        <TouchableOpacity
+          style={[s.addBar, !product.in_stock && s.addBarDisabled]}
+          onPress={handleAdd}
+          activeOpacity={0.9}
+          disabled={!product.in_stock}
+        >
           <Ionicons name="cart-outline" size={20} color="#fff" />
-          <Text style={s.addBarText}>Додати в кошик</Text>
+          <Text style={s.addBarText}>{product.in_stock ? 'Додати в кошик' : 'Немає в наявності'}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -202,7 +225,7 @@ const s = StyleSheet.create({
 
   header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
   headerBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.bg, alignItems: 'center', justifyContent: 'center' },
-  headerBadge: { position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#E53935', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  headerBadge: { position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   headerBadgeText: { fontSize: 10, fontWeight: '700', color: '#fff' },
 
   imageWrap: { backgroundColor: COLORS.bg, paddingVertical: 20 },
@@ -210,11 +233,13 @@ const s = StyleSheet.create({
   imagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
 
   info: { paddingHorizontal: 24, paddingTop: 20 },
-  brand: { fontSize: 14, fontWeight: '700', color: '#E53935', marginBottom: 6 },
+  brand: { fontSize: 14, fontWeight: '700', color: COLORS.brand, marginBottom: 6 },
   name: { fontSize: 20, fontWeight: '600', color: COLORS.text, lineHeight: 26, marginBottom: 4 },
   volume: { fontSize: 14, color: COLORS.textSecondary, marginBottom: 8 },
-  stockBadge: { alignSelf: 'flex-start', backgroundColor: '#43A04718', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6, marginBottom: 12 },
-  stockBadgeText: { fontSize: 12, fontWeight: '600', color: '#43A047' },
+  stockBadge: { alignSelf: 'flex-start', backgroundColor: COLORS.successBg, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6, marginBottom: 12 },
+  stockBadgeText: { fontSize: 12, fontWeight: '600', color: COLORS.success },
+  stockBadgeOut: { backgroundColor: COLORS.dangerBg },
+  stockBadgeTextOut: { color: COLORS.danger },
   price: { fontSize: 26, fontWeight: '700', color: COLORS.text },
 
   descSection: { paddingHorizontal: 24, paddingTop: 24 },
@@ -235,6 +260,7 @@ const s = StyleSheet.create({
   qtyText: { fontSize: 16, fontWeight: '700', color: COLORS.text, minWidth: 24, textAlign: 'center' },
 
   addBarWrap: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 30, backgroundColor: '#fff' },
-  addBar: { flexDirection: 'row', height: 54, borderRadius: 14, backgroundColor: '#E53935', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  addBar: { flexDirection: 'row', height: 54, borderRadius: 14, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  addBarDisabled: { backgroundColor: COLORS.textTertiary },
   addBarText: { fontSize: 16, fontWeight: '700', color: '#fff' },
 });

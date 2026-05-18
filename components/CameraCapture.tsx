@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, SafeAreaView } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, SafeAreaView, Linking } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
@@ -35,14 +35,25 @@ export default function CameraCapture({ label, onCapture, onClose }: CameraCaptu
   if (!permission) return null;
 
   if (!permission.granted) {
+    // After the user denies once, iOS will not show the system dialog again
+    // and `requestPermission()` silently returns the existing denied status —
+    // the button looks broken. Route to Settings instead.
+    const blocked = !permission.canAskAgain;
+    const onPermPress = blocked
+      ? () => { Linking.openSettings(); }
+      : requestPermission;
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.permissionContainer}>
           <Feather name="camera" size={48} color={COLORS.brand} />
           <Text style={styles.permTitle}>Потрібен доступ до камери</Text>
-          <Text style={styles.permText}>Щоб фотографувати індикатори, дозвольте камеру</Text>
-          <TouchableOpacity style={styles.permBtn} onPress={requestPermission}>
-            <Text style={styles.permBtnText}>Дозволити</Text>
+          <Text style={styles.permText}>
+            {blocked
+              ? 'Доступ до камери заблоковано. Відкрийте Налаштування і дозвольте камеру для Dezik Log.'
+              : 'Щоб фотографувати індикатори, дозвольте камеру'}
+          </Text>
+          <TouchableOpacity style={styles.permBtn} onPress={onPermPress}>
+            <Text style={styles.permBtnText}>{blocked ? 'Відкрити Налаштування' : 'Дозволити'}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.permCancel} onPress={onClose}>
             <Text style={styles.permCancelText}>Скасувати</Text>

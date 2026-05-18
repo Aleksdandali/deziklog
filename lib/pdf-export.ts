@@ -11,13 +11,33 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
+// English packet codes stored in DB → Ukrainian labels for user-facing PDFs.
+// Mirrors the picker in app/new-cycle.tsx.
+// Keep in sync with PACK_OPTIONS in app/new-cycle.tsx.
+const PACKET_LABELS: Record<string, string> = {
+  kraft: 'Крафт',
+  transparent: 'Прозорий',
+  none: 'Без пакета',
+};
+function packetLabel(code: string | null | undefined): string {
+  if (!code) return '--';
+  return PACKET_LABELS[code] ?? code;
+}
+
+/** Photos for a journal row, as base64 data URIs (so the PDF is self-contained). */
+export type CyclePhotos = { before?: string | null; after?: string | null };
+
 export async function generateJournalPDF(
   cycles: SterilizationCycle[],
   salonName?: string,
+  photos?: Map<string, CyclePhotos>,
 ): Promise<string> {
   const today = new Date().toLocaleDateString('uk-UA', {
     day: 'numeric', month: 'long', year: 'numeric',
   });
+
+  // Single empty-photo placeholder, reused across rows to keep HTML small.
+  const emptyThumb = `<div class="thumb empty">—</div>`;
 
   const rows = cycles.map((c, i) => {
     const dateSource = c.started_at || c.created_at;
@@ -32,15 +52,29 @@ export async function generateJournalPDF(
     const result = c.result === 'passed' ? 'Пройдено' : 'Не пройдено';
     const resultColor = c.result === 'passed' ? COLORS.success : COLORS.danger;
 
+    const ph = photos?.get(c.id);
+    const beforeImg = ph?.before
+      ? `<img src="${ph.before}" class="thumb" alt="до"/>`
+      : emptyThumb;
+    const afterImg = ph?.after
+      ? `<img src="${ph.after}" class="thumb" alt="після"/>`
+      : emptyThumb;
+    const photoCell = `
+      <div class="photo-pair">
+        <div class="photo-col"><div class="photo-label">До</div>${beforeImg}</div>
+        <div class="photo-col"><div class="photo-label">Після</div>${afterImg}</div>
+      </div>`;
+
     return `
       <tr>
         <td style="text-align:center">${i + 1}</td>
         <td>${date}<br><span style="color:#6B7280;font-size:9px">${time}</span></td>
-        <td>${c.sterilizer_name}</td>
-        <td>${c.instrument_name}</td>
-        <td>${c.packet_type}</td>
+        <td>${escapeHtml(c.sterilizer_name)}</td>
+        <td>${escapeHtml(c.instrument_name)}</td>
+        <td>${escapeHtml(packetLabel(c.packet_type))}</td>
         <td style="text-align:center">${temp}</td>
         <td style="text-align:center">${duration}</td>
+        <td>${photoCell}</td>
         <td style="text-align:center;color:${resultColor};font-weight:600">${result}</td>
       </tr>
     `;
@@ -58,28 +92,34 @@ export async function generateJournalPDF(
         .header p { font-size: 11px; color: #6B7280; margin: 2px 0; }
         table { width: 100%; border-collapse: collapse; margin-top: 12px; }
         th { background: ${COLORS.brand}; color: white; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 6px; text-align: left; }
-        td { padding: 6px; border-bottom: 1px solid #e2e4ed; font-size: 10px; vertical-align: top; }
+        td { padding: 6px; border-bottom: 1px solid #e2e4ed; font-size: 10px; vertical-align: middle; }
         tr:nth-child(even) { background: #f9f9fb; }
+        .photo-pair { display: flex; gap: 6px; align-items: flex-end; }
+        .photo-col { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+        .photo-label { font-size: 8px; color: #6B7280; text-transform: uppercase; letter-spacing: 0.3px; }
+        .thumb { width: 38px; height: 38px; object-fit: cover; border-radius: 4px; border: 1px solid #e2e4ed; display: block; }
+        .thumb.empty { display: flex; align-items: center; justify-content: center; color: #9CA3AF; font-size: 11px; background: #f3f4f6; }
         .footer { margin-top: 24px; font-size: 9px; color: #6B7280; text-align: center; border-top: 1px solid #e2e4ed; padding-top: 8px; }
       </style>
     </head>
     <body>
       <div class="header">
         <h1>Журнал стерилізації</h1>
-        ${salonName ? `<p>${salonName}</p>` : ''}
+        ${salonName ? `<p>${escapeHtml(salonName)}</p>` : ''}
         <p>Сформовано: ${today}</p>
         <p>Записів: ${cycles.length}</p>
       </div>
       <table>
         <thead>
           <tr>
-            <th style="width:30px">№</th>
-            <th style="width:80px">Дата</th>
+            <th style="width:28px">№</th>
+            <th style="width:72px">Дата</th>
             <th>Стерилізатор</th>
             <th>Інструменти</th>
-            <th>Пакет</th>
-            <th style="width:45px">Темп.</th>
-            <th style="width:45px">Час</th>
+            <th style="width:62px">Пакет</th>
+            <th style="width:42px">Темп.</th>
+            <th style="width:42px">Час</th>
+            <th style="width:96px">Фото</th>
             <th style="width:70px">Результат</th>
           </tr>
         </thead>
@@ -138,7 +178,7 @@ export async function generateCyclePDF(
     ['Стерилізатор', sess.sterilizer_name || '--'],
     ['Інструменти', sess.instrument_names || '--'],
     ['Температура', tempLabel],
-    ['Пакет', sess.packet_type || '--'],
+    ['Пакет', packetLabel(sess.packet_type)],
   ];
   if (sess.pouch_size) rows.push(['Розмір пакета', sess.pouch_size]);
   if (sess.employee_name) rows.push(['Хто стерилізував', sess.employee_name]);

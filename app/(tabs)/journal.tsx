@@ -134,7 +134,25 @@ export default function JournalScreen() {
         temperature: s.temperature, result: s.result === 'success' ? 'passed' : 'failed',
         notes: null, started_at: s.started_at || s.created_at, created_at: s.created_at,
       }));
-      const uri = await generateJournalPDF(pdfData, profile?.salon_name ?? undefined);
+
+      // Inline photos as base64 data URIs so the PDF is self-contained (sharing
+      // would otherwise hit signed-URL expiry / network at render time).
+      // Process in chunks to cap concurrent fetch + FileReader + base64 in RAM —
+      // a long journal could otherwise fire hundreds of parallel requests.
+      const photos = new Map<string, import('../../lib/pdf-export').CyclePhotos>();
+      const CHUNK = 6;
+      for (let i = 0; i < sessions.length; i += CHUNK) {
+        await Promise.all(sessions.slice(i, i + CHUNK).map(async (s) => {
+          if (!s.photo_before_path && !s.photo_after_path) return;
+          const [before, after] = await Promise.all([
+            s.photo_before_path ? fetchAsDataUri(s.photo_before_path) : null,
+            s.photo_after_path ? fetchAsDataUri(s.photo_after_path) : null,
+          ]);
+          if (before || after) photos.set(s.id, { before, after });
+        }));
+      }
+
+      const uri = await generateJournalPDF(pdfData, profile?.salon_name ?? undefined, photos);
       await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Журнал стерилізації', UTI: 'com.adobe.pdf' });
     } catch {
       Alert.alert('Помилка', 'Не вдалось створити PDF');
@@ -142,6 +160,25 @@ export default function JournalScreen() {
       setExporting(false);
     }
   };
+
+  // Convert a Supabase storage photo to a data: URI. Returns null on any
+  // failure — the PDF still generates, just with the empty-photo placeholder.
+  async function fetchAsDataUri(storagePath: string): Promise<string | null> {
+    try {
+      const url = await getPhotoUrl(storagePath);
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return await new Promise<string | null>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  }
 
   // Start share: load & prefetch photos, then set sharingCycle to trigger render
   const handleStartShare = async (sess: SterilizationSession) => {

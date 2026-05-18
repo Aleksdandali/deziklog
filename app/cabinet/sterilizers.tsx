@@ -1,18 +1,27 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useCallback, useEffect } from 'react';
+import { View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth-context';
 import { COLORS } from '../../lib/constants';
+import { uploadSterilizerPhoto, getPhotoUrl } from '../../lib/api';
+import CameraCapture from '../../components/CameraCapture';
 
 const TYPE_OPTIONS = [
   { value: 'dry_heat', label: 'Сухожар', color: '#E65100', bg: '#FFF3E0' },
   { value: 'autoclave', label: 'Автоклав', color: '#0277BD', bg: '#E1F5FE' },
 ] as const;
 
-interface SterilizerRow { id: string; name: string; type: string | null; brand: string | null; created_at: string; }
+interface SterilizerRow {
+  id: string;
+  name: string;
+  type: string | null;
+  brand: string | null;
+  image_path: string | null;
+  created_at: string;
+}
 
 export default function SterilizersScreen() {
   const router = useRouter();
@@ -20,12 +29,16 @@ export default function SterilizersScreen() {
   const userId = session?.user?.id;
 
   const [items, setItems] = useState<SterilizerRow[]>([]);
-  const [newName, setNewName] = useState('');
-  const [newType, setNewType] = useState<string>('dry_heat');
-  const [newBrand, setNewBrand] = useState('');
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [formName, setFormName] = useState('');
+  const [formType, setFormType] = useState<string>('dry_heat');
+  const [formBrand, setFormBrand] = useState('');
+  const [pendingPhoto, setPendingPhoto] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -41,22 +54,107 @@ export default function SterilizersScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const handleAdd = async () => {
-    if (!newName.trim() || !userId) {
+  // Resolve signed URLs for any new image_paths
+  useEffect(() => {
+    const missing = items.filter((i) => i.image_path && !thumbs[i.image_path]);
+    if (missing.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        missing.map(async (i) => {
+          try {
+            const url = await getPhotoUrl(i.image_path!);
+            return [i.image_path!, url] as const;
+          } catch { return null; }
+        }),
+      );
+      if (cancelled) return;
+      setThumbs((prev) => {
+        const next = { ...prev };
+        for (const e of entries) if (e) next[e[0]] = e[1];
+        return next;
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [items, thumbs]);
+
+  const resetForm = () => {
+    setFormName(''); setFormBrand(''); setFormType('dry_heat');
+    setPendingPhoto(null); setEditingId(null);
+  };
+
+  const openCreate = () => {
+    resetForm();
+    setShowForm(true);
+  };
+
+  const openEdit = (item: SterilizerRow) => {
+    setEditingId(item.id);
+    setFormName(item.name);
+    setFormType(item.type || 'dry_heat');
+    setFormBrand(item.brand || '');
+    setPendingPhoto(null);
+    setShowForm(true);
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    resetForm();
+  };
+
+  const handleSave = async () => {
+    if (!formName.trim() || !userId) {
       Alert.alert('Увага', 'Введіть назву стерилізатора');
       return;
     }
-    setAdding(true);
-    const { error } = await supabase.from('sterilizers').insert({
-      user_id: userId,
-      name: newName.trim(),
-      type: newType || 'dry_heat',
-      brand: newBrand.trim() || null,
-    });
-    setAdding(false);
-    if (error) { if (__DEV__) console.error('Add sterilizer error:', error.message); Alert.alert('Помилка', error.message); return; }
-    setNewName(''); setNewBrand(''); setNewType('dry_heat'); setShowForm(false);
-    load();
+    setSaving(true);
+    try {
+      let id = editingId;
+      if (id) {
+        const { error } = await supabase
+          .from('sterilizers')
+          .update({
+            name: formName.trim(),
+            type: formType || 'dry_heat',
+            brand: formBrand.trim() || null,
+          })
+          .eq('id', id)
+          .eq('user_id', userId);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase
+          .from('sterilizers')
+          .insert({
+            user_id: userId,
+            name: formName.trim(),
+            type: formType || 'dry_heat',
+            brand: formBrand.trim() || null,
+          })
+          .select('id')
+          .single();
+        if (error) throw error;
+        id = data.id;
+      }
+
+      if (pendingPhoto && id) {
+        const path = await uploadSterilizerPhoto(userId, id, pendingPhoto);
+        const { error: imgErr } = await supabase
+          .from('sterilizers')
+          .update({ image_path: path })
+          .eq('id', id)
+          .eq('user_id', userId);
+        if (imgErr) throw imgErr;
+      }
+
+      closeForm();
+      load();
+    } catch (e: unknown) {
+      const msg = (e as { message?: string })?.message ?? 'Не вдалося зберегти';
+      if (__DEV__) console.error('Save sterilizer error:', msg);
+      Alert.alert('Помилка', msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = (id: string, name: string) => {
@@ -76,6 +174,16 @@ export default function SterilizersScreen() {
     return found || { label: type || 'Невідомий', color: COLORS.textSecondary, bg: COLORS.cardBg };
   };
 
+  if (showCamera) {
+    return (
+      <CameraCapture
+        label="Фото стерилізатора"
+        onCapture={(uri) => { setPendingPhoto(uri); setShowCamera(false); }}
+        onClose={() => setShowCamera(false)}
+      />
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -83,38 +191,65 @@ export default function SterilizersScreen() {
           <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Стерилізатори</Text>
-        <TouchableOpacity style={[styles.backBtn, showForm && { backgroundColor: COLORS.brand, borderColor: COLORS.brand }]} onPress={() => setShowForm(!showForm)}>
+        <TouchableOpacity
+          style={[styles.backBtn, showForm && { backgroundColor: COLORS.brand, borderColor: COLORS.brand }]}
+          onPress={() => (showForm ? closeForm() : openCreate())}
+        >
           <Feather name={showForm ? 'x' : 'plus'} size={18} color={showForm ? COLORS.white : COLORS.brand} />
         </TouchableOpacity>
       </View>
 
-      {showForm && (
+      {showForm && (() => {
+        const editing = editingId ? items.find((i) => i.id === editingId) : null;
+        const existingPath = editing?.image_path ?? null;
+        const existingUrl = existingPath ? thumbs[existingPath] : null;
+        const hasPhoto = !!pendingPhoto || !!existingPath;
+        return (
         <View style={styles.formCard}>
-          <Text style={styles.formTitle}>Новий стерилізатор</Text>
+          <Text style={styles.formTitle}>{editingId ? 'Редагувати стерилізатор' : 'Новий стерилізатор'}</Text>
+
+          {/* Photo */}
+          <View style={styles.photoRow}>
+            <TouchableOpacity style={styles.photoThumb} onPress={() => setShowCamera(true)} activeOpacity={0.7}>
+              {pendingPhoto ? (
+                <Image source={{ uri: pendingPhoto }} style={styles.photoThumbImg} />
+              ) : existingUrl ? (
+                <Image source={{ uri: existingUrl }} style={styles.photoThumbImg} />
+              ) : (
+                <Feather name="camera" size={22} color={COLORS.textSecondary} />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.photoBtn} onPress={() => setShowCamera(true)} activeOpacity={0.7}>
+              <Feather name="camera" size={14} color={COLORS.brand} />
+              <Text style={styles.photoBtnText}>{hasPhoto ? 'Замінити фото' : 'Додати фото'}</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.inputGroup}>
             <MaterialCommunityIcons name="radiator" size={16} color={COLORS.textSecondary} style={{ marginLeft: 12 }} />
-            <TextInput style={styles.formInput} value={newName} onChangeText={setNewName} placeholder="Назва стерилізатора" placeholderTextColor={COLORS.textSecondary} />
+            <TextInput style={styles.formInput} value={formName} onChangeText={setFormName} placeholder="Назва стерилізатора" placeholderTextColor={COLORS.textSecondary} />
           </View>
           <Text style={styles.fieldLabel}>Тип</Text>
           <View style={styles.typeRow}>
             {TYPE_OPTIONS.map((opt) => (
-              <TouchableOpacity key={opt.value} style={[styles.typeChip, newType === opt.value && { backgroundColor: opt.bg, borderColor: opt.color }]} onPress={() => setNewType(opt.value)} activeOpacity={0.7}>
-                <View style={[styles.typeRadio, newType === opt.value && { borderColor: opt.color }]}>
-                  {newType === opt.value && <View style={[styles.typeRadioDot, { backgroundColor: opt.color }]} />}
+              <TouchableOpacity key={opt.value} style={[styles.typeChip, formType === opt.value && { backgroundColor: opt.bg, borderColor: opt.color }]} onPress={() => setFormType(opt.value)} activeOpacity={0.7}>
+                <View style={[styles.typeRadio, formType === opt.value && { borderColor: opt.color }]}>
+                  {formType === opt.value && <View style={[styles.typeRadioDot, { backgroundColor: opt.color }]} />}
                 </View>
-                <Text style={[styles.typeLabel, newType === opt.value && { color: opt.color, fontWeight: '600' }]}>{opt.label}</Text>
+                <Text style={[styles.typeLabel, formType === opt.value && { color: opt.color, fontWeight: '600' }]}>{opt.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
           <View style={styles.inputGroup}>
             <Feather name="tag" size={14} color={COLORS.textSecondary} style={{ marginLeft: 12 }} />
-            <TextInput style={styles.formInput} value={newBrand} onChangeText={setNewBrand} placeholder="Бренд (необов'язково)" placeholderTextColor={COLORS.textSecondary} />
+            <TextInput style={styles.formInput} value={formBrand} onChangeText={setFormBrand} placeholder="Бренд (необов'язково)" placeholderTextColor={COLORS.textSecondary} />
           </View>
-          <TouchableOpacity style={styles.submitBtn} onPress={handleAdd} activeOpacity={0.8} disabled={adding}>
-            {adding ? <ActivityIndicator size="small" color={COLORS.white} /> : (<><Feather name="plus" size={16} color={COLORS.white} /><Text style={styles.submitBtnText}>Додати стерилізатор</Text></>)}
+          <TouchableOpacity style={styles.submitBtn} onPress={handleSave} activeOpacity={0.8} disabled={saving}>
+            {saving ? <ActivityIndicator size="small" color={COLORS.white} /> : (<><Feather name={editingId ? 'check' : 'plus'} size={16} color={COLORS.white} /><Text style={styles.submitBtnText}>{editingId ? 'Зберегти зміни' : 'Додати стерилізатор'}</Text></>)}
           </TouchableOpacity>
         </View>
-      )}
+        );
+      })()}
 
       {loading ? (
         <ActivityIndicator size="large" color={COLORS.brand} style={{ marginTop: 40 }} />
@@ -125,9 +260,16 @@ export default function SterilizersScreen() {
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
             const typeStyle = getTypeStyle(item.type);
+            const thumbUrl = item.image_path ? thumbs[item.image_path] : null;
             return (
-              <View style={styles.card}>
-                <View style={styles.cardIconWrap}><MaterialCommunityIcons name="radiator" size={22} color="#E65100" /></View>
+              <TouchableOpacity style={styles.card} onPress={() => openEdit(item)} activeOpacity={0.7}>
+                <View style={styles.cardIconWrap}>
+                  {thumbUrl ? (
+                    <Image source={{ uri: thumbUrl }} style={styles.cardThumbImg} />
+                  ) : (
+                    <MaterialCommunityIcons name="radiator" size={22} color="#E65100" />
+                  )}
+                </View>
                 <View style={styles.cardContent}>
                   <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
                   <View style={styles.tagRow}>
@@ -138,7 +280,7 @@ export default function SterilizersScreen() {
                 <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id, item.name)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                   <Feather name="trash-2" size={16} color={COLORS.textSecondary} />
                 </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
             );
           }}
           ListHeaderComponent={items.length > 0 ? <Text style={styles.listTitle}>{items.length} {items.length === 1 ? 'стерилізатор' : items.length < 5 ? 'стерилізатори' : 'стерилізаторів'}</Text> : null}
@@ -148,7 +290,7 @@ export default function SterilizersScreen() {
               <Text style={styles.emptyTitle}>Стерилізаторів поки немає</Text>
               <Text style={styles.emptyText}>Додайте свій стерилізатор (сухожар, автоклав)</Text>
               {!showForm && (
-                <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowForm(true)} activeOpacity={0.7}>
+                <TouchableOpacity style={styles.emptyBtn} onPress={openCreate} activeOpacity={0.7}>
                   <Feather name="plus" size={16} color={COLORS.brand} /><Text style={styles.emptyBtnText}>Додати стерилізатор</Text>
                 </TouchableOpacity>
               )}
@@ -177,10 +319,16 @@ const styles = StyleSheet.create({
   typeLabel: { fontSize: 13, fontWeight: '500', color: COLORS.text },
   submitBtn: { flexDirection: 'row', height: 44, borderRadius: 12, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4 },
   submitBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+  photoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  photoThumb: { width: 64, height: 64, borderRadius: 12, backgroundColor: COLORS.bg, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  photoThumbImg: { width: '100%', height: '100%' },
+  photoBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: COLORS.brand },
+  photoBtnText: { fontSize: 13, fontWeight: '600', color: COLORS.brand },
   listContent: { paddingHorizontal: 16, paddingBottom: 32 },
   listTitle: { fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
   card: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, padding: 14, marginBottom: 8 },
-  cardIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#FFF3E0', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  cardIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#FFF3E0', alignItems: 'center', justifyContent: 'center', marginRight: 12, overflow: 'hidden' },
+  cardThumbImg: { width: '100%', height: '100%' },
   cardContent: { flex: 1 },
   cardName: { fontSize: 15, fontWeight: '600', color: COLORS.text, marginBottom: 4 },
   tagRow: { flexDirection: 'row', gap: 6 },

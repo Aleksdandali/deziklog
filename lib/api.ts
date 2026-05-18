@@ -248,6 +248,39 @@ export async function uploadSessionPhoto(
   throw lastError;
 }
 
+/**
+ * Upload a photo of a sterilizer (taken in-app or picked from gallery) to the
+ * shared cycle-photos bucket. Returns the storage path to persist on the row.
+ */
+export async function uploadSterilizerPhoto(
+  userId: string,
+  sterilizerId: string,
+  uri: string,
+): Promise<string> {
+  const rawExt = (uri.split('.').pop()?.split('?')[0] || 'jpg').toLowerCase();
+  const ext = ['jpg', 'jpeg', 'png', 'webp', 'heic'].includes(rawExt) ? rawExt : 'jpg';
+  const fileName = `${userId}/sterilizer/${sterilizerId}.${ext}`;
+
+  const response = await fetch(uri);
+  const blob = await response.blob();
+  const arrayBuffer = await new Response(blob).arrayBuffer();
+  const contentType = `image/${ext === 'png' ? 'png' : 'jpeg'}`;
+
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { error: uploadError } = await supabase.storage
+      .from('cycle-photos')
+      .upload(fileName, arrayBuffer, { contentType, upsert: true });
+    if (!uploadError) return fileName;
+    lastError = uploadError;
+    const msg = (uploadError as { message?: string })?.message ?? '';
+    const isTransient = /network|fetch|timeout|temporarily|5\d\d/i.test(msg);
+    if (!isTransient) throw uploadError;
+    await new Promise((r) => setTimeout(r, 400 * (attempt + 1) * (attempt + 1)));
+  }
+  throw lastError;
+}
+
 export async function getPhotoUrl(storagePath: string): Promise<string> {
   const { data, error } = await supabase.storage.from('cycle-photos').createSignedUrl(storagePath, 3600);
   if (error || !data?.signedUrl) {
@@ -324,6 +357,22 @@ export async function getNPWarehouses(cityRef: string): Promise<NPWarehouse[]> {
   });
   if (error) throw error;
   return data?.warehouses ?? [];
+}
+
+/**
+ * Best-effort resolve a city name (e.g. legacy profile rows missing city_ref)
+ * to a full NPCity via search. Picks the exact case-insensitive name match,
+ * else falls back to the first result. Returns null on no match or any error.
+ */
+export async function resolveNPCityByName(name: string): Promise<NPCity | null> {
+  try {
+    const results = await searchNPCities(name);
+    if (results.length === 0) return null;
+    const lower = name.toLowerCase();
+    return results.find((c) => c.name.toLowerCase() === lower) ?? results[0];
+  } catch {
+    return null;
+  }
 }
 
 // ── Orders ────────────────────────────────────────────────

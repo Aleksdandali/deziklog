@@ -12,7 +12,7 @@ import * as Sharing from 'expo-sharing';
 import Constants from 'expo-constants';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth-context';
-import { getProfile, getOrders, searchNPCities, getNPWarehouses, type SterilizationSession } from '../../lib/api';
+import { getProfile, getOrders, searchNPCities, getNPWarehouses, resolveNPCityByName, type SterilizationSession } from '../../lib/api';
 import type { OrderItem, NPCity, NPWarehouse } from '../../lib/types';
 import { generateJournalPDF } from '../../lib/pdf-export';
 import { getCached, setCache } from '../../lib/cache';
@@ -145,6 +145,24 @@ export default function ProfileScreen() {
     setAddressStreet(p.address_street || '');
     setAddressBuilding(p.address_building || '');
     setAddressApartment(p.address_apartment || '');
+
+    // Legacy data path: profile has city name but no city_ref (e.g. saved before
+    // NP integration or typed manually). Auto-resolve via NP search so the
+    // delivery-type toggle and warehouse/address fields appear without forcing
+    // the user to re-type and re-pick the city.
+    if (p.city && !p.city_ref) {
+      void (async () => {
+        const match = await resolveNPCityByName(p.city!);
+        if (!match) return;
+        setSelectedCity(match);
+        if ((p.delivery_type ?? 'warehouse') === 'warehouse') {
+          try {
+            const whs = await getNPWarehouses(match.ref);
+            setNpWarehouses(whs);
+          } catch {/* ignore — user can re-pick manually */}
+        }
+      })();
+    }
   };
 
   useFocusEffect(useCallback(() => {

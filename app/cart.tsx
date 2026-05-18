@@ -14,7 +14,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 import { ProductImage } from '../components/ProductImage';
 import { useCart, CartItem } from '../lib/cart-context';
 import { useAuth, useSessionGuard } from '../lib/auth-context';
-import { createOrder, searchNPCities, getNPWarehouses, getProfile, getProductsStockStatus } from '../lib/api';
+import { createOrder, searchNPCities, getNPWarehouses, resolveNPCityByName, getProfile, getProductsStockStatus } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { COLORS, FONT, RADIUS } from '../lib/constants';
 import type { NPCity, NPWarehouse, DeliveryType, Profile } from '../lib/types';
@@ -103,6 +103,20 @@ export default function CartScreen() {
       if (p.city && p.city_ref) {
         setSelectedCity({ ref: p.city_ref, name: p.city, region: '' });
         setCityQuery(p.city);
+      } else if (p.city) {
+        // Legacy profile data with city name but no city_ref —
+        // resolve the ref via NP search so the warehouse picker isn't gated out.
+        setCityQuery(p.city);
+        const match = await resolveNPCityByName(p.city);
+        if (match) {
+          setSelectedCity(match);
+          if ((p.delivery_type ?? 'warehouse') === 'warehouse') {
+            try {
+              const whs = await getNPWarehouses(match.ref);
+              setWarehouses(whs);
+            } catch {/* ignore — user can re-pick manually */}
+          }
+        }
       }
       if (p.delivery_type !== 'address' && p.warehouse_ref && p.warehouse_name) {
         setSelectedWarehouse({ ref: p.warehouse_ref, description: p.warehouse_name, number: '' });
