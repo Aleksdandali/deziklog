@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView,
-  TextInput, Alert, Image,
+  TextInput, Alert, Image, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -315,6 +315,11 @@ export default function NewCycleScreen() {
 
   return (
     <SafeAreaView style={st.container}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      >
       <View style={st.header}>
         <Text style={st.headerTitle}>Новий цикл</Text>
         <TouchableOpacity style={st.closeBtn} onPress={() => router.back()}>
@@ -322,7 +327,12 @@ export default function NewCycleScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={st.body} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[st.body, { paddingBottom: 120 }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
 
         {/* Sterilizer */}
         <Text style={st.label}>Стерилізатор</Text>
@@ -476,6 +486,7 @@ export default function NewCycleScreen() {
 
         <Text style={st.hint}>Після фото ви зможете перевірити знімок перед стартом</Text>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

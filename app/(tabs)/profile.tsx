@@ -2,12 +2,14 @@ import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity,
   TextInput, Alert, Switch, ActivityIndicator, LayoutAnimation, UIManager, Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
+import Constants from 'expo-constants';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth-context';
 import { getProfile, getOrders, searchNPCities, getNPWarehouses, type SterilizationSession } from '../../lib/api';
@@ -328,7 +330,17 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={s.container}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      >
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 120 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
         {/* ── Header with gradient ── */}
         <LinearGradient
           colors={['#eceef5', COLORS.bg]}
@@ -618,20 +630,6 @@ export default function ProfileScreen() {
             <Feather name="chevron-right" size={16} color={COLORS.textTertiary} />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[s.ordersBtn, { marginTop: 8 }]}
-            activeOpacity={0.7}
-            onPress={() => router.push('/keycrm-history' as any)}
-          >
-            <View style={[s.menuIcon, { backgroundColor: COLORS.brandLight }]}>
-              <Feather name="archive" size={18} color={COLORS.brand} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.ordersBtnTitle}>Історія з KeyCRM</Text>
-              <Text style={s.ordersBtnSub}>Замовлення до встановлення додатку</Text>
-            </View>
-            <Feather name="chevron-right" size={16} color={COLORS.textTertiary} />
-          </TouchableOpacity>
         </View>
 
         {/* ── Staff ── */}
@@ -732,8 +730,12 @@ export default function ProfileScreen() {
           )}
         </TouchableOpacity>
 
-        <Text style={s.versionText}>Dezik v1.0</Text>
+        <Text style={s.versionText}>
+          Dezik v{Constants.expoConfig?.version ?? '?'}
+          {Constants.nativeBuildVersion ? ` (${Constants.nativeBuildVersion})` : ''}
+        </Text>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

@@ -213,6 +213,8 @@ export default function CartScreen() {
       // failing the whole checkout with an opaque error.
       const cartIds = items.map((i) => i.product.id);
       const live = await getProductsStockStatus(cartIds);
+      console.log('[cart] pre-flight cartIds:', cartIds);
+      console.log('[cart] pre-flight live:', live);
       const liveById = new Map(live.map((p) => [p.id, p]));
       const unavailable = items.filter((i) => {
         const p = liveById.get(i.product.id);
@@ -276,22 +278,44 @@ export default function CartScreen() {
       // `err instanceof Error` is false and `err.message` was previously
       // swallowed. Extract message defensively from any shape we might get.
       console.warn('[cart] order failed:', err);
-      const raw = err && typeof err === 'object' && 'message' in err
-        ? (err as { message?: unknown }).message
-        : undefined;
+      const errObj = (err && typeof err === 'object') ? (err as Record<string, unknown>) : {};
+      const raw = errObj.message;
       const msg = typeof raw === 'string' && raw.trim().length > 0
         ? raw
-        : 'Не вдалось оформити замовлення';
+        : '';
       // Translate the most common trigger messages to Ukrainian. The DB
       // triggers raise English text (e.g. `Product "X" is out of stock`),
       // which would otherwise hit the end-user as-is.
       let userMsg = msg;
+      let isCartStale = false;
       const oosMatch = /Product "(.+?)" is out of stock/i.exec(msg);
       if (oosMatch) userMsg = `Товар "${oosMatch[1]}" більше не в наявності. Видаліть його з кошика.`;
-      else if (/does not exist/i.test(msg)) userMsg = 'Деяких товарів у кошику більше не існує. Оновіть кошик.';
+      else if (/does not exist/i.test(msg)) {
+        userMsg = 'Деяких товарів у кошику більше не існує (товар видалено з каталогу). Очистіть кошик і додайте товари заново.';
+        isCartStale = true;
+      }
       else if (/Quantity must be/i.test(msg)) userMsg = 'Невірна кількість товару.';
+      // If we still don't have a useful message, dump the full error so we
+      // can see what's actually failing (network, RLS, trigger, etc.).
+      if (!userMsg) {
+        const parts: string[] = [];
+        if (typeof errObj.code === 'string' || typeof errObj.code === 'number') parts.push(`code: ${errObj.code}`);
+        if (typeof errObj.details === 'string' && errObj.details) parts.push(`details: ${errObj.details}`);
+        if (typeof errObj.hint === 'string' && errObj.hint) parts.push(`hint: ${errObj.hint}`);
+        if (parts.length === 0) {
+          try { parts.push(JSON.stringify(err)?.slice(0, 400) || String(err)); } catch { parts.push(String(err)); }
+        }
+        userMsg = `Не вдалось оформити замовлення.\n\n${parts.join('\n')}`;
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Помилка', userMsg);
+      if (isCartStale) {
+        Alert.alert('Помилка', userMsg, [
+          { text: 'Скасувати', style: 'cancel' },
+          { text: 'Очистити кошик', style: 'destructive', onPress: () => { clearCart(); setShowCheckout(false); } },
+        ]);
+      } else {
+        Alert.alert('Помилка', userMsg);
+      }
     } finally {
       setOrdering(false);
     }
@@ -343,7 +367,11 @@ export default function CartScreen() {
   if (showCheckout) {
     return (
       <SafeAreaView style={s.container}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+        >
           <View style={s.headerRow}>
             <TouchableOpacity onPress={() => setShowCheckout(false)} style={s.backBtn}>
               <Ionicons name="arrow-back" size={22} color={COLORS.text} />
@@ -354,7 +382,9 @@ export default function CartScreen() {
 
           <ScrollView
             style={s.checkoutBody}
+            contentContainerStyle={{ paddingBottom: 200 }}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
             showsVerticalScrollIndicator={false}
           >
             {/* Buyer (read-only from profile) */}
