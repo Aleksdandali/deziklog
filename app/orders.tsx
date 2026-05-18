@@ -88,9 +88,10 @@ type Row =
 
 // Cache KeyCRM history for 5 min — the edge function hits an external API
 // and useFocusEffect re-fires on every tab switch. User-pulled refresh
-// still bypasses the cache via `force=true`.
+// still bypasses the cache. Keyed by userId so signing out as A and in as
+// B doesn't leak A's history into B's screen.
 const LEGACY_TTL_MS = 5 * 60 * 1000;
-const legacyCache: { at: number; data: KeyCRMHistoryOrder[] } = { at: 0, data: [] };
+const legacyCache: { userId: string | null; at: number; data: KeyCRMHistoryOrder[] } = { userId: null, at: 0, data: [] };
 
 export default function OrdersScreen() {
   const router = useRouter();
@@ -103,6 +104,9 @@ export default function OrdersScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [repeatingId, setRepeatingId] = useState<number | null>(null);
+  // Synchronous guard against double-tap during the products fetch window —
+  // `repeatingId` state lags behind the second tap and lets it slip through.
+  const repeatBusyRef = useRef(false);
   // Products are only needed for "Повторити" matching, so load them
   // lazily on the first repeat tap (and cache for the screen lifetime).
   const productsRef = useRef<Product[] | null>(null);
@@ -111,7 +115,10 @@ export default function OrdersScreen() {
     if (!userId) return;
     if (isRefresh) setRefreshing(true);
 
-    const useCache = !isRefresh && legacyCache.data.length > 0 && (Date.now() - legacyCache.at) < LEGACY_TTL_MS;
+    const useCache = !isRefresh
+      && legacyCache.userId === userId
+      && legacyCache.data.length > 0
+      && (Date.now() - legacyCache.at) < LEGACY_TTL_MS;
     try {
       const [ordersData, legacyData] = await Promise.all([
         getOrders(userId),
@@ -119,7 +126,7 @@ export default function OrdersScreen() {
       ]);
       setNative(ordersData);
       setLegacy(legacyData);
-      if (!useCache) { legacyCache.at = Date.now(); legacyCache.data = legacyData; }
+      if (!useCache) { legacyCache.userId = userId; legacyCache.at = Date.now(); legacyCache.data = legacyData; }
     } catch (err) {
       console.warn('Orders: failed to load:', err);
     } finally {
@@ -145,8 +152,11 @@ export default function OrdersScreen() {
                     + legacy.reduce((s, o) => s + (o.total || 0), 0);
 
   const handleRepeat = useCallback(async (order: KeyCRMHistoryOrder) => {
-    if (repeatingId !== null) return;
+    if (repeatBusyRef.current) return;
+    repeatBusyRef.current = true;
     setRepeatingId(order.keycrm_order_id);
+
+    const clearBusy = () => { repeatBusyRef.current = false; setRepeatingId(null); };
 
     // Lazy-fetch products on first repeat (cached for screen lifetime).
     if (productsRef.current === null) {
@@ -160,7 +170,7 @@ export default function OrdersScreen() {
       const { matched, unmatched } = matchProducts(order.items, products);
 
       if (matched.length === 0) {
-        setRepeatingId(null);
+        clearBusy();
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
         Alert.alert(
           'Товари більше не доступні',
@@ -176,7 +186,7 @@ export default function OrdersScreen() {
       const addAndGo = () => {
         addItems(matched);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        setRepeatingId(null);
+        clearBusy();
         router.push('/cart' as never);
       };
 
@@ -187,7 +197,7 @@ export default function OrdersScreen() {
           `Додано ${matched.length} з ${matched.length + unmatched.length}`,
           `Не знайдено в каталозі:\n• ${preview}${moreNote}`,
           [
-            { text: 'Скасувати', style: 'cancel', onPress: () => setRepeatingId(null) },
+            { text: 'Скасувати', style: 'cancel', onPress: clearBusy },
             { text: 'Додати знайдені', onPress: addAndGo },
           ],
         );
@@ -195,7 +205,7 @@ export default function OrdersScreen() {
         addAndGo();
       }
     }, 0);
-  }, [addItems, router, repeatingId]);
+  }, [addItems, router]);
 
   const totalCount = native.length + legacy.length;
 

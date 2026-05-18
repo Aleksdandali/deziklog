@@ -213,8 +213,6 @@ export default function CartScreen() {
       // failing the whole checkout with an opaque error.
       const cartIds = items.map((i) => i.product.id);
       const live = await getProductsStockStatus(cartIds);
-      console.log('[cart] pre-flight cartIds:', cartIds);
-      console.log('[cart] pre-flight live:', live);
       const liveById = new Map(live.map((p) => [p.id, p]));
       const unavailable = items.filter((i) => {
         const p = liveById.get(i.product.id);
@@ -306,7 +304,9 @@ export default function CartScreen() {
           `"${badItem.product.name}" видалено з каталогу. Видалити його з кошика і спробувати знову?`,
           [
             { text: 'Скасувати', style: 'cancel' },
-            { text: 'Видалити і повторити', onPress: () => { removeItem(badItem.product.id); setTimeout(handleOrder, 100); } },
+            // Just drop the item — user re-taps "Замовити" so the next call sees
+          // fresh `items` instead of relying on a stale-closure setTimeout retry.
+          { text: 'Видалити з кошика', onPress: () => removeItem(badItem.product.id) },
           ],
         );
       } else if (isMissing) {
