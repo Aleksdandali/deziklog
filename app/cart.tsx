@@ -279,42 +279,60 @@ export default function CartScreen() {
       // swallowed. Extract message defensively from any shape we might get.
       console.warn('[cart] order failed:', err);
       const errObj = (err && typeof err === 'object') ? (err as Record<string, unknown>) : {};
-      const raw = errObj.message;
-      const msg = typeof raw === 'string' && raw.trim().length > 0
-        ? raw
-        : '';
-      // Translate the most common trigger messages to Ukrainian. The DB
-      // triggers raise English text (e.g. `Product "X" is out of stock`),
-      // which would otherwise hit the end-user as-is.
-      let userMsg = msg;
-      let isCartStale = false;
-      const oosMatch = /Product "(.+?)" is out of stock/i.exec(msg);
-      if (oosMatch) userMsg = `Товар "${oosMatch[1]}" більше не в наявності. Видаліть його з кошика.`;
-      else if (/does not exist/i.test(msg)) {
-        userMsg = 'Деяких товарів у кошику більше не існує (товар видалено з каталогу). Очистіть кошик і додайте товари заново.';
-        isCartStale = true;
-      }
-      else if (/Quantity must be/i.test(msg)) userMsg = 'Невірна кількість товару.';
-      // If we still don't have a useful message, dump the full error so we
-      // can see what's actually failing (network, RLS, trigger, etc.).
-      if (!userMsg) {
+      const rawMsg = typeof errObj.message === 'string' ? errObj.message : '';
+      const rawDetails = typeof errObj.details === 'string' ? errObj.details : '';
+      const combined = `${rawMsg} ${rawDetails}`.trim();
+
+      // The trigger raises "Product <UUID> does not exist" with the actual
+      // UUID, OR an FK violation has details like "Key (product_id)=(<uuid>)…".
+      // Extract any UUID we can find so we know which cart line is bad and
+      // can auto-prune it instead of asking the user to nuke the whole cart.
+      const uuidMatch = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.exec(combined);
+      const badId = uuidMatch?.[0];
+      const badItem = badId ? items.find((i) => i.product.id.toLowerCase() === badId.toLowerCase()) : undefined;
+
+      const oosMatch = /Product "(.+?)" is out of stock/i.exec(rawMsg);
+      const isMissing = /does not exist|not present in table|foreign key/i.test(combined);
+      const isBadQty = /Quantity must be/i.test(rawMsg);
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+
+      if (oosMatch) {
+        Alert.alert('Помилка', `Товар "${oosMatch[1]}" більше не в наявності. Видаліть його з кошика.`);
+      } else if (isMissing && badItem) {
+        // Surgical removal: drop only the offending item and offer retry.
+        Alert.alert(
+          'Товар більше не доступний',
+          `"${badItem.product.name}" видалено з каталогу. Видалити його з кошика і спробувати знову?`,
+          [
+            { text: 'Скасувати', style: 'cancel' },
+            { text: 'Видалити і повторити', onPress: () => { removeItem(badItem.product.id); setTimeout(placeOrder, 100); } },
+          ],
+        );
+      } else if (isMissing) {
+        // Couldn't parse the UUID — fall back to clearing the cart, but
+        // also dump the raw msg so we can debug if user screenshots it.
+        Alert.alert(
+          'Помилка',
+          `Деяких товарів у кошику більше не існує.\n\n${combined.slice(0, 200)}`,
+          [
+            { text: 'Скасувати', style: 'cancel' },
+            { text: 'Очистити кошик', style: 'destructive', onPress: () => { clearCart(); setShowCheckout(false); } },
+          ],
+        );
+      } else if (isBadQty) {
+        Alert.alert('Помилка', 'Невірна кількість товару.');
+      } else {
+        // Unknown error — show raw payload so we have something to debug.
         const parts: string[] = [];
+        if (rawMsg) parts.push(rawMsg);
         if (typeof errObj.code === 'string' || typeof errObj.code === 'number') parts.push(`code: ${errObj.code}`);
-        if (typeof errObj.details === 'string' && errObj.details) parts.push(`details: ${errObj.details}`);
+        if (rawDetails) parts.push(`details: ${rawDetails}`);
         if (typeof errObj.hint === 'string' && errObj.hint) parts.push(`hint: ${errObj.hint}`);
         if (parts.length === 0) {
           try { parts.push(JSON.stringify(err)?.slice(0, 400) || String(err)); } catch { parts.push(String(err)); }
         }
-        userMsg = `Не вдалось оформити замовлення.\n\n${parts.join('\n')}`;
-      }
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      if (isCartStale) {
-        Alert.alert('Помилка', userMsg, [
-          { text: 'Скасувати', style: 'cancel' },
-          { text: 'Очистити кошик', style: 'destructive', onPress: () => { clearCart(); setShowCheckout(false); } },
-        ]);
-      } else {
-        Alert.alert('Помилка', userMsg);
+        Alert.alert('Помилка', `Не вдалось оформити замовлення.\n\n${parts.join('\n')}`);
       }
     } finally {
       setOrdering(false);
