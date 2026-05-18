@@ -4,6 +4,7 @@
  */
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchAllKeycrmProducts, syncStockToDb } from "./keycrm-stock.ts";
 
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
 const NP_API_URL = "https://api.novaposhta.ua/v2.0/json/";
@@ -262,6 +263,22 @@ export async function syncOrderToKeyCRM(
     keycrm_sync_status: "synced",
     keycrm_sync_error: null,
   }).eq("id", orderId);
+
+  // 7. Targeted stock refresh for ordered SKUs. Best-effort: order success
+  // doesn't depend on this. KeyCRM already decremented its own stock when we
+  // created the order above; this just propagates the new `in_stock` value
+  // back into our DB without waiting for the 5h cron.
+  const productIds = (items || [])
+    .map((it: { product_id: string }) => it.product_id)
+    .filter(Boolean);
+  if (productIds.length > 0) {
+    try {
+      const keycrmMap = await fetchAllKeycrmProducts(KEYCRM_API_KEY);
+      await syncStockToDb(adminClient, keycrmMap, productIds);
+    } catch (e) {
+      console.warn("[post-order stock refresh] failed:", (e as Error).message);
+    }
+  }
 
   return { success: true, keycrm_order_id: keycrmOrderId, np_ttn: ttn };
 }

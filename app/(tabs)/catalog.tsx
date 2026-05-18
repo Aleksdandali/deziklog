@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity,
-  Dimensions, ScrollView,
+  Dimensions, ScrollView, RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -25,6 +26,10 @@ function formatPrice(price: number): string {
   return price.toLocaleString('uk-UA') + ' ₴';
 }
 
+// On-focus auto-refresh is throttled — KeyCRM rate-limit-friendly. Pull-to-
+// refresh bypasses the throttle (user intent is explicit).
+const FOCUS_REFRESH_COOLDOWN_MS = 60_000;
+
 export default function CatalogScreen() {
   const router = useRouter();
   const { addItem, itemCount } = useCart();
@@ -33,7 +38,36 @@ export default function CatalogScreen() {
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const lastFocusRefreshAt = useRef(0);
 
+  // Read DB products+categories. Optionally invoke the KeyCRM refresh
+  // function first so the read picks up fresh in_stock values.
+  const loadProducts = useCallback(async (opts?: { refreshStock?: boolean }) => {
+    if (opts?.refreshStock) {
+      try {
+        await supabase.functions.invoke('refresh-stock');
+      } catch (e) {
+        // Network/server failures here just mean we'll show slightly stale
+        // data — still better than blocking the catalog read.
+        console.warn('Catalog: refresh-stock failed:', e);
+      }
+    }
+    const [catRes, prodRes] = await Promise.all([
+      supabase.from('product_categories').select('*').order('sort_order'),
+      supabase.from('products').select('*, category:product_categories(name)').eq('in_stock', true).order('sort_order'),
+    ]);
+    if (catRes.data) {
+      setCategories(catRes.data);
+      AsyncStorage.setItem(CACHE_KEY_CATEGORIES, JSON.stringify(catRes.data)).catch(() => {});
+    }
+    if (prodRes.data) {
+      setProducts(prodRes.data);
+      AsyncStorage.setItem(CACHE_KEY_PRODUCTS, JSON.stringify(prodRes.data)).catch(() => {});
+    }
+  }, []);
+
+  // Initial load — show cache instantly, then fetch fresh in background.
   useEffect(() => {
     let mounted = true;
 
@@ -46,29 +80,31 @@ export default function CatalogScreen() {
       if (cachedProds) try { setProducts(JSON.parse(cachedProds)); setLoading(false); } catch (e) { console.warn('Catalog: cached products parse error:', e); }
     });
 
-    (async () => {
-      try {
-        const [catRes, prodRes] = await Promise.all([
-          supabase.from('product_categories').select('*').order('sort_order'),
-          supabase.from('products').select('*, category:product_categories(name)').eq('in_stock', true).order('sort_order'),
-        ]);
-        if (!mounted) return;
-        if (catRes.data) {
-          setCategories(catRes.data);
-          AsyncStorage.setItem(CACHE_KEY_CATEGORIES, JSON.stringify(catRes.data)).catch(() => {});
-        }
-        if (prodRes.data) {
-          setProducts(prodRes.data);
-          AsyncStorage.setItem(CACHE_KEY_PRODUCTS, JSON.stringify(prodRes.data)).catch(() => {});
-          // expo-image handles disk caching natively — no manual prefetch needed
-        }
-      } catch (err) {
-        console.warn('Catalog: failed to load products:', err);
-      } finally { if (mounted) setLoading(false); }
-    })();
+    loadProducts().catch((err) => {
+      console.warn('Catalog: failed to load products:', err);
+    }).finally(() => { if (mounted) setLoading(false); });
 
     return () => { mounted = false; };
-  }, []);
+  }, [loadProducts]);
+
+  // Refresh stock on tab focus, but no more than once per cooldown to avoid
+  // hammering KeyCRM when the user bounces between tabs.
+  useFocusEffect(useCallback(() => {
+    const now = Date.now();
+    if (now - lastFocusRefreshAt.current < FOCUS_REFRESH_COOLDOWN_MS) return;
+    lastFocusRefreshAt.current = now;
+    loadProducts({ refreshStock: true }).catch(() => {});
+  }, [loadProducts]));
+
+  const onPullRefresh = useCallback(async () => {
+    setRefreshing(true);
+    lastFocusRefreshAt.current = Date.now();
+    try {
+      await loadProducts({ refreshStock: true });
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadProducts]);
 
   const filtered = useMemo(
     () => selectedCat ? products.filter((p) => p.category_id === selectedCat) : products,
@@ -145,6 +181,14 @@ export default function CatalogScreen() {
           initialNumToRender={6}
           maxToRenderPerBatch={8}
           windowSize={5}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onPullRefresh}
+              tintColor={COLORS.brand}
+              colors={[COLORS.brand]}
+            />
+          }
           renderItem={({ item }) => {
             const catName = item.category?.name;
             return (
