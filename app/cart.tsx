@@ -306,7 +306,7 @@ export default function CartScreen() {
           `"${badItem.product.name}" видалено з каталогу. Видалити його з кошика і спробувати знову?`,
           [
             { text: 'Скасувати', style: 'cancel' },
-            { text: 'Видалити і повторити', onPress: () => { removeItem(badItem.product.id); setTimeout(placeOrder, 100); } },
+            { text: 'Видалити і повторити', onPress: () => { removeItem(badItem.product.id); setTimeout(handleOrder, 100); } },
           ],
         );
       } else if (isMissing) {

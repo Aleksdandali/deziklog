@@ -3,7 +3,7 @@
 // function). KeyCRM-only items show with an "Архів" badge and a "Повторити"
 // action — native orders open the detail screen.
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity,
   RefreshControl, ActivityIndicator, Alert,
@@ -86,6 +86,12 @@ type Row =
   | { kind: 'native'; createdAt: string; order: Order }
   | { kind: 'legacy'; createdAt: string; order: KeyCRMHistoryOrder };
 
+// Cache KeyCRM history for 5 min — the edge function hits an external API
+// and useFocusEffect re-fires on every tab switch. User-pulled refresh
+// still bypasses the cache via `force=true`.
+const LEGACY_TTL_MS = 5 * 60 * 1000;
+const legacyCache: { at: number; data: KeyCRMHistoryOrder[] } = { at: 0, data: [] };
+
 export default function OrdersScreen() {
   const router = useRouter();
   const { session } = useAuth();
@@ -94,23 +100,26 @@ export default function OrdersScreen() {
 
   const [native, setNative] = useState<Order[]>([]);
   const [legacy, setLegacy] = useState<KeyCRMHistoryOrder[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [repeatingId, setRepeatingId] = useState<number | null>(null);
+  // Products are only needed for "Повторити" matching, so load them
+  // lazily on the first repeat tap (and cache for the screen lifetime).
+  const productsRef = useRef<Product[] | null>(null);
 
   const load = useCallback(async (isRefresh = false) => {
     if (!userId) return;
     if (isRefresh) setRefreshing(true);
+
+    const useCache = !isRefresh && legacyCache.data.length > 0 && (Date.now() - legacyCache.at) < LEGACY_TTL_MS;
     try {
-      const [ordersData, legacyData, prodRes] = await Promise.all([
+      const [ordersData, legacyData] = await Promise.all([
         getOrders(userId),
-        getKeyCRMHistory(),
-        supabase.from('products').select('*').eq('in_stock', true),
+        useCache ? Promise.resolve(legacyCache.data) : getKeyCRMHistory(),
       ]);
       setNative(ordersData);
       setLegacy(legacyData);
-      setProducts((prodRes.data ?? []) as Product[]);
+      if (!useCache) { legacyCache.at = Date.now(); legacyCache.data = legacyData; }
     } catch (err) {
       console.warn('Orders: failed to load:', err);
     } finally {
@@ -135,9 +144,17 @@ export default function OrdersScreen() {
   const totalAmount = native.reduce((s, o) => s + (o.total_amount || 0), 0)
                     + legacy.reduce((s, o) => s + (o.total || 0), 0);
 
-  const handleRepeat = useCallback((order: KeyCRMHistoryOrder) => {
+  const handleRepeat = useCallback(async (order: KeyCRMHistoryOrder) => {
     if (repeatingId !== null) return;
     setRepeatingId(order.keycrm_order_id);
+
+    // Lazy-fetch products on first repeat (cached for screen lifetime).
+    if (productsRef.current === null) {
+      const { data } = await supabase.from('products').select('*').eq('in_stock', true);
+      productsRef.current = (data ?? []) as Product[];
+    }
+    const products = productsRef.current;
+
     // Small delay lets the spinner render before Alert pops.
     setTimeout(() => {
       const { matched, unmatched } = matchProducts(order.items, products);
@@ -178,7 +195,7 @@ export default function OrdersScreen() {
         addAndGo();
       }
     }, 0);
-  }, [products, addItems, router, repeatingId]);
+  }, [addItems, router, repeatingId]);
 
   const totalCount = native.length + legacy.length;
 
