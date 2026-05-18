@@ -13,25 +13,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { sendExpoPush, buildPushMessage } from "../_shared/expo-push.ts";
 import { timingSafeEqual } from "../_shared/timing-safe.ts";
+import { mapKeyCRMStatus, STATUS_LABELS } from "../_shared/keycrm-status.ts";
 
 const WEBHOOK_SECRET = Deno.env.get("KEYCRM_WEBHOOK_SECRET");
-
-const STATUS_MAP: Record<string, string> = {
-  // Map KeyCRM status IDs/names to our internal statuses
-  // Adjust these mappings based on your KeyCRM configuration
-  "1": "pending",
-  "2": "confirmed",
-  "3": "canceled",
-  "new": "pending",
-  "confirmed": "confirmed",
-  "canceled": "canceled",
-  "cancelled": "canceled",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  confirmed: "підтверджено",
-  canceled: "скасовано",
-};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -50,16 +34,27 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const keycrmOrderId = body.order_id || body.id;
-    const rawStatus = String(body.status || body.status_id || "");
-    const newStatus = STATUS_MAP[rawStatus] ?? rawStatus;
+    // Try status_id first (numeric), fall back to status (name). The shared
+    // mapper handles all three shapes (number, numeric string, name).
+    const newStatus = mapKeyCRMStatus(body.status_id ?? body.status);
 
-    if (!keycrmOrderId || !newStatus) {
+    if (!keycrmOrderId) {
       return new Response(
-        JSON.stringify({ error: "Missing order_id or status" }),
+        JSON.stringify({ error: "Missing order_id" }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
+      );
+    }
+
+    if (!newStatus) {
+      // Unknown status → log and ack so KeyCRM doesn't keep retrying, but
+      // don't pollute orders.status with raw IDs.
+      console.warn("[keycrm-webhook] unknown status, skipping:", { keycrmOrderId, status: body.status, status_id: body.status_id });
+      return new Response(
+        JSON.stringify({ ok: true, message: "Unknown status, skipped" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -115,7 +110,7 @@ Deno.serve(async (req) => {
       profile?.expo_push_token &&
       profile.notification_order_status !== false
     ) {
-      const label = STATUS_LABELS[newStatus] ?? newStatus;
+      const label = STATUS_LABELS[newStatus];
       const message = buildPushMessage(
         profile.expo_push_token,
         "Статус замовлення змінено",

@@ -9,25 +9,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { sendExpoPush, buildPushMessage } from "../_shared/expo-push.ts";
 import { timingSafeEqual } from "../_shared/timing-safe.ts";
+import { mapKeyCRMStatus, STATUS_LABELS } from "../_shared/keycrm-status.ts";
 
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
-
-/**
- * Map KeyCRM status_id → our app status
- * Adjust if you add more statuses in KeyCRM
- */
-const KEYCRM_STATUS_MAP: Record<number, string> = {
-  1: "pending",       // new
-  8: "processing",    // 🚚Передан на сборку
-  12: "delivered",    // completed
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  processing: "передано на збірку",
-  delivered: "доставлено",
-  confirmed: "підтверджено",
-  canceled: "скасовано",
-};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -90,8 +74,7 @@ Deno.serve(async (req) => {
         }
 
         const kcOrder = await res.json();
-        const kcStatusId = kcOrder.status_id;
-        const newStatus = KEYCRM_STATUS_MAP[kcStatusId];
+        const newStatus = mapKeyCRMStatus(kcOrder.status_id);
 
         if (!newStatus || newStatus === order.status) continue;
 
@@ -109,7 +92,7 @@ Deno.serve(async (req) => {
           .maybeSingle();
 
         if (profile?.expo_push_token && profile.notification_order_status !== false) {
-          const label = STATUS_LABELS[newStatus] ?? newStatus;
+          const label = STATUS_LABELS[newStatus];
           await sendExpoPush([
             buildPushMessage(
               profile.expo_push_token,
