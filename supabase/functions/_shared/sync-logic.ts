@@ -5,6 +5,7 @@
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAllKeycrmProducts, syncStockToDb } from "./keycrm-stock.ts";
+import { KEYCRM_ID_MAP } from "./keycrm-product-map.ts";
 
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
 const NP_API_URL = "https://api.novaposhta.ua/v2.0/json/";
@@ -181,10 +182,16 @@ export async function syncOrderToKeyCRM(
             shipping_receive_point: `${order.address_street || ""} ${order.address_building || ""}${order.address_apartment ? ", кв. " + order.address_apartment : ""}`.trim() || order.delivery_address,
           }),
     },
-    products: (items || []).map((item: { product_name: string; product_id: string; price_at_order: number; quantity: number }) => ({
-      name: item.product_name, sku: item.product_id,
-      price: item.price_at_order, quantity: item.quantity,
-    })),
+    // Link each line to a KeyCRM catalog product when possible — required for
+    // KeyCRM to show product pictures & inherit canonical name/sku in the order
+    // detail view. Falls back to a free-form line (name+sku) if a UUID is not
+    // in KEYCRM_ID_MAP (legacy/manually-added products).
+    products: (items || []).map((item: { product_name: string; product_id: string; price_at_order: number; quantity: number }) => {
+      const keycrmId = KEYCRM_ID_MAP[item.product_id];
+      return keycrmId
+        ? { product_id: keycrmId, price: item.price_at_order, quantity: item.quantity }
+        : { name: item.product_name, sku: item.product_id, price: item.price_at_order, quantity: item.quantity };
+    }),
   };
 
   const keycrmRes = await fetch(`${KEYCRM_API_URL}/order`, {
