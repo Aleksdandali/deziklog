@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ComponentType } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet } from 'react-native';
@@ -14,10 +14,15 @@ import {
 import { AuthProvider, useAuth } from '../lib/auth-context';
 import { CartProvider } from '../lib/cart-context';
 import ErrorBoundary from '../components/ErrorBoundary';
-import DebugAuthBanner from '../components/DebugAuthBanner';
 import OnboardingScreen from './onboarding';
 import AnimatedSplash from '../components/AnimatedSplash';
 import { COLORS } from '../lib/constants';
+
+// Dev-only auth debug banner. Lazy require so production/preview bundles
+// (where __DEV__ is statically false) tree-shake the component entirely.
+const DebugAuthBanner: ComponentType | null = __DEV__
+  ? require('../components/DebugAuthBanner').default
+  : null;
 
 // Import to initialize notification handler (side effect)
 import '../lib/notifications';
@@ -133,7 +138,7 @@ export default function RootLayout() {
     <ErrorBoundary>
       <AuthProvider>
         <RootNavigator />
-        <DebugAuthBanner />
+        {DebugAuthBanner ? <DebugAuthBanner /> : null}
       </AuthProvider>
     </ErrorBoundary>
   );

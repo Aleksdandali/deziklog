@@ -10,7 +10,12 @@ export default function DebugAuthBanner() {
   if (!SHOW_DEBUG) return null;
 
   const uid = session?.user?.id?.slice(0, 8) ?? 'none';
-  const email = session?.user?.email ?? 'none';
+  // Mask email even in dev: never want a raw address visible if a dev build
+  // accidentally lands on a beta tester's device.
+  const rawEmail = session?.user?.email;
+  const email = rawEmail
+    ? rawEmail.replace(/^([^@])[^@]*(@.*)$/, '$1***$2')
+    : 'none';
   const exp = session?.expires_at
     ? new Date(session.expires_at * 1000).toLocaleTimeString()
     : 'none';
