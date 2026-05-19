@@ -24,7 +24,10 @@ export const createClient = jest.fn(() => ({
   storage: {
     from: jest.fn(() => ({
       upload: jest.fn().mockResolvedValue({ error: null }),
-      getPublicUrl: jest.fn(() => ({ data: { publicUrl: 'https://example.com/photo.jpg' } })),
+      createSignedUrl: jest.fn().mockResolvedValue({
+        data: { signedUrl: 'https://example.com/photo.jpg?token=signed' },
+        error: null,
+      }),
     })),
   },
 }));

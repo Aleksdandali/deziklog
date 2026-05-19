@@ -287,12 +287,19 @@ export async function uploadSterilizerPhoto(
   throw lastError;
 }
 
-export async function getPhotoUrl(storagePath: string): Promise<string> {
-  const { data, error } = await supabase.storage.from('cycle-photos').createSignedUrl(storagePath, 3600);
+// Cycle-photos bucket is private (see 20260528_cycle_photos_private.sql);
+// only signed URLs work. Returns null on failure — callers already render
+// nothing when the URL is missing, which is the right UX for a transient
+// network error too. The old getPublicUrl fallback was removed because it
+// would have started silently 400-ing once the bucket flipped private,
+// hiding the real error.
+export async function getPhotoUrl(storagePath: string): Promise<string | null> {
+  const { data, error } = await supabase.storage
+    .from('cycle-photos')
+    .createSignedUrl(storagePath, 3600);
   if (error || !data?.signedUrl) {
-    // Fallback to public URL if signed URL fails
-    const { data: pub } = supabase.storage.from('cycle-photos').getPublicUrl(storagePath);
-    return pub.publicUrl;
+    if (__DEV__) console.warn('[getPhotoUrl] signed URL failed:', error?.message ?? 'no data');
+    return null;
   }
   return data.signedUrl;
 }

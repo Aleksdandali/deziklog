@@ -166,6 +166,7 @@ export default function JournalScreen() {
   async function fetchAsDataUri(storagePath: string): Promise<string | null> {
     try {
       const url = await getPhotoUrl(storagePath);
+      if (!url) return null;
       const res = await fetch(url);
       if (!res.ok) return null;
       const blob = await res.blob();

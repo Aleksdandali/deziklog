@@ -1,0 +1,22 @@
+-- M1: re-private the cycle-photos bucket; signed URLs only from clients.
+--
+-- Reversal of 20260519_cycle_photos_keep_public, which set public=true to
+-- accommodate an admin panel that would have read via getPublicUrl. The
+-- admin panel is still in planning (docs/ADMIN-PANEL-PROMPT.md is local-
+-- only, gitignored), so the M1 audit fix lands now: any production admin
+-- build must use service_role with createSignedUrl.
+--
+-- Threat closed: while paths embed UUIDs (user_id + session_id), photos
+-- often contain identifiable scenes from medical/aesthetic clinics. A
+-- leaked path in an old Slack message, an HTTP referer, or an analytics
+-- crash report would expose the image to anyone with the URL. Private
+-- bucket + signed URLs caps that exposure window at the signed-URL TTL.
+--
+-- The per-user folder RLS policies from 20260518 already restrict
+-- INSERT/UPDATE/DELETE/SELECT to {user_id}/* — making the bucket private
+-- means SELECT now actually has to pass RLS (clients can no longer read
+-- via /object/public/* which bypasses RLS for public buckets).
+--
+-- delete-account edge function uses service_role and is unaffected.
+
+UPDATE storage.buckets SET public = false WHERE id = 'cycle-photos';

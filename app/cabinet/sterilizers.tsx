@@ -64,7 +64,8 @@ export default function SterilizersScreen() {
         missing.map(async (i) => {
           try {
             const url = await getPhotoUrl(i.image_path!);
-            return [i.image_path!, url] as const;
+            // null = signed-URL failed; don't cache so a later re-render retries.
+            return url ? ([i.image_path!, url] as const) : null;
           } catch { return null; }
         }),
       );
