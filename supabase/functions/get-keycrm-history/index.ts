@@ -16,6 +16,9 @@ import { corsHeaders } from "../_shared/cors.ts";
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
 const TIMEOUT_MS = 8000;
 const PAGE_LIMIT = 50;
+/** Screen "Історія з KeyCRM" is typically opened a handful of times/day.
+ *  Anything above this is abuse/loops — return empty silently. */
+const DAILY_HISTORY_LIMIT = 60;
 
 interface NormalizedItem {
   id: number;
@@ -65,6 +68,13 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    // Per-user daily cap (protects KeyCRM API quota from refresh-loop abuse).
+    const { data: usageCount } = await adminClient
+      .rpc("increment_keycrm_history_usage", { p_user_id: user.id });
+    if (typeof usageCount === "number" && usageCount > DAILY_HISTORY_LIMIT) {
+      return jsonRes({ orders: [] });
+    }
 
     // 1. Resolve buyer_id.
     const { data: profile } = await adminClient
