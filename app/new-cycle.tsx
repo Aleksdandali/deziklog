@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView,
-  TextInput, Alert, Image, KeyboardAvoidingView, Platform,
+  TextInput, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -15,6 +15,7 @@ import { COLORS } from '../lib/constants';
 import { RADII } from '../lib/theme';
 import { getDefaultPreset, type SteriType } from '../lib/steri-config';
 import CameraCapture from '../components/CameraCapture';
+import RotatedImage from '../components/RotatedImage';
 
 interface SterilizerRow { id: string; name: string; type: string | null; }
 interface EmployeeRow { id: string; name: string; }
@@ -273,11 +274,12 @@ export default function NewCycleScreen() {
   // ── Photo preview ──────────────────────────────────────
 
   if (photoPreview) {
-    // EXIF was baked into pixels at capture (see CameraCapture); no manual
-    // rotation is needed here.
+    // Use expo-image (via RotatedImage) — RN's <Image> on iOS does not
+    // reliably honor the EXIF Orientation tag in downsampled previews,
+    // which made portrait photos appear sideways before upload.
     return (
       <View style={st.previewContainer}>
-        <Image source={{ uri: photoPreview }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+        <RotatedImage uri={photoPreview} style={StyleSheet.absoluteFillObject} />
         <View style={st.previewOverlay} />
 
         {/* Top bar */}
@@ -473,7 +475,7 @@ export default function NewCycleScreen() {
         {/* Photo preview if retaking */}
         {photoBefore && (
           <View style={st.previewWrap}>
-            <Image source={{ uri: photoBefore }} style={st.preview} resizeMode="cover" />
+            <RotatedImage uri={photoBefore} style={st.preview} />
           </View>
         )}
 
