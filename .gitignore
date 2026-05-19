@@ -36,6 +36,9 @@ yarn-error.*
 .env
 .env*.local
 
+# local planning notes with credentials/PII (keep working copy out of git)
+docs/ADMIN-PANEL-PROMPT.md
+
 # typescript
 *.tsbuildinfo
 
