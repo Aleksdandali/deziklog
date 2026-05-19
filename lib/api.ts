@@ -159,8 +159,6 @@ export interface SterilizationSession {
   ended_at: string | null;
   photo_before_path: string | null;
   photo_after_path: string | null;
-  photo_before_orientation: number | null;
-  photo_after_orientation: number | null;
   result: 'success' | 'fail' | null;
   status: 'draft' | 'in_progress' | 'completed' | 'failed' | 'canceled';
   pouch_size: string | null;
@@ -208,7 +206,6 @@ export async function updateSession(
   updates: Partial<Pick<SterilizationSession,
     'status' | 'started_at' | 'ended_at'
     | 'photo_before_path' | 'photo_after_path'
-    | 'photo_before_orientation' | 'photo_after_orientation'
     | 'result'>>,
 ): Promise<SterilizationSession> {
   const { data, error } = await supabase

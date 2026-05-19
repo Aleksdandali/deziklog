@@ -2,27 +2,37 @@ import React, { useRef } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, SafeAreaView, Linking } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
 import { COLORS } from '../lib/constants';
 
 /**
- * EXIF Orientation value → degrees of clockwise rotation needed to display
- * the image upright. iPhones write 6 for back-camera portrait shots; RN's
- * <Image> ignores EXIF, so callers must apply this rotation via `transform`.
+ * Re-encode the image with no transforms — expo-image-manipulator applies any
+ * EXIF auto-rotation before saving and strips the orientation tag. The result
+ * is upright pixel data that displays correctly in every viewer (RN <Image>,
+ * expo-image, WKWebView/PDF, browser <img>) without relying on EXIF support.
+ *
+ * Failure is non-fatal: we fall back to the original URI so the user still
+ * has a photo. EXIF handling then becomes the viewer's problem, which used
+ * to be the source of the orientation bug.
  */
-export function exifRotationDeg(orientation: number | undefined): number {
-  switch (orientation) {
-    case 3: return 180;
-    case 6: return 90;
-    case 8: return 270;
-    default: return 0;
+async function bakeOrientation(uri: string): Promise<string> {
+  try {
+    const out = await ImageManipulator.manipulateAsync(
+      uri,
+      [],
+      { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG },
+    );
+    return out.uri;
+  } catch {
+    return uri;
   }
 }
 
 interface CameraCaptureProps {
   label: string;
-  onCapture: (uri: string, exifOrientation?: number) => void;
+  onCapture: (uri: string) => void;
   onClose: () => void;
 }
 
@@ -33,14 +43,9 @@ export default function CameraCapture({ label, onCapture, onClose }: CameraCaptu
   const takePicture = async () => {
     if (!cameraRef.current) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    // `exif: true` — iPhones write landscape pixel data + an EXIF rotate flag
-    // (e.g. Orientation=6 for 90°CW). RN's <Image> does NOT apply EXIF on its
-    // own, so we surface the value to the caller to rotate via CSS transform.
-    const photo = await cameraRef.current.takePictureAsync({ quality: 0.7, base64: false, exif: true });
-    if (photo?.uri) {
-      const orientation = (photo as { exif?: { Orientation?: number } }).exif?.Orientation;
-      onCapture(photo.uri, orientation);
-    }
+    const photo = await cameraRef.current.takePictureAsync({ quality: 0.7, base64: false });
+    if (!photo?.uri) return;
+    onCapture(await bakeOrientation(photo.uri));
   };
 
   const pickFromGallery = async () => {
@@ -49,7 +54,8 @@ export default function CameraCapture({ label, onCapture, onClose }: CameraCaptu
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.7,
     });
-    if (!res.canceled) onCapture(res.assets[0].uri);
+    if (res.canceled) return;
+    onCapture(await bakeOrientation(res.assets[0].uri));
   };
 
   if (!permission) return null;

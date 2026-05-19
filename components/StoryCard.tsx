@@ -12,10 +12,6 @@ export interface StoryCardProps {
   packType: string;
   photoBefore?: string | null;
   photoAfter?: string | null;
-  /** EXIF Orientation for photoBefore — applied via CSS transform. */
-  photoBeforeOrientation?: number | null;
-  /** EXIF Orientation for photoAfter — applied via CSS transform. */
-  photoAfterOrientation?: number | null;
   salonName?: string | null;
   city?: string | null;
   date: string;
@@ -24,7 +20,6 @@ export interface StoryCardProps {
 export default function StoryCard({
   instruments, sterilizer, duration, packType,
   photoBefore, photoAfter,
-  photoBeforeOrientation, photoAfterOrientation,
   salonName, city, date,
 }: StoryCardProps) {
   return (
@@ -114,7 +109,6 @@ export default function StoryCard({
                     <View style={st.photoFrame}>
                       <RotatedImage
                         uri={photoBefore}
-                        orientation={photoBeforeOrientation ?? undefined}
                         style={st.photo}
                       />
                     </View>
@@ -131,7 +125,6 @@ export default function StoryCard({
                     <View style={[st.photoFrame, st.photoFrameAfter]}>
                       <RotatedImage
                         uri={photoAfter}
-                        orientation={photoAfterOrientation ?? undefined}
                         style={st.photo}
                       />
                     </View>

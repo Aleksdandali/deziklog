@@ -46,7 +46,7 @@ export default function CycleDetailScreen() {
   const { width: winW } = useWindowDimensions();
   const [sess, setSess] = useState<SterilizationSession | null>(null);
   const [loading, setLoading] = useState(true);
-  const [fullscreenPhoto, setFullscreenPhoto] = useState<{ uri: string; orientation: number | null } | null>(null);
+  const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
   const [photoBeforeUrl, setPhotoBeforeUrl] = useState<string | null>(null);
   const [photoAfterUrl, setPhotoAfterUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
@@ -234,12 +234,11 @@ export default function CycleDetailScreen() {
             <Text style={st.photoLabel}>До</Text>
             {photoBeforeUrl ? (
               <TouchableOpacity
-                onPress={() => setFullscreenPhoto({ uri: photoBeforeUrl, orientation: sess.photo_before_orientation })}
+                onPress={() => setFullscreenPhoto(photoBeforeUrl)}
                 activeOpacity={0.9}
               >
                 <RotatedImage
                   uri={photoBeforeUrl}
-                  orientation={sess.photo_before_orientation ?? undefined}
                   style={st.photo}
                 />
               </TouchableOpacity>
@@ -251,12 +250,11 @@ export default function CycleDetailScreen() {
             <Text style={st.photoLabel}>Після</Text>
             {photoAfterUrl ? (
               <TouchableOpacity
-                onPress={() => setFullscreenPhoto({ uri: photoAfterUrl, orientation: sess.photo_after_orientation })}
+                onPress={() => setFullscreenPhoto(photoAfterUrl)}
                 activeOpacity={0.9}
               >
                 <RotatedImage
                   uri={photoAfterUrl}
-                  orientation={sess.photo_after_orientation ?? undefined}
                   style={st.photo}
                 />
               </TouchableOpacity>
@@ -321,8 +319,6 @@ export default function CycleDetailScreen() {
               packType={sess.pouch_size && sess.pouch_size !== 'none' ? sess.pouch_size : ''}
               photoBefore={photoBeforeUrl}
               photoAfter={photoAfterUrl}
-              photoBeforeOrientation={sess.photo_before_orientation}
-              photoAfterOrientation={sess.photo_after_orientation}
               salonName={profileData.salon_name}
               city={profileData.city}
               date={new Date(sess.created_at).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}
@@ -339,11 +335,8 @@ export default function CycleDetailScreen() {
           </TouchableOpacity>
           {fullscreenPhoto && (
             <RotatedImage
-              uri={fullscreenPhoto.uri}
-              orientation={fullscreenPhoto.orientation ?? undefined}
-              // Square viewport — `contain` letterboxes, and a W×W box guarantees
-              // the rotated image (which may have swapped axes) still fits on screen
-              // for any phone aspect ratio.
+              uri={fullscreenPhoto}
+              // Square viewport — `contain` letterboxes so any aspect ratio fits.
               style={{ width: winW, height: winW }}
               resizeMode="contain"
             />

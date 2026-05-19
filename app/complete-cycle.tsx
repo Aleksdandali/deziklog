@@ -32,8 +32,6 @@ interface TimerData {
   temperature: number;
   instruments: string;
   photoBeforeUri?: string;
-  /** EXIF Orientation captured at photo-ДО time — used to rotate the thumbnail. */
-  photoBeforeOrientation?: number;
 }
 
 export default function CompleteCycleScreen() {
@@ -45,9 +43,7 @@ export default function CompleteCycleScreen() {
 
   const [showCamera, setShowCamera] = useState(false);
   const [photoAfter, setPhotoAfter] = useState<string | null>(null);
-  const [photoAfterOrientation, setPhotoAfterOrientation] = useState<number>(1);
   const [photoBeforeUri, setPhotoBeforeUri] = useState<string | null>(null);
-  const [photoBeforeOrientation, setPhotoBeforeOrientation] = useState<number>(1);
   const [selectedResult, setSelectedResult] = useState<'success' | 'fail' | null>(null);
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
@@ -75,7 +71,6 @@ export default function CompleteCycleScreen() {
           const data: TimerData = JSON.parse(stored);
           setTimerData(data);
           if (data.photoBeforeUri) setPhotoBeforeUri(data.photoBeforeUri);
-          if (data.photoBeforeOrientation) setPhotoBeforeOrientation(data.photoBeforeOrientation);
           const elapsedMs = Date.now() - data.startedAt;
           setActualMinutes(Math.round(elapsedMs / 60000));
         } catch {
@@ -180,18 +175,8 @@ export default function CompleteCycleScreen() {
       const finalStatus = selectedResult === 'success' ? 'completed' : 'failed';
       const endedAt = new Date().toISOString();
 
-      // Backfill photo_before_orientation if the row was created before this
-      // column existed (or if new-cycle ran an old build) — we know it from
-      // the persisted timer data. New runs already wrote it on cycle start.
-      const backfillBeforeOrientation =
-        existing && existing.photo_before_orientation == null && photoBeforeOrientation
-          ? { photo_before_orientation: photoBeforeOrientation }
-          : {};
-
       await updateSession(sessionId, uid, {
         photo_after_path: path,
-        photo_after_orientation: photoAfterOrientation,
-        ...backfillBeforeOrientation,
         ended_at: endedAt,
         result: selectedResult,
         status: finalStatus,
@@ -216,9 +201,8 @@ export default function CompleteCycleScreen() {
     return (
       <CameraCapture
         label="Фото індикатора ПІСЛЯ"
-        onCapture={(uri, orientation = 1) => {
+        onCapture={(uri) => {
           setPhotoAfter(uri);
-          setPhotoAfterOrientation(orientation);
           setShowCamera(false);
         }}
         onClose={() => setShowCamera(false)}
@@ -318,8 +302,6 @@ export default function CompleteCycleScreen() {
               packType=""
               photoBefore={photoBeforeUri}
               photoAfter={photoAfter}
-              photoBeforeOrientation={photoBeforeOrientation}
-              photoAfterOrientation={photoAfterOrientation}
               salonName={profileData.salon_name}
               city={profileData.city}
               date={new Date().toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}
@@ -387,7 +369,7 @@ export default function CompleteCycleScreen() {
           {/* Photo after */}
           {photoAfter ? (
             <View style={s.previewWrap}>
-              <RotatedImage uri={photoAfter} orientation={photoAfterOrientation} style={s.preview} />
+              <RotatedImage uri={photoAfter} style={s.preview} />
               <View style={s.previewActions}>
                 <TouchableOpacity style={s.retakeBtn} onPress={() => setShowCamera(true)}>
                   <Feather name="rotate-ccw" size={16} color={COLORS.brand} />
@@ -410,11 +392,11 @@ export default function CompleteCycleScreen() {
               <View style={s.compareRow}>
                 <View style={s.compareCol}>
                   <Text style={s.compareLabel}>ДО</Text>
-                  <RotatedImage uri={photoBeforeUri} orientation={photoBeforeOrientation} style={s.compareImg} />
+                  <RotatedImage uri={photoBeforeUri} style={s.compareImg} />
                 </View>
                 <View style={s.compareCol}>
                   <Text style={s.compareLabel}>ПІСЛЯ</Text>
-                  <RotatedImage uri={photoAfter} orientation={photoAfterOrientation} style={s.compareImg} />
+                  <RotatedImage uri={photoAfter} style={s.compareImg} />
                 </View>
               </View>
               <Text style={s.compareHint}>Індикатор має змінити колір якщо стерилізація пройшла</Text>
