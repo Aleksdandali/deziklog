@@ -2,33 +2,22 @@ import React, { useRef } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, SafeAreaView, Linking } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
 import { COLORS } from '../lib/constants';
 
 /**
- * Re-encode the image with no transforms — expo-image-manipulator applies any
- * EXIF auto-rotation before saving and strips the orientation tag. The result
- * is upright pixel data that displays correctly in every viewer (RN <Image>,
- * expo-image, WKWebView/PDF, browser <img>) without relying on EXIF support.
+ * Captured / picked URIs are returned as-is. EXIF orientation handling is
+ * delegated to `expo-image` (see `components/RotatedImage.tsx`), which honors
+ * it natively on both iOS (SDWebImage) and Android (Glide). WKWebView's
+ * <img> also honors EXIF, so PDF exports stay correct.
  *
- * Failure is non-fatal: we fall back to the original URI so the user still
- * has a photo. EXIF handling then becomes the viewer's problem, which used
- * to be the source of the orientation bug.
+ * We previously tried baking the orientation into pixels via
+ * expo-image-manipulator, but in SDK 55 it pulls the `EXImageLoader` iOS
+ * pod through `expo-image-loader@55.0.0`, which is Android-only in this
+ * SDK — pod install fails. Skipping the manipulator step costs nothing as
+ * long as every viewer honors EXIF (which they do).
  */
-async function bakeOrientation(uri: string): Promise<string> {
-  try {
-    const out = await ImageManipulator.manipulateAsync(
-      uri,
-      [],
-      { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG },
-    );
-    return out.uri;
-  } catch {
-    return uri;
-  }
-}
 
 interface CameraCaptureProps {
   label: string;
@@ -44,8 +33,7 @@ export default function CameraCapture({ label, onCapture, onClose }: CameraCaptu
     if (!cameraRef.current) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const photo = await cameraRef.current.takePictureAsync({ quality: 0.7, base64: false });
-    if (!photo?.uri) return;
-    onCapture(await bakeOrientation(photo.uri));
+    if (photo?.uri) onCapture(photo.uri);
   };
 
   const pickFromGallery = async () => {
@@ -54,8 +42,7 @@ export default function CameraCapture({ label, onCapture, onClose }: CameraCaptu
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.7,
     });
-    if (res.canceled) return;
-    onCapture(await bakeOrientation(res.assets[0].uri));
+    if (!res.canceled) onCapture(res.assets[0].uri);
   };
 
   if (!permission) return null;
