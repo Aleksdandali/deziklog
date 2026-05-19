@@ -257,8 +257,9 @@ export default function CartScreen() {
         return;
       }
 
+      // price_at_order / product_name / total_amount are filled by DB triggers
+      // (see lib/api.ts createOrder for the rationale).
       await createOrder(uid, {
-        total_amount: total,
         delivery_address: deliveryAddr,
         delivery_type: deliveryType,
         phone: phoneToDigits(phone),
@@ -276,9 +277,7 @@ export default function CartScreen() {
         address_apartment: deliveryType === 'address' ? addressApartment.trim() : undefined,
       }, items.map((i) => ({
         product_id: i.product.id,
-        product_name: i.product.name,
         quantity: i.quantity,
-        price_at_order: i.product.price,
       })));
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

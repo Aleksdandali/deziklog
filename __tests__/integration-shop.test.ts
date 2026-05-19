@@ -159,29 +159,33 @@ describe('Integration: Shop & Cart', () => {
       items = cartAdd(items, products[0]); // kraft ×2
       items = cartAdd(items, products[3]); // delanol 245
 
+      // The cart total is computed for client-side display only — the actual
+      // order total is recomputed by the recompute_order_total DB trigger
+      // from authoritative line-item prices. Keep the display assertion to
+      // catch regressions in cartTotal() math.
+      expect(cartTotal(items)).toBe(415);
+
       const orderPayload = {
         user_id: 'user-abc-123',
         status: 'pending',
-        total_amount: cartTotal(items),
         delivery_address: 'вул. Дерибасівська 1, Одеса',
         phone: '+380501234567',
         notes: null,
       };
 
+      // Server fills price_at_order + product_name via enforce_order_item_price
+      // trigger — client only sends product_id + quantity.
       const orderItems = items.map((i) => ({
         product_id: i.product.id,
-        product_name: i.product.name,
         quantity: i.quantity,
-        price_at_order: i.product.price ?? 0,
       }));
 
-      expect(orderPayload.total_amount).toBe(415);
       expect(orderPayload.status).toBe('pending');
       expect(orderItems).toHaveLength(2);
+      expect(orderItems[0].product_id).toBe('kraft-60x100');
       expect(orderItems[0].quantity).toBe(2);
-      expect(orderItems[0].price_at_order).toBe(85);
+      expect(orderItems[1].product_id).toBe('delanol-1l');
       expect(orderItems[1].quantity).toBe(1);
-      expect(orderItems[1].price_at_order).toBe(245);
     });
 
     it('validates required checkout fields', () => {

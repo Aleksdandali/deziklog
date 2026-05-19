@@ -405,8 +405,14 @@ export async function getProductsStockStatus(
   return (data ?? []) as Array<{ id: string; name: string; in_stock: boolean }>;
 }
 
+// `total_amount`, `price_at_order` and `product_name` are intentionally NOT
+// accepted from the caller: the `enforce_order_item_price` BEFORE trigger
+// overwrites price_at_order + product_name from products on every line item,
+// and `recompute_order_total` AFTER trigger derives total_amount from those
+// items. Letting clients supply these values would invite confusion (the
+// DB always wins) and hides a price-manipulation vector that the audit
+// already closed at the DB layer (REVOKE UPDATE on orders.total_amount).
 export async function createOrder(userId: string, order: {
-  total_amount: number;
   delivery_address: string;
   delivery_type?: string;
   phone: string;
@@ -423,13 +429,12 @@ export async function createOrder(userId: string, order: {
   address_building?: string;
   address_apartment?: string;
   notes?: string;
-}, items: { product_id: string; product_name: string; quantity: number; price_at_order: number }[]) {
+}, items: { product_id: string; quantity: number }[]) {
   const { data: orderData, error: orderError } = await supabase
     .from('orders')
     .insert({
       user_id: userId,
       status: 'pending',
-      total_amount: order.total_amount,
       delivery_address: order.delivery_address,
       delivery_type: order.delivery_type ?? 'warehouse',
       phone: order.phone,
