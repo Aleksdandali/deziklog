@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { X, Send, Sparkles, Bot, ArrowDown, Plus, Trash2, MessageCircle, ChevronLeft, Copy, Check } from 'lucide-react-native';
+import { X, Send, Sparkles, Bot, ArrowDown, Plus, Trash2, MessageCircle, ChevronLeft, Copy, Check, Shield } from 'lucide-react-native';
 import ReAnimated, { FadeInDown, FadeIn, FadeInUp } from 'react-native-reanimated';
 import { COLORS } from '../lib/constants';
 import { RADII, SHADOWS } from '../lib/theme';
@@ -33,6 +33,8 @@ interface ChatSession {
 }
 
 const STORAGE_KEY = 'ai_chat_sessions';
+// Bump suffix if disclosure text materially changes — forces users to re-consent.
+const CONSENT_KEY = 'ai_chat_consent_v1';
 
 // ── Quick suggestions ───────────────────────────────────
 
@@ -78,6 +80,9 @@ export default function AIChatScreen() {
   const [loading, setLoading] = useState(false);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  // `null` = unknown (still loading from storage), `false` = need to show gate,
+  // `true` = user accepted disclosure. Gate blocks sendMessage until true.
+  const [consentAccepted, setConsentAccepted] = useState<boolean | null>(null);
 
   const copyToClipboard = async (text: string, id: string) => {
     try {
@@ -93,7 +98,7 @@ export default function AIChatScreen() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // Load sessions on mount
+  // Load sessions + consent state on mount
   useEffect(() => {
     loadSessions().then((loaded) => {
       setSessions(loaded);
@@ -104,7 +109,16 @@ export default function AIChatScreen() {
         setMessages(latest.messages);
       }
     });
+    AsyncStorage.getItem(CONSENT_KEY)
+      .then((v) => setConsentAccepted(v === '1'))
+      .catch(() => setConsentAccepted(false));
   }, []);
+
+  const acceptConsent = async () => {
+    try { await AsyncStorage.setItem(CONSENT_KEY, '1'); } catch {}
+    setConsentAccepted(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
 
   // Persist messages when they change
   useEffect(() => {
@@ -183,6 +197,9 @@ export default function AIChatScreen() {
   const sendMessage = async (text?: string) => {
     const msg = (text ?? input).trim();
     if (!msg || loading) return;
+    // Defense-in-depth: UI hides the input behind the consent gate, but guard
+    // here too in case anything bypasses it (e.g. a future deep-link / share).
+    if (!consentAccepted) return;
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setInput('');
@@ -332,6 +349,35 @@ export default function AIChatScreen() {
     );
   };
 
+  // ── Consent gate ──────────────────────────────────────
+  // One-time disclosure before the user's first prompt leaves the device.
+  // Required for transparency: messages are sent to Anthropic for processing.
+
+  const renderConsentGate = () => (
+    <View style={styles.consentContainer}>
+      <View style={styles.consentIconWrap}>
+        <Shield size={28} color={COLORS.brand} strokeWidth={1.8} />
+      </View>
+      <Text style={styles.consentTitle}>Як працює AI-асистент</Text>
+      <Text style={styles.consentBody}>
+        Ваші запитання надсилаються до сервісу Anthropic (Claude) для обробки. Не вводьте конфіденційні дані — діагнози, паролі, дані пацієнтів.
+      </Text>
+      <Text style={styles.consentBody}>
+        Відповіді є довідковими. Завжди звіряйтеся з інструкцією виробника засобу.
+      </Text>
+      <TouchableOpacity style={styles.consentBtn} onPress={acceptConsent} activeOpacity={0.85}>
+        <LinearGradient
+          colors={[COLORS.brand, COLORS.brandDark]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.consentBtnGradient}
+        >
+          <Text style={styles.consentBtnText}>Зрозуміло, продовжити</Text>
+        </LinearGradient>
+      </TouchableOpacity>
+    </View>
+  );
+
   // ── Empty state ───────────────────────────────────────
 
   const renderEmptyState = () => (
@@ -463,7 +509,13 @@ export default function AIChatScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 30}
       >
         <View style={styles.flex}>
-          {messages.length === 0 ? (
+          {consentAccepted === null ? (
+            // Brief AsyncStorage read — render nothing to avoid showing
+            // suggestions before consent state is known.
+            <View style={styles.flex} />
+          ) : !consentAccepted ? (
+            renderConsentGate()
+          ) : messages.length === 0 ? (
             renderEmptyState()
           ) : (
             <FlatList
@@ -489,7 +541,8 @@ export default function AIChatScreen() {
           )}
         </View>
 
-        {/* Input area */}
+        {/* Input area — hidden until user accepts the consent disclosure */}
+        {consentAccepted ? (
         <View style={styles.inputContainer}>
           <View style={styles.inputWrap}>
             <TextInput
@@ -521,6 +574,7 @@ export default function AIChatScreen() {
             Довідкова інформація. Звіряйтеся з інструкцією виробника.
           </Text>
         </View>
+        ) : null}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -618,6 +672,30 @@ const styles = StyleSheet.create({
   disclaimer: {
     fontSize: 10, color: COLORS.textTertiary, fontFamily: 'Inter_400Regular',
     textAlign: 'center', marginTop: 6,
+  },
+
+  // Consent gate
+  consentContainer: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 28, paddingBottom: 40, gap: 14,
+  },
+  consentIconWrap: {
+    width: 64, height: 64, borderRadius: 20, backgroundColor: COLORS.brandLight,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 4,
+  },
+  consentTitle: {
+    fontSize: 20, fontWeight: '700', color: COLORS.text,
+    fontFamily: 'Inter_700Bold', textAlign: 'center',
+  },
+  consentBody: {
+    fontSize: 13, lineHeight: 20, color: COLORS.textSecondary,
+    fontFamily: 'Inter_400Regular', textAlign: 'center',
+  },
+  consentBtn: { marginTop: 12, borderRadius: 14, overflow: 'hidden', ...SHADOWS.button },
+  consentBtnGradient: { paddingHorizontal: 24, paddingVertical: 14, alignItems: 'center' },
+  consentBtnText: {
+    fontSize: 14, fontWeight: '600', color: '#fff',
+    fontFamily: 'Inter_600SemiBold',
   },
 
   // History panel
