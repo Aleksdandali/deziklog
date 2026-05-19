@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { syncOrderToKeyCRM } from "../_shared/sync-logic.ts";
+import { timingSafeEqual } from "../_shared/timing-safe.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -27,7 +28,7 @@ Deno.serve(async (req) => {
 
     const cronSecret = req.headers.get("x-cron-secret");
     const expectedCronSecret = Deno.env.get("CRON_SECRET");
-    const isCron = cronSecret && expectedCronSecret && cronSecret === expectedCronSecret;
+    const isCron = !!cronSecret && !!expectedCronSecret && timingSafeEqual(cronSecret, expectedCronSecret);
 
     if (isCron) {
       userId = body.user_id;
