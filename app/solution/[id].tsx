@@ -10,17 +10,7 @@ import { useAuth } from '../../lib/auth-context';
 import { COLORS, MS_PER_DAY } from '../../lib/constants';
 import { RADII } from '../../lib/theme';
 import { cancelSolutionNotifications } from '../../lib/notifications';
-
-type Status = 'active' | 'warning' | 'expired';
-
-function getStatus(expiresAt: string): { status: Status; daysLeft: number } {
-  const expires = new Date(expiresAt);
-  if (isNaN(expires.getTime())) return { status: 'expired', daysLeft: 0 };
-  const daysLeft = Math.ceil((expires.getTime() - Date.now()) / MS_PER_DAY);
-  if (daysLeft <= 0) return { status: 'expired', daysLeft: 0 };
-  if (daysLeft <= 3) return { status: 'warning', daysLeft };
-  return { status: 'active', daysLeft };
-}
+import { getSolutionStatus, pluralizeUkDays, type SolutionStatus as Status } from '../../lib/solution-utils';
 
 function formatDateUk(iso: string): string {
   try {
@@ -65,16 +55,18 @@ export default function SolutionDetailScreen() {
         .single();
       if (data) setSolution(data);
 
-      // Try to load photo
+      // Try to load photo. Bucket is private — public URLs would 403; we
+      // mint a short-lived signed URL the <Image> can fetch directly.
       try {
         const { data: files } = await supabase.storage
           .from('solution-photos')
           .list(`${userId}/${id}`);
         if (files && files.length > 0) {
-          const { data: urlData } = supabase.storage
+          const path = `${userId}/${id}/${files[0].name}`;
+          const { data: signed } = await supabase.storage
             .from('solution-photos')
-            .getPublicUrl(`${userId}/${id}/${files[0].name}`);
-          if (urlData?.publicUrl) setPhotoUrl(urlData.publicUrl);
+            .createSignedUrl(path, 3600);
+          if (signed?.signedUrl) setPhotoUrl(signed.signedUrl);
         }
       } catch (err) {
         console.warn('Solution photo load failed:', err);
@@ -85,7 +77,7 @@ export default function SolutionDetailScreen() {
   }, [userId, id]);
 
   const { status, daysLeft } = useMemo(
-    () => solution ? getStatus(solution.expires_at) : { status: 'active' as Status, daysLeft: 0 },
+    () => solution ? getSolutionStatus(solution.expires_at) : { status: 'active' as Status, daysLeft: 0 },
     [solution],
   );
 
@@ -171,7 +163,7 @@ export default function SolutionDetailScreen() {
             <Text style={st.progressTitle}>
               {status === 'expired'
                 ? 'Термін вийшов'
-                : `${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft <= 4 ? 'дні' : 'днів'} залишилось`
+                : `${daysLeft} ${pluralizeUkDays(daysLeft)} залишилось`
               }
             </Text>
             <Text style={st.progressSub}>{elapsed} з {totalDays} днів</Text>
@@ -232,17 +224,22 @@ export default function SolutionDetailScreen() {
           )}
         </View>
 
-        {/* Replace button */}
+        {/* Replace button. For warning/expired we want to REPLACE the old
+            solution; we don't delete here (that risks losing history if the
+            user cancels the next screen). Instead pass `replaceId` —
+            `solution/add` will delete the old row only after the new one
+            is saved successfully. */}
         <TouchableOpacity
           style={[st.replaceBtn, status === 'expired' && { backgroundColor: COLORS.brand }]}
-          onPress={async () => {
-            if (status === 'expired' || status === 'warning') {
-              // Delete old and create new with same product
-              await supabase.from('solutions').delete().eq('id', id).eq('user_id', userId);
-              cancelSolutionNotifications(id);
-            }
+          onPress={() => {
+            const replace = status === 'expired' || status === 'warning';
+            const productParam = encodeURIComponent(solution.name);
+            const replaceParam = replace ? `&replaceId=${id}` : '';
             router.back();
-            setTimeout(() => router.push(`/solution/add?product=${encodeURIComponent(solution.name)}`), 300);
+            setTimeout(
+              () => router.push(`/solution/add?product=${productParam}${replaceParam}` as any),
+              300,
+            );
           }}
           activeOpacity={0.85}
         >

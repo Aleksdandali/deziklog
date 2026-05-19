@@ -10,7 +10,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth-context';
 import { COLORS, MS_PER_DAY } from '../../lib/constants';
 import { RADII } from '../../lib/theme';
-import { scheduleSolutionReminder } from '../../lib/notifications';
+import { scheduleSolutionReminder, cancelSolutionNotifications } from '../../lib/notifications';
 
 // ── Products with shelf life ──────────────────────────────
 
@@ -165,9 +165,10 @@ function InlineCalendar({
 
 export default function AddSolutionScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ product?: string }>();
+  const params = useLocalSearchParams<{ product?: string; replaceId?: string }>();
   const { session } = useAuth();
   const userId = session?.user?.id;
+  const replaceId = params.replaceId || null;
 
   // Pre-select product if passed from "Замінити"
   const preselectedId = params.product
@@ -272,25 +273,48 @@ export default function AddSolutionScreen() {
 
       if (error) throw error;
 
-      // Upload photo if provided
+      // Upload photo if provided. Strip URL params/fragments before
+      // splitting on '.' so paths like `file:///…/img.jpg?token=…` don't
+      // produce a broken storage filename.
+      let photoFailed = false;
       if (solData?.id && photoUri) {
         try {
-          const ext = photoUri.split('.').pop() || 'jpg';
+          const cleanUri = photoUri.split('?')[0].split('#')[0];
+          const ext = (cleanUri.split('.').pop() || 'jpg').toLowerCase();
+          const mime = ext === 'png' ? 'image/png' : ext === 'heic' ? 'image/heic' : 'image/jpeg';
           const path = `${userId}/${solData.id}/photo.${ext}`;
           const response = await fetch(photoUri);
           const blob = await response.blob();
-          await supabase.storage.from('solution-photos').upload(path, blob, {
-            contentType: `image/${ext === 'png' ? 'png' : 'jpeg'}`,
-          });
+          const { error: upErr } = await supabase.storage
+            .from('solution-photos')
+            .upload(path, blob, { contentType: mime });
+          if (upErr) throw upErr;
         } catch (err) {
-          console.warn('Solution photo upload failed:', err);
+          photoFailed = true;
+          if (__DEV__) console.warn('Solution photo upload failed:', err);
         }
       }
 
       if (solData?.id) {
         scheduleSolutionReminder(solData.id, selectedProduct.name, expiryDateObj.toISOString());
       }
-      router.back();
+
+      // Replace flow: only now is it safe to delete the old solution —
+      // the new one is persisted, so we can't lose the user's record.
+      if (replaceId) {
+        await supabase.from('solutions').delete().eq('id', replaceId).eq('user_id', userId);
+        cancelSolutionNotifications(replaceId);
+      }
+
+      if (photoFailed) {
+        Alert.alert(
+          'Розчин збережено',
+          'Але фото не вдалось завантажити. Ви зможете додати його пізніше.',
+          [{ text: 'OK', onPress: () => router.back() }],
+        );
+      } else {
+        router.back();
+      }
     } catch (err: unknown) {
       Alert.alert('Помилка', err instanceof Error ? err.message : 'Не вдалось зберегти');
     } finally {

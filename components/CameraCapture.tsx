@@ -6,9 +6,23 @@ import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
 import { COLORS } from '../lib/constants';
 
+/**
+ * EXIF Orientation value → degrees of clockwise rotation needed to display
+ * the image upright. iPhones write 6 for back-camera portrait shots; RN's
+ * <Image> ignores EXIF, so callers must apply this rotation via `transform`.
+ */
+export function exifRotationDeg(orientation: number | undefined): number {
+  switch (orientation) {
+    case 3: return 180;
+    case 6: return 90;
+    case 8: return 270;
+    default: return 0;
+  }
+}
+
 interface CameraCaptureProps {
   label: string;
-  onCapture: (uri: string) => void;
+  onCapture: (uri: string, exifOrientation?: number) => void;
   onClose: () => void;
 }
 
@@ -19,8 +33,14 @@ export default function CameraCapture({ label, onCapture, onClose }: CameraCaptu
   const takePicture = async () => {
     if (!cameraRef.current) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const photo = await cameraRef.current.takePictureAsync({ quality: 0.7, base64: false });
-    if (photo?.uri) onCapture(photo.uri);
+    // `exif: true` — iPhones write landscape pixel data + an EXIF rotate flag
+    // (e.g. Orientation=6 for 90°CW). RN's <Image> does NOT apply EXIF on its
+    // own, so we surface the value to the caller to rotate via CSS transform.
+    const photo = await cameraRef.current.takePictureAsync({ quality: 0.7, base64: false, exif: true });
+    if (photo?.uri) {
+      const orientation = (photo as { exif?: { Orientation?: number } }).exif?.Orientation;
+      onCapture(photo.uri, orientation);
+    }
   };
 
   const pickFromGallery = async () => {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView,
-  TextInput, Alert, Image, KeyboardAvoidingView, Platform,
+  TextInput, Alert, Image, KeyboardAvoidingView, Platform, useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -14,7 +14,7 @@ import { useAuth, useSessionGuard } from '../lib/auth-context';
 import { COLORS } from '../lib/constants';
 import { RADII } from '../lib/theme';
 import { getDefaultPreset, type SteriType } from '../lib/steri-config';
-import CameraCapture from '../components/CameraCapture';
+import CameraCapture, { exifRotationDeg } from '../components/CameraCapture';
 
 interface SterilizerRow { id: string; name: string; type: string | null; }
 interface EmployeeRow { id: string; name: string; }
@@ -32,6 +32,7 @@ export default function NewCycleScreen() {
   const { session } = useAuth();
   const getUid = useSessionGuard();
   const userId = session?.user?.id;
+  const { width: winW, height: winH } = useWindowDimensions();
 
   const [showCamera, setShowCamera] = useState(false);
   const [photoBefore, setPhotoBefore] = useState<string | null>(null);
@@ -169,9 +170,11 @@ export default function NewCycleScreen() {
   };
 
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoOrientation, setPhotoOrientation] = useState<number>(1);
 
-  const handlePhotoCaptured = (uri: string) => {
+  const handlePhotoCaptured = (uri: string, orientation = 1) => {
     setPhotoPreview(uri);
+    setPhotoOrientation(orientation);
     setShowCamera(false);
   };
 
@@ -232,6 +235,9 @@ export default function NewCycleScreen() {
         temperature: temp,
         instruments: instrumentsText.trim(),
         photoBeforeUri: photoUri,
+        // Persist EXIF orientation so the timer/complete screens can rotate
+        // the thumbnail the same way the new-cycle preview did.
+        photoBeforeOrientation: photoOrientation,
       }));
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -269,9 +275,27 @@ export default function NewCycleScreen() {
   // ── Photo preview ──────────────────────────────────────
 
   if (photoPreview) {
+    // EXIF orientation → CSS rotation. iPhones write landscape pixel data
+    // with Orientation=6 (90° CW) for shots taken in portrait. RN's <Image>
+    // ignores EXIF, so we rotate manually. For 90/270 the image must be
+    // laid out with swapped dimensions (H × W) so that after rotation its
+    // visual box fills the screen (W × H).
+    const rotationDeg = exifRotationDeg(photoOrientation);
+    const swapAxes = rotationDeg === 90 || rotationDeg === 270;
+    const photoStyle = swapAxes
+      ? {
+          position: 'absolute' as const,
+          width: winH,
+          height: winW,
+          top: (winH - winW) / 2,
+          left: (winW - winH) / 2,
+          transform: [{ rotate: `${rotationDeg}deg` as const }],
+        }
+      : { ...StyleSheet.absoluteFillObject, transform: [{ rotate: `${rotationDeg}deg` as const }] };
+
     return (
       <View style={st.previewContainer}>
-        <Image source={{ uri: photoPreview }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <Image source={{ uri: photoPreview }} style={photoStyle} resizeMode="cover" />
         <View style={st.previewOverlay} />
 
         {/* Top bar */}
@@ -543,17 +567,23 @@ const st = StyleSheet.create({
 
   // Photo preview screen — fullscreen with overlay
   previewContainer: { flex: 1, backgroundColor: '#000' },
-  previewOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.15)' },
+  // Stronger overlay — top & bottom gradients would be cleaner, but a flat
+  // 35% black is enough to keep header + actions legible over any photo.
+  previewOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
   previewTopBar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
   previewHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
-  previewCloseBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  previewCloseBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
   previewTitle: { fontSize: 16, fontWeight: '600', color: '#fff' },
-  previewBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: 12, zIndex: 10 },
-  previewHint: { fontSize: 13, color: 'rgba(255,255,255,0.7)', textAlign: 'center', marginBottom: 14 },
-  previewActions: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
-  retakeBtn: { flex: 1, flexDirection: 'row', height: 54, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  // Extra bottom padding for iPhone X+ home-indicator clearance. SafeAreaView
+  // with `position: absolute` is unreliable, so we hard-pad here.
+  previewBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingBottom: 28, zIndex: 10 },
+  previewHint: { fontSize: 13, color: 'rgba(255,255,255,0.85)', textAlign: 'center', marginBottom: 14 },
+  previewActions: { flexDirection: 'row', gap: 12, alignItems: 'stretch' },
+  // Equal split — retake is a primary alternative, not a secondary nudge.
+  // Bumped opacity & border so the button is clearly legible on dark photos.
+  retakeBtn: { flex: 1, flexDirection: 'row', height: 54, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.55)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)', alignItems: 'center', justifyContent: 'center', gap: 8 },
   retakeBtnText: { fontSize: 15, fontWeight: '600', color: '#fff' },
-  confirmBtn: { flex: 2 },
+  confirmBtn: { flex: 1 },
   confirmBtnInner: { flexDirection: 'row', height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 8 },
   confirmBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 });

@@ -85,9 +85,15 @@ export async function scheduleSolutionReminder(
   solutionName: string,
   expiresAt: string,
 ): Promise<void> {
+  // Bail out early if user denied notifications — scheduleNotificationAsync
+  // otherwise silently no-ops, hiding the real reason from logs.
+  const granted = await requestNotificationPermissions();
+  if (!granted) return;
+
   const expiryDate = new Date(expiresAt);
   const now = new Date();
 
+  // Two-days-before heads-up — 9:00 local on (expiry − 2 days) is fine.
   const twoDaysBefore = new Date(expiryDate);
   twoDaysBefore.setDate(twoDaysBefore.getDate() - 2);
   twoDaysBefore.setHours(9, 0, 0, 0);
@@ -104,10 +110,10 @@ export async function scheduleSolutionReminder(
     });
   }
 
-  const expiryDay = new Date(expiryDate);
-  expiryDay.setHours(9, 0, 0, 0);
-
-  if (expiryDay > now) {
+  // "Expired" notif must fire AT expiry, not before. Previously was 9:00
+  // on the expiry day → users got "термін вийшов" while the in-app status
+  // still showed "Активний".
+  if (expiryDate > now) {
     await Notifications.scheduleNotificationAsync({
       identifier: `solution-${solutionId}-expired`,
       content: {
@@ -115,7 +121,7 @@ export async function scheduleSolutionReminder(
         body: `${solutionName} — термін вийшов. Замініть розчин.`,
         sound: 'default',
       },
-      trigger: { type: 'date', date: expiryDay } as any,
+      trigger: { type: 'date', date: expiryDate } as any,
     });
   }
 }

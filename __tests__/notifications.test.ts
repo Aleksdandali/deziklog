@@ -27,6 +27,11 @@ describe('requestNotificationPermissions', () => {
 });
 
 describe('scheduleSolutionReminder', () => {
+  beforeEach(() => {
+    // scheduleSolutionReminder now checks permissions first; tests assume granted.
+    (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
+  });
+
   it('schedules two notifications for a future expiry date', async () => {
     const future = new Date();
     future.setDate(future.getDate() + 10);
@@ -61,18 +66,35 @@ describe('scheduleSolutionReminder', () => {
     expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
   });
 
-  it('sets reminder time to 9:00 AM local time', async () => {
+  it('warning fires at 9:00 AM, expired fires at exact expiry time', async () => {
     const future = new Date();
     future.setDate(future.getDate() + 10);
+    future.setHours(12, 0, 0, 0); // mimic noon-anchored expiry from solution/add
 
     await scheduleSolutionReminder('sol-abc', 'Septonal', future.toISOString());
 
     const calls = (Notifications.scheduleNotificationAsync as jest.Mock).mock.calls;
-    for (const call of calls) {
-      const triggerDate: Date = call[0].trigger.date;
-      expect(triggerDate.getHours()).toBe(9);
-      expect(triggerDate.getMinutes()).toBe(0);
-    }
+    const warning = calls.find((c) => c[0].identifier.endsWith('-warning'));
+    const expired = calls.find((c) => c[0].identifier.endsWith('-expired'));
+
+    expect(warning[0].trigger.date.getHours()).toBe(9);
+    expect(warning[0].trigger.date.getMinutes()).toBe(0);
+
+    // Previously fired at 9 AM on expiry day — caused "Прострочено" pushes
+    // 3h before the in-app status flipped. Must match expiry exactly now.
+    expect(expired[0].trigger.date.getTime()).toBe(future.getTime());
+  });
+
+  it('does not schedule when notification permission is denied', async () => {
+    (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'denied' });
+    (Notifications.requestPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'denied' });
+
+    const future = new Date();
+    future.setDate(future.getDate() + 10);
+
+    await scheduleSolutionReminder('sol-ghi', 'Septonal', future.toISOString());
+
+    expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
   });
 
   it('includes solution name in notification body', async () => {
