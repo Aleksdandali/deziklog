@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView,
-  Alert,
+  Alert, Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -19,7 +19,6 @@ import { RADII } from '../lib/theme';
 import { getDurationStatus } from '../lib/steri-config';
 import { shareToInstagramStory } from '../lib/share-instagram';
 import CameraCapture from '../components/CameraCapture';
-import RotatedImage from '../components/RotatedImage';
 import StoryCard from '../components/StoryCard';
 
 const ACTIVE_TIMER_KEY = 'active_timer';
@@ -32,8 +31,6 @@ interface TimerData {
   temperature: number;
   instruments: string;
   photoBeforeUri?: string;
-  /** EXIF Orientation captured at photo-ДО time — used to rotate the thumbnail. */
-  photoBeforeOrientation?: number;
 }
 
 export default function CompleteCycleScreen() {
@@ -45,9 +42,7 @@ export default function CompleteCycleScreen() {
 
   const [showCamera, setShowCamera] = useState(false);
   const [photoAfter, setPhotoAfter] = useState<string | null>(null);
-  const [photoAfterOrientation, setPhotoAfterOrientation] = useState<number>(1);
   const [photoBeforeUri, setPhotoBeforeUri] = useState<string | null>(null);
-  const [photoBeforeOrientation, setPhotoBeforeOrientation] = useState<number>(1);
   const [selectedResult, setSelectedResult] = useState<'success' | 'fail' | null>(null);
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
@@ -75,7 +70,6 @@ export default function CompleteCycleScreen() {
           const data: TimerData = JSON.parse(stored);
           setTimerData(data);
           if (data.photoBeforeUri) setPhotoBeforeUri(data.photoBeforeUri);
-          if (data.photoBeforeOrientation) setPhotoBeforeOrientation(data.photoBeforeOrientation);
           const elapsedMs = Date.now() - data.startedAt;
           setActualMinutes(Math.round(elapsedMs / 60000));
         } catch {
@@ -206,11 +200,7 @@ export default function CompleteCycleScreen() {
     return (
       <CameraCapture
         label="Фото індикатора ПІСЛЯ"
-        onCapture={(uri, orientation = 1) => {
-          setPhotoAfter(uri);
-          setPhotoAfterOrientation(orientation);
-          setShowCamera(false);
-        }}
+        onCapture={(uri) => { setPhotoAfter(uri); setShowCamera(false); }}
         onClose={() => setShowCamera(false)}
       />
     );
@@ -375,7 +365,7 @@ export default function CompleteCycleScreen() {
           {/* Photo after */}
           {photoAfter ? (
             <View style={s.previewWrap}>
-              <RotatedImage uri={photoAfter} orientation={photoAfterOrientation} style={s.preview} />
+              <Image source={{ uri: photoAfter }} style={s.preview} />
               <View style={s.previewActions}>
                 <TouchableOpacity style={s.retakeBtn} onPress={() => setShowCamera(true)}>
                   <Feather name="rotate-ccw" size={16} color={COLORS.brand} />
@@ -398,11 +388,11 @@ export default function CompleteCycleScreen() {
               <View style={s.compareRow}>
                 <View style={s.compareCol}>
                   <Text style={s.compareLabel}>ДО</Text>
-                  <RotatedImage uri={photoBeforeUri} orientation={photoBeforeOrientation} style={s.compareImg} />
+                  <Image source={{ uri: photoBeforeUri }} style={s.compareImg} />
                 </View>
                 <View style={s.compareCol}>
                   <Text style={s.compareLabel}>ПІСЛЯ</Text>
-                  <RotatedImage uri={photoAfter} orientation={photoAfterOrientation} style={s.compareImg} />
+                  <Image source={{ uri: photoAfter }} style={s.compareImg} />
                 </View>
               </View>
               <Text style={s.compareHint}>Індикатор має змінити колір якщо стерилізація пройшла</Text>

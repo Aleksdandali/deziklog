@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView,
-  TextInput, Alert, Image, KeyboardAvoidingView, Platform, useWindowDimensions,
+  TextInput, Alert, Image, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -14,7 +14,7 @@ import { useAuth, useSessionGuard } from '../lib/auth-context';
 import { COLORS } from '../lib/constants';
 import { RADII } from '../lib/theme';
 import { getDefaultPreset, type SteriType } from '../lib/steri-config';
-import CameraCapture, { exifRotationDeg } from '../components/CameraCapture';
+import CameraCapture from '../components/CameraCapture';
 
 interface SterilizerRow { id: string; name: string; type: string | null; }
 interface EmployeeRow { id: string; name: string; }
@@ -32,7 +32,6 @@ export default function NewCycleScreen() {
   const { session } = useAuth();
   const getUid = useSessionGuard();
   const userId = session?.user?.id;
-  const { width: winW, height: winH } = useWindowDimensions();
 
   const [showCamera, setShowCamera] = useState(false);
   const [photoBefore, setPhotoBefore] = useState<string | null>(null);
@@ -170,11 +169,9 @@ export default function NewCycleScreen() {
   };
 
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [photoOrientation, setPhotoOrientation] = useState<number>(1);
 
-  const handlePhotoCaptured = (uri: string, orientation = 1) => {
+  const handlePhotoCaptured = (uri: string) => {
     setPhotoPreview(uri);
-    setPhotoOrientation(orientation);
     setShowCamera(false);
   };
 
@@ -235,9 +232,6 @@ export default function NewCycleScreen() {
         temperature: temp,
         instruments: instrumentsText.trim(),
         photoBeforeUri: photoUri,
-        // Persist EXIF orientation so the timer/complete screens can rotate
-        // the thumbnail the same way the new-cycle preview did.
-        photoBeforeOrientation: photoOrientation,
       }));
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -275,27 +269,9 @@ export default function NewCycleScreen() {
   // ── Photo preview ──────────────────────────────────────
 
   if (photoPreview) {
-    // EXIF orientation → CSS rotation. iPhones write landscape pixel data
-    // with Orientation=6 (90° CW) for shots taken in portrait. RN's <Image>
-    // ignores EXIF, so we rotate manually. For 90/270 the image must be
-    // laid out with swapped dimensions (H × W) so that after rotation its
-    // visual box fills the screen (W × H).
-    const rotationDeg = exifRotationDeg(photoOrientation);
-    const swapAxes = rotationDeg === 90 || rotationDeg === 270;
-    const photoStyle = swapAxes
-      ? {
-          position: 'absolute' as const,
-          width: winH,
-          height: winW,
-          top: (winH - winW) / 2,
-          left: (winW - winH) / 2,
-          transform: [{ rotate: `${rotationDeg}deg` as const }],
-        }
-      : { ...StyleSheet.absoluteFillObject, transform: [{ rotate: `${rotationDeg}deg` as const }] };
-
     return (
       <View style={st.previewContainer}>
-        <Image source={{ uri: photoPreview }} style={photoStyle} resizeMode="cover" />
+        <Image source={{ uri: photoPreview }} style={StyleSheet.absoluteFill} resizeMode="cover" />
         <View style={st.previewOverlay} />
 
         {/* Top bar */}
