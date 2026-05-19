@@ -225,7 +225,12 @@ export default function NewCycleScreen() {
 
       const path = await uploadSessionPhoto(uid, sess.id, 'before', photoUri);
       const now = new Date().toISOString();
-      await updateSession(sess.id, uid, { photo_before_path: path, status: 'in_progress', started_at: now });
+      await updateSession(sess.id, uid, {
+        photo_before_path: path,
+        photo_before_orientation: photoOrientation,
+        status: 'in_progress',
+        started_at: now,
+      });
 
       await AsyncStorage.setItem(ACTIVE_TIMER_KEY, JSON.stringify({
         sessionId: sess.id,

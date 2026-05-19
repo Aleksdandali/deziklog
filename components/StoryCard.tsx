@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Stop, Circle, Rect } from 'react-native-svg';
+import RotatedImage from './RotatedImage';
 
 export interface StoryCardProps {
   instruments: string;
@@ -12,6 +12,10 @@ export interface StoryCardProps {
   packType: string;
   photoBefore?: string | null;
   photoAfter?: string | null;
+  /** EXIF Orientation for photoBefore — applied via CSS transform. */
+  photoBeforeOrientation?: number | null;
+  /** EXIF Orientation for photoAfter — applied via CSS transform. */
+  photoAfterOrientation?: number | null;
   salonName?: string | null;
   city?: string | null;
   date: string;
@@ -19,7 +23,9 @@ export interface StoryCardProps {
 
 export default function StoryCard({
   instruments, sterilizer, duration, packType,
-  photoBefore, photoAfter, salonName, city, date,
+  photoBefore, photoAfter,
+  photoBeforeOrientation, photoAfterOrientation,
+  salonName, city, date,
 }: StoryCardProps) {
   return (
     <View style={st.container}>
@@ -106,7 +112,11 @@ export default function StoryCard({
                 {photoBefore && (
                   <View style={st.photoCol}>
                     <View style={st.photoFrame}>
-                      <Image source={photoBefore} style={st.photo} cachePolicy="memory-disk" />
+                      <RotatedImage
+                        uri={photoBefore}
+                        orientation={photoBeforeOrientation ?? undefined}
+                        style={st.photo}
+                      />
                     </View>
                     <Text style={st.photoLabel}>ДО</Text>
                   </View>
@@ -119,7 +129,11 @@ export default function StoryCard({
                 {photoAfter && (
                   <View style={st.photoCol}>
                     <View style={[st.photoFrame, st.photoFrameAfter]}>
-                      <Image source={photoAfter} style={st.photo} cachePolicy="memory-disk" />
+                      <RotatedImage
+                        uri={photoAfter}
+                        orientation={photoAfterOrientation ?? undefined}
+                        style={st.photo}
+                      />
                     </View>
                     <Text style={[st.photoLabel, { color: '#22C55E' }]}>ПІСЛЯ</Text>
                   </View>

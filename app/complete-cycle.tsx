@@ -180,8 +180,18 @@ export default function CompleteCycleScreen() {
       const finalStatus = selectedResult === 'success' ? 'completed' : 'failed';
       const endedAt = new Date().toISOString();
 
+      // Backfill photo_before_orientation if the row was created before this
+      // column existed (or if new-cycle ran an old build) — we know it from
+      // the persisted timer data. New runs already wrote it on cycle start.
+      const backfillBeforeOrientation =
+        existing && existing.photo_before_orientation == null && photoBeforeOrientation
+          ? { photo_before_orientation: photoBeforeOrientation }
+          : {};
+
       await updateSession(sessionId, uid, {
         photo_after_path: path,
+        photo_after_orientation: photoAfterOrientation,
+        ...backfillBeforeOrientation,
         ended_at: endedAt,
         result: selectedResult,
         status: finalStatus,
@@ -308,6 +318,8 @@ export default function CompleteCycleScreen() {
               packType=""
               photoBefore={photoBeforeUri}
               photoAfter={photoAfter}
+              photoBeforeOrientation={photoBeforeOrientation}
+              photoAfterOrientation={photoAfterOrientation}
               salonName={profileData.salon_name}
               city={profileData.city}
               date={new Date().toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}

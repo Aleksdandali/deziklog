@@ -342,6 +342,8 @@ export default function JournalScreen() {
               packType={sharingCycle.pouch_size && sharingCycle.pouch_size !== 'none' ? sharingCycle.pouch_size : ''}
               photoBefore={sharingPhotoBefore}
               photoAfter={sharingPhotoAfter}
+              photoBeforeOrientation={sharingCycle.photo_before_orientation}
+              photoAfterOrientation={sharingCycle.photo_after_orientation}
               salonName={profileInfo.salon_name}
               city={profileInfo.city}
               date={new Date(sharingCycle.created_at).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}

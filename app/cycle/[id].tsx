@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView,
-  Image, Modal, Alert,
+  Modal, Alert, useWindowDimensions,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -17,6 +17,7 @@ import { calcActualMinutes, getDurationStatus } from '../../lib/steri-config';
 import { shareToInstagramStory } from '../../lib/share-instagram';
 import { generateCyclePDF } from '../../lib/pdf-export';
 import StoryCard from '../../components/StoryCard';
+import RotatedImage from '../../components/RotatedImage';
 
 function fmt(iso: string | null, mode: 'time' | 'date' | 'datetime'): string {
   if (!iso) return '--';
@@ -42,9 +43,10 @@ export default function CycleDetailScreen() {
   const { session: authSession } = useAuth();
   const userId = authSession?.user?.id;
 
+  const { width: winW } = useWindowDimensions();
   const [sess, setSess] = useState<SterilizationSession | null>(null);
   const [loading, setLoading] = useState(true);
-  const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
+  const [fullscreenPhoto, setFullscreenPhoto] = useState<{ uri: string; orientation: number | null } | null>(null);
   const [photoBeforeUrl, setPhotoBeforeUrl] = useState<string | null>(null);
   const [photoAfterUrl, setPhotoAfterUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
@@ -231,8 +233,15 @@ export default function CycleDetailScreen() {
           <View style={st.photoCol}>
             <Text style={st.photoLabel}>До</Text>
             {photoBeforeUrl ? (
-              <TouchableOpacity onPress={() => setFullscreenPhoto(photoBeforeUrl)} activeOpacity={0.9}>
-                <Image source={{ uri: photoBeforeUrl }} style={st.photo} />
+              <TouchableOpacity
+                onPress={() => setFullscreenPhoto({ uri: photoBeforeUrl, orientation: sess.photo_before_orientation })}
+                activeOpacity={0.9}
+              >
+                <RotatedImage
+                  uri={photoBeforeUrl}
+                  orientation={sess.photo_before_orientation ?? undefined}
+                  style={st.photo}
+                />
               </TouchableOpacity>
             ) : (
               <View style={st.photoEmpty}><Feather name="camera-off" size={20} color={COLORS.textTertiary} /></View>
@@ -241,8 +250,15 @@ export default function CycleDetailScreen() {
           <View style={st.photoCol}>
             <Text style={st.photoLabel}>Після</Text>
             {photoAfterUrl ? (
-              <TouchableOpacity onPress={() => setFullscreenPhoto(photoAfterUrl)} activeOpacity={0.9}>
-                <Image source={{ uri: photoAfterUrl }} style={st.photo} />
+              <TouchableOpacity
+                onPress={() => setFullscreenPhoto({ uri: photoAfterUrl, orientation: sess.photo_after_orientation })}
+                activeOpacity={0.9}
+              >
+                <RotatedImage
+                  uri={photoAfterUrl}
+                  orientation={sess.photo_after_orientation ?? undefined}
+                  style={st.photo}
+                />
               </TouchableOpacity>
             ) : (
               <View style={st.photoEmpty}><Feather name="camera-off" size={20} color={COLORS.textTertiary} /></View>
@@ -305,6 +321,8 @@ export default function CycleDetailScreen() {
               packType={sess.pouch_size && sess.pouch_size !== 'none' ? sess.pouch_size : ''}
               photoBefore={photoBeforeUrl}
               photoAfter={photoAfterUrl}
+              photoBeforeOrientation={sess.photo_before_orientation}
+              photoAfterOrientation={sess.photo_after_orientation}
               salonName={profileData.salon_name}
               city={profileData.city}
               date={new Date(sess.created_at).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}
@@ -320,7 +338,15 @@ export default function CycleDetailScreen() {
             <Feather name="x" size={24} color="#fff" />
           </TouchableOpacity>
           {fullscreenPhoto && (
-            <Image source={{ uri: fullscreenPhoto }} style={st.modalImage} resizeMode="contain" />
+            <RotatedImage
+              uri={fullscreenPhoto.uri}
+              orientation={fullscreenPhoto.orientation ?? undefined}
+              // Square viewport — `contain` letterboxes, and a W×W box guarantees
+              // the rotated image (which may have swapped axes) still fits on screen
+              // for any phone aspect ratio.
+              style={{ width: winW, height: winW }}
+              resizeMode="contain"
+            />
           )}
         </View>
       </Modal>
@@ -388,5 +414,4 @@ const st = StyleSheet.create({
   // Modal
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
   modalClose: { position: 'absolute', top: 60, right: 20, zIndex: 10, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  modalImage: { width: '90%', height: '70%' },
 });
