@@ -55,7 +55,7 @@ export default function CatalogScreen() {
     }
     const [catRes, prodRes] = await Promise.all([
       supabase.from('product_categories').select('*').order('sort_order'),
-      supabase.from('products').select('*, category:product_categories(name)').eq('in_stock', true).order('sort_order'),
+      supabase.from('products').select('*, category:product_categories(name)').order('sort_order'),
     ]);
     if (catRes.data) {
       setCategories(catRes.data);
