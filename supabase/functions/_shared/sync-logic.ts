@@ -6,6 +6,7 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAllKeycrmProducts, syncStockToDb } from "./keycrm-stock.ts";
 import { KEYCRM_ID_MAP } from "./keycrm-product-map.ts";
+import { redact } from "./redact.ts";
 
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
 const NP_API_URL = "https://api.novaposhta.ua/v2.0/json/";
@@ -146,7 +147,7 @@ export async function syncOrderToKeyCRM(
         });
         const buyerData = await buyerRes.json();
         if (buyerRes.ok && buyerData.id) buyerId = buyerData.id;
-        else console.warn("KeyCRM buyer create:", buyerData);
+        else console.warn("KeyCRM buyer create:", redact(buyerData));
       } catch (e) {
         console.warn("KeyCRM buyer create failed:", e);
       }
@@ -203,7 +204,7 @@ export async function syncOrderToKeyCRM(
   const keycrmData = await keycrmRes.json();
 
   if (!keycrmRes.ok) {
-    const errMsg = `KeyCRM ${keycrmRes.status}: ${JSON.stringify(keycrmData).slice(0, 500)}`;
+    const errMsg = `KeyCRM ${keycrmRes.status}: ${redact(keycrmData).slice(0, 500)}`;
     console.error(errMsg);
     await markFailed(adminClient, orderId, errMsg);
     return { success: false, error: errMsg };
@@ -257,7 +258,7 @@ export async function syncOrderToKeyCRM(
         } catch { /* non-critical */ }
         await adminClient.from("orders").update({ np_ttn: ttn, np_delivery_cost: deliveryCost ? Number(deliveryCost) : null }).eq("id", orderId);
       } else {
-        console.warn("NP TTN failed:", npData.errors || npData.warnings);
+        console.warn("NP TTN failed:", redact(npData.errors || npData.warnings));
       }
     } catch (e) {
       console.warn("NP TTN error:", e);

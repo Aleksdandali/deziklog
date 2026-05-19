@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { redact } from "../_shared/redact.ts";
 
 const NP_API_URL = "https://api.novaposhta.ua/v2.0/json/";
 const NP_API_KEY = Deno.env.get("NOVA_POSHTA_API_KEY")!;
@@ -119,7 +120,7 @@ Deno.serve(async (req) => {
     const npData = await npRes.json();
 
     if (!npData.success || !npData.data?.[0]) {
-      console.error("NP TTN creation failed:", npData);
+      console.error("NP TTN creation failed:", redact(npData));
       return new Response(
         JSON.stringify({
           error: "NP TTN creation failed",
