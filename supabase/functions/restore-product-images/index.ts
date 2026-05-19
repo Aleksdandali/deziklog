@@ -71,6 +71,37 @@ function pickImageUrl(p: KeycrmProduct): string | null {
   return fromAttachments ?? null;
 }
 
+// SSRF guard: KeyCRM is upstream-trusted, but a compromised admin or stale
+// dataset could plant `http://169.254.169.254/...` (cloud metadata) or
+// `http://10.x.x.x/...` (internal). Reject non-https and private/loopback hosts
+// before we let the function fetch & upload arbitrary bytes into our bucket.
+function isPrivateHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (h === "localhost" || h === "" || h === "::" || h === "::1") return true;
+  if (h.startsWith("[")) return isPrivateHost(h.slice(1, -1));
+  // IPv4
+  const m = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (m) {
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    if (a === 0 || a === 10 || a === 127) return true;
+    if (a === 169 && b === 254) return true;        // link-local + cloud metadata
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    return false;
+  }
+  // IPv6 broad strokes — link-local + ULA + loopback
+  if (h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe80")) return true;
+  return false;
+}
+
+function isSafeImageUrl(rawUrl: string): boolean {
+  let u: URL;
+  try { u = new URL(rawUrl); } catch { return false; }
+  if (u.protocol !== "https:") return false;
+  return !isPrivateHost(u.hostname);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -203,6 +234,15 @@ Deno.serve(async (req) => {
       const imgUrl = pickImageUrl(kp);
       if (!imgUrl) {
         results.push({ id: row.id, name: row.name, status: "no_image" });
+        continue;
+      }
+      if (!isSafeImageUrl(imgUrl)) {
+        results.push({
+          id: row.id,
+          name: row.name,
+          status: "download_failed",
+          message: `SSRF guard rejected URL: ${imgUrl}`,
+        });
         continue;
       }
 
