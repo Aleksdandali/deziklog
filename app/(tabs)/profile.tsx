@@ -12,9 +12,9 @@ import * as Sharing from 'expo-sharing';
 import Constants from 'expo-constants';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth-context';
-import { getProfile, getOrders, searchNPCities, getNPWarehouses, resolveNPCityByName, type SterilizationSession } from '../../lib/api';
+import { getProfile, getOrders, searchNPCities, getNPWarehouses, resolveNPCityByName, getPhotoUrl, type SterilizationSession } from '../../lib/api';
 import type { OrderItem, NPCity, NPWarehouse } from '../../lib/types';
-import { generateJournalPDF } from '../../lib/pdf-export';
+import { generateJournalPDF, loadCyclePhotos } from '../../lib/pdf-export';
 import { getCached, setCache } from '../../lib/cache';
 import { COLORS } from '../../lib/constants';
 import { RADII } from '../../lib/theme';
@@ -273,9 +273,11 @@ export default function ProfileScreen() {
         instrument_name: s.instrument_names, sterilizer_name: s.sterilizer_name,
         packet_type: s.packet_type, duration_minutes: s.duration_minutes,
         temperature: s.temperature, result: s.result === 'success' ? 'passed' : 'failed',
-        notes: null, started_at: s.started_at || s.created_at, created_at: s.created_at,
+        notes: null, started_at: s.started_at || s.created_at, ended_at: s.ended_at,
+        employee_name: s.employee_name, created_at: s.created_at,
       }));
-      const uri = await generateJournalPDF(pdfData, prof?.salon_name ?? undefined);
+      const photos = await loadCyclePhotos(sessions, getPhotoUrl);
+      const uri = await generateJournalPDF(pdfData, prof?.salon_name ?? undefined, photos);
       await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Журнал', UTI: 'com.adobe.pdf' });
     } catch { Alert.alert('Помилка', 'Не вдалось створити PDF'); }
   };

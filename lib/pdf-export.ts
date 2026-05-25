@@ -25,9 +25,83 @@ function packetLabel(code: string | null | undefined): string {
   return PACKET_LABELS[code] ?? code;
 }
 
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('uk-UA', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+  });
+}
+function fmtTime(iso: string | null | undefined): string {
+  if (!iso) return '--';
+  return new Date(iso).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+}
+
 /** Photos for a journal row, as base64 data URIs (so the PDF is self-contained). */
 export type CyclePhotos = { before?: string | null; after?: string | null };
 
+/** Minimal shape required to build the photos map. */
+export interface CycleWithPhotoPaths {
+  id: string;
+  photo_before_path?: string | null;
+  photo_after_path?: string | null;
+}
+
+/**
+ * Fetch signed URLs for each cycle's before/after photos and inline them as
+ * base64 data URIs (so the resulting PDF is self-contained — no network at
+ * render time, no signed-URL expiry).
+ *
+ * Chunked to cap concurrent fetch + FileReader in RAM: a long journal would
+ * otherwise fire hundreds of parallel requests at the storage host.
+ */
+export async function loadCyclePhotos(
+  items: CycleWithPhotoPaths[],
+  getSignedUrl: (path: string) => Promise<string | null>,
+  chunkSize = 6,
+): Promise<Map<string, CyclePhotos>> {
+  const photos = new Map<string, CyclePhotos>();
+  for (let i = 0; i < items.length; i += chunkSize) {
+    await Promise.all(items.slice(i, i + chunkSize).map(async (s) => {
+      if (!s.photo_before_path && !s.photo_after_path) return;
+      const [before, after] = await Promise.all([
+        s.photo_before_path ? fetchAsDataUri(s.photo_before_path, getSignedUrl) : null,
+        s.photo_after_path ? fetchAsDataUri(s.photo_after_path, getSignedUrl) : null,
+      ]);
+      if (before || after) photos.set(s.id, { before, after });
+    }));
+  }
+  return photos;
+}
+
+async function fetchAsDataUri(
+  storagePath: string,
+  getSignedUrl: (path: string) => Promise<string | null>,
+): Promise<string | null> {
+  try {
+    const url = await getSignedUrl(storagePath);
+    if (!url) return null;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise<string | null>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Render the sterilization journal as a PDF matching the column layout of
+ * Form №257/о — "Журнал контролю роботи стерилізаторів повітряного, парового
+ * (автоклаву)", approved by наказ МОЗ України від 04.01.2001 №1.
+ *
+ * Note: officially the form must be kept on paper (наказ МОЗ №330 від
+ * 05.07.2005). This PDF is a helper for printing — the operator still has to
+ * sign the physical journal.
+ */
 export async function generateJournalPDF(
   cycles: SterilizationCycle[],
   salonName?: string,
@@ -37,29 +111,22 @@ export async function generateJournalPDF(
     day: 'numeric', month: 'long', year: 'numeric',
   });
 
-  // Single empty-photo placeholder, reused across rows to keep HTML small.
   const emptyThumb = `<div class="thumb empty">—</div>`;
 
   const rows = cycles.map((c, i) => {
-    const dateSource = c.started_at || c.created_at;
-    const date = new Date(dateSource).toLocaleDateString('uk-UA', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-    });
-    const time = new Date(dateSource).toLocaleTimeString('uk-UA', {
-      hour: '2-digit', minute: '2-digit',
-    });
-    const duration = c.duration_minutes ? `${c.duration_minutes} хв` : '--';
-    const temp = c.temperature ? `${c.temperature}°C` : '--';
+    const startIso = c.started_at || c.created_at;
+    const date = fmtDate(startIso);
+    const startTime = fmtTime(startIso);
+    const endTime = fmtTime(c.ended_at);
+    const duration = c.duration_minutes != null ? `${c.duration_minutes} хв` : '--';
+    const temp = c.temperature != null ? `${c.temperature}°C` : '--';
     const result = c.result === 'passed' ? 'Пройдено' : 'Не пройдено';
     const resultColor = c.result === 'passed' ? COLORS.success : COLORS.danger;
+    const signer = c.employee_name ? escapeHtml(c.employee_name) : '';
 
     const ph = photos?.get(c.id);
-    const beforeImg = ph?.before
-      ? `<img src="${ph.before}" class="thumb" alt="до"/>`
-      : emptyThumb;
-    const afterImg = ph?.after
-      ? `<img src="${ph.after}" class="thumb" alt="після"/>`
-      : emptyThumb;
+    const beforeImg = ph?.before ? `<img src="${ph.before}" class="thumb" alt="до"/>` : emptyThumb;
+    const afterImg = ph?.after ? `<img src="${ph.after}" class="thumb" alt="після"/>` : emptyThumb;
     const photoCell = `
       <div class="photo-pair">
         <div class="photo-col"><div class="photo-label">До</div>${beforeImg}</div>
@@ -68,15 +135,18 @@ export async function generateJournalPDF(
 
     return `
       <tr>
-        <td style="text-align:center">${i + 1}</td>
-        <td>${date}<br><span style="color:#6B7280;font-size:9px">${time}</span></td>
+        <td class="num">${i + 1}</td>
+        <td>${date}</td>
         <td>${escapeHtml(c.sterilizer_name)}</td>
         <td>${escapeHtml(c.instrument_name)}</td>
         <td>${escapeHtml(packetLabel(c.packet_type))}</td>
-        <td style="text-align:center">${temp}</td>
-        <td style="text-align:center">${duration}</td>
+        <td class="num">${startTime}</td>
+        <td class="num">${endTime}</td>
+        <td class="num">${temp}</td>
+        <td class="num">${duration}</td>
         <td>${photoCell}</td>
-        <td style="text-align:center;color:${resultColor};font-weight:600">${result}</td>
+        <td class="num" style="color:${resultColor};font-weight:600">${result}</td>
+        <td class="sign">${signer}</td>
       </tr>
     `;
   }).join('');
@@ -87,41 +157,51 @@ export async function generateJournalPDF(
     <head>
       <meta charset="utf-8">
       <style>
-        body { font-family: -apple-system, Helvetica, Arial, sans-serif; font-size: 11px; color: #1B1B1B; padding: 24px; }
-        .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid ${COLORS.brand}; padding-bottom: 12px; }
-        .header h1 { font-size: 18px; color: ${COLORS.brand}; margin: 0 0 4px 0; }
-        .header p { font-size: 11px; color: #6B7280; margin: 2px 0; }
-        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-        th { background: ${COLORS.brand}; color: white; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 6px; text-align: left; }
-        td { padding: 6px; border-bottom: 1px solid #e2e4ed; font-size: 10px; vertical-align: middle; }
-        tr:nth-child(even) { background: #f9f9fb; }
-        .photo-pair { display: flex; gap: 6px; align-items: flex-end; }
+        @page { size: A4 landscape; margin: 14mm 10mm; }
+        body { font-family: -apple-system, Helvetica, Arial, sans-serif; font-size: 10px; color: #1B1B1B; }
+        .header { text-align: center; margin-bottom: 12px; border-bottom: 2px solid ${COLORS.brand}; padding-bottom: 10px; }
+        .header h1 { font-size: 16px; color: ${COLORS.brand}; margin: 0 0 4px 0; }
+        .header .form-id { font-size: 10px; color: #1B1B1B; margin: 2px 0; font-weight: 600; }
+        .header .legal { font-size: 9px; color: #6B7280; margin: 2px 0; }
+        .header .salon { font-size: 11px; color: #1B1B1B; margin: 4px 0 2px 0; font-weight: 600; }
+        .header .meta { font-size: 9px; color: #6B7280; margin: 2px 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+        th { background: ${COLORS.brand}; color: white; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.3px; padding: 6px 4px; text-align: left; border: 1px solid #d1d5db; }
+        td { padding: 5px 4px; border: 1px solid #e2e4ed; font-size: 9.5px; vertical-align: middle; }
+        td.num { text-align: center; }
+        td.sign { min-width: 60px; }
+        tr:nth-child(even) td { background: #f9f9fb; }
+        .photo-pair { display: flex; gap: 4px; align-items: flex-end; justify-content: center; }
         .photo-col { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-        .photo-label { font-size: 8px; color: #6B7280; text-transform: uppercase; letter-spacing: 0.3px; }
-        .thumb { width: 38px; height: 38px; object-fit: cover; border-radius: 4px; border: 1px solid #e2e4ed; display: block; }
-        .thumb.empty { display: flex; align-items: center; justify-content: center; color: #9CA3AF; font-size: 11px; background: #f3f4f6; }
-        .footer { margin-top: 24px; font-size: 9px; color: #6B7280; text-align: center; border-top: 1px solid #e2e4ed; padding-top: 8px; }
+        .photo-label { font-size: 7px; color: #6B7280; text-transform: uppercase; letter-spacing: 0.3px; }
+        .thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 3px; border: 1px solid #e2e4ed; display: block; }
+        .thumb.empty { display: flex; align-items: center; justify-content: center; color: #9CA3AF; font-size: 10px; background: #f3f4f6; }
+        .footer { margin-top: 14px; font-size: 8px; color: #6B7280; text-align: center; border-top: 1px solid #e2e4ed; padding-top: 6px; }
       </style>
     </head>
     <body>
       <div class="header">
-        <h1>Журнал стерилізації</h1>
-        ${salonName ? `<p>${escapeHtml(salonName)}</p>` : ''}
-        <p>Сформовано: ${today}</p>
-        <p>Записів: ${cycles.length}</p>
+        <h1>Журнал контролю роботи стерилізаторів</h1>
+        <p class="form-id">Форма № 257/о</p>
+        <p class="legal">Затв. наказом МОЗ України від 04.01.2001 № 1</p>
+        ${salonName ? `<p class="salon">${escapeHtml(salonName)}</p>` : ''}
+        <p class="meta">Сформовано: ${today} · Записів: ${cycles.length}</p>
       </div>
       <table>
         <thead>
           <tr>
-            <th style="width:28px">№</th>
-            <th style="width:72px">Дата</th>
+            <th style="width:24px">№</th>
+            <th style="width:60px">Дата</th>
             <th>Стерилізатор</th>
-            <th>Інструменти</th>
-            <th style="width:62px">Пакет</th>
-            <th style="width:42px">Темп.</th>
-            <th style="width:42px">Час</th>
-            <th style="width:96px">Фото</th>
-            <th style="width:70px">Результат</th>
+            <th>Найменування інструментів</th>
+            <th style="width:54px">Упаковка</th>
+            <th style="width:46px">Початок</th>
+            <th style="width:46px">Кінець</th>
+            <th style="width:36px">t°C</th>
+            <th style="width:48px">Тривалість</th>
+            <th style="width:96px">Тест-контроль</th>
+            <th style="width:60px">Результат</th>
+            <th style="width:80px">Підпис</th>
           </tr>
         </thead>
         <tbody>
@@ -129,7 +209,7 @@ export async function generateJournalPDF(
         </tbody>
       </table>
       <div class="footer">
-        Згенеровано в Dezik Log · dezik.com.ua · ${today}
+        Допоміжний друк з Dezik SteriLog · dezik.com.ua · оригінал журналу ведеться на папері згідно з наказом МОЗ № 330 від 05.07.2005
       </div>
     </body>
     </html>

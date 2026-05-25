@@ -53,6 +53,8 @@ export interface SterilizationCycle {
   temperature: number | null;
   duration_minutes: number | null;
   started_at: string;
+  ended_at?: string | null;
+  employee_name?: string | null;
   result: string | null;
   notes: string | null;
   created_at: string;
