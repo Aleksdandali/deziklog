@@ -5,9 +5,11 @@
 //   - sync-order-to-keycrm (post-order, ordered product_ids only)
 //
 // Only writes when the boolean value actually changes — safe to call often.
+//
+// The mapping our_product.id → KeyCRM numeric id lives on `products.keycrm_id`
+// (filled by reconcileKeycrmIds; see _shared/keycrm-products-lookup.ts).
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { KEYCRM_ID_MAP } from "./keycrm-product-map.ts";
 
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
 
@@ -70,8 +72,8 @@ export async function fetchAllKeycrmProducts(apiKey: string): Promise<Map<number
 
 /**
  * Reconcile `products.in_stock` against KeyCRM availability.
- * If `productIds` is provided, only those rows (intersected with the mapped
- * set) are touched. Otherwise all mapped products are processed.
+ * If `productIds` is provided, only those rows (intersected with rows that
+ * have a cached keycrm_id) are touched. Otherwise all mapped products are processed.
  */
 export async function syncStockToDb(
   admin: SupabaseClient,
@@ -79,26 +81,21 @@ export async function syncStockToDb(
   productIds?: string[],
   dryRun = false,
 ): Promise<SyncStockResult> {
-  const mappedIds = Object.keys(KEYCRM_ID_MAP);
-  const targetIds = productIds
-    ? productIds.filter((id) => mappedIds.includes(id))
-    : mappedIds;
-
-  if (targetIds.length === 0) {
-    return { mapped_rows: 0, keycrm_total: keycrmMap.size, summary: {}, results: [] };
-  }
-
-  const { data: rows, error: selErr } = await admin
+  let query = admin
     .from("products")
-    .select("id,name,in_stock")
-    .in("id", targetIds);
+    .select("id,name,in_stock,keycrm_id")
+    .not("keycrm_id", "is", null);
+  if (productIds && productIds.length > 0) {
+    query = query.in("id", productIds);
+  }
+  const { data: rows, error: selErr } = await query;
   if (selErr) throw new Error(`DB select failed: ${selErr.message}`);
 
   const results: StockOutcome[] = [];
 
   for (const row of rows ?? []) {
-    const kid = KEYCRM_ID_MAP[row.id];
-    const kp = keycrmMap.get(kid);
+    const kid = row.keycrm_id as number | null;
+    const kp = kid ? keycrmMap.get(kid) : undefined;
     if (!kp) { results.push({ id: row.id, name: row.name, status: "no_keycrm" }); continue; }
     if (kp.has_offers) { results.push({ id: row.id, name: row.name, status: "has_offers_unsupported" }); continue; }
     const qty = availableQty(kp);

@@ -5,7 +5,6 @@
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAllKeycrmProducts, syncStockToDb } from "./keycrm-stock.ts";
-import { KEYCRM_ID_MAP } from "./keycrm-product-map.ts";
 import { redact } from "./redact.ts";
 
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
@@ -106,7 +105,12 @@ export async function syncOrderToKeyCRM(
     return { success: true, in_progress: true };
   }
 
-  const { data: items } = await adminClient.from("order_items").select("*").eq("order_id", orderId);
+  // Join in products.keycrm_id so we can link each order line to a KeyCRM
+  // catalog entry (required for KeyCRM to show the product picture).
+  const { data: items } = await adminClient
+    .from("order_items")
+    .select("*, product:products(keycrm_id)")
+    .eq("order_id", orderId);
   const buyerName = `${order.first_name || ""} ${order.last_name || ""}`.trim() || "Клієнт";
 
   // Always send phones in E.164 to KeyCRM so dedup search is deterministic.
@@ -185,10 +189,10 @@ export async function syncOrderToKeyCRM(
     },
     // Link each line to a KeyCRM catalog product when possible — required for
     // KeyCRM to show product pictures & inherit canonical name/sku in the order
-    // detail view. Falls back to a free-form line (name+sku) if a UUID is not
-    // in KEYCRM_ID_MAP (legacy/manually-added products).
-    products: (items || []).map((item: { product_name: string; product_id: string; price_at_order: number; quantity: number }) => {
-      const keycrmId = KEYCRM_ID_MAP[item.product_id];
+    // detail view. Falls back to a free-form line (name+sku) if products.keycrm_id
+    // is NULL (legacy/manually-added products not yet reconciled by the cron).
+    products: (items || []).map((item: { product_name: string; product_id: string; price_at_order: number; quantity: number; product?: { keycrm_id: number | null } | null }) => {
+      const keycrmId = item.product?.keycrm_id ?? null;
       return keycrmId
         ? { product_id: keycrmId, price: item.price_at_order, quantity: item.quantity }
         : { name: item.product_name, sku: item.product_id, price: item.price_at_order, quantity: item.quantity };

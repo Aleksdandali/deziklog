@@ -1,5 +1,7 @@
 // Cron-driven: pull current stock availability from KeyCRM and update
-// `products.in_stock` for every row in KEYCRM_ID_MAP. Runs every 5 hours.
+// `products.in_stock` for every row with a cached keycrm_id. Also self-heals
+// the products.keycrm_id mapping by matching KeyCRM `sku == our UUID`.
+// Runs every 5 hours.
 //
 // Core logic lives in _shared/keycrm-stock.ts and is also reused by
 // `refresh-stock` (user-triggered) and `sync-order-to-keycrm` (post-order).
@@ -14,6 +16,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { timingSafeEqual } from "../_shared/timing-safe.ts";
 import { fetchAllKeycrmProducts, syncStockToDb } from "../_shared/keycrm-stock.ts";
+import { reconcileKeycrmIds } from "../_shared/keycrm-products-lookup.ts";
 
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
 
@@ -60,8 +63,11 @@ Deno.serve(async (req) => {
   try {
     const keycrmMap = await fetchAllKeycrmProducts(keycrmKey);
     const admin = createClient(supabaseUrl, serviceRoleKey);
+    // Self-heal the products.keycrm_id mapping (UUID-sku → KeyCRM id) before
+    // running stock sync. Skipped during dry_run to keep that mode read-only.
+    const reconcile = dryRun ? null : await reconcileKeycrmIds(admin, keycrmMap);
     const result = await syncStockToDb(admin, keycrmMap, undefined, dryRun);
-    return jsonRes({ done: true, dry_run: dryRun, ...result });
+    return jsonRes({ done: true, dry_run: dryRun, reconcile, ...result });
   } catch (e) {
     return jsonRes({ error: "Sync failed", details: (e as Error).message }, 502);
   }

@@ -13,7 +13,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { timingSafeEqual } from "../_shared/timing-safe.ts";
-import { KEYCRM_ID_MAP } from "../_shared/keycrm-product-map.ts";
+import { reconcileKeycrmIds } from "../_shared/keycrm-products-lookup.ts";
 
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
 const BUCKET = "product-images";
@@ -158,10 +158,28 @@ Deno.serve(async (req) => {
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
 
+  // Build KeyCRM id → product map (single fetch covers all rows)
+  let keycrmMap: Map<number, KeycrmProduct>;
+  try {
+    keycrmMap = await fetchAllKeycrmProducts(keycrmKey);
+  } catch (e) {
+    return new Response(JSON.stringify({ error: "KeyCRM fetch failed", details: (e as Error).message }), {
+      status: 502,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // Self-heal products.keycrm_id from KeyCRM's catalog before we read it.
+  // No-op in dry-run mode so the dry-run remains side-effect free.
+  if (!dryRun) {
+    try { await reconcileKeycrmIds(admin, keycrmMap); }
+    catch (e) { console.warn("reconcileKeycrmIds failed:", (e as Error).message); }
+  }
+
   // Find broken products (image_path still points to dezik.com.ua)
   const { data: broken, error: selErr } = await admin
     .from("products")
-    .select("id,name,image_path")
+    .select("id,name,image_path,keycrm_id")
     .like("image_path", "%dezik.com.ua%");
 
   if (selErr) {
@@ -176,21 +194,9 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Build KeyCRM id → product map (single fetch covers all rows)
-  let keycrmMap: Map<number, KeycrmProduct>;
-  try {
-    keycrmMap = await fetchAllKeycrmProducts(keycrmKey);
-  } catch (e) {
-    return new Response(JSON.stringify({ error: "KeyCRM fetch failed", details: (e as Error).message }), {
-      status: 502,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  const resolveKp = (rowId: string): KeycrmProduct | null => {
-    const kid = KEYCRM_ID_MAP[rowId];
-    if (!kid) return null;
-    return keycrmMap.get(kid) ?? null;
+  const resolveKp = (row: { keycrm_id: number | null }): KeycrmProduct | null => {
+    if (!row.keycrm_id) return null;
+    return keycrmMap.get(row.keycrm_id) ?? null;
   };
 
   // DRY-RUN: show match status + picked URL for every broken row
@@ -201,11 +207,11 @@ Deno.serve(async (req) => {
         broken_count: broken.length,
         keycrm_total: keycrmMap.size,
         rows: broken.map((r) => {
-          const kp = resolveKp(r.id);
+          const kp = resolveKp(r);
           return {
             id: r.id,
             name: r.name,
-            keycrm_id: KEYCRM_ID_MAP[r.id] ?? null,
+            keycrm_id: r.keycrm_id ?? null,
             keycrm_name: kp?.name ?? null,
             picked_image_url: kp ? pickImageUrl(kp) : null,
           };
@@ -226,7 +232,7 @@ Deno.serve(async (req) => {
 
   for (const row of broken) {
     try {
-      const kp = resolveKp(row.id);
+      const kp = resolveKp(row);
       if (!kp) {
         results.push({ id: row.id, name: row.name, status: "no_keycrm" });
         continue;
