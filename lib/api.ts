@@ -463,6 +463,7 @@ export async function createOrder(userId: string, order: {
   address_building?: string;
   address_apartment?: string;
   notes?: string;
+  payment_method?: string;
 }, items: { product_id: string; quantity: number }[]) {
   const { data: orderData, error: orderError } = await supabase
     .from('orders')
@@ -485,6 +486,7 @@ export async function createOrder(userId: string, order: {
       address_building: order.address_building ?? null,
       address_apartment: order.address_apartment ?? null,
       notes: order.notes ?? null,
+      payment_method: order.payment_method ?? null,
     })
     .select()
     .single();

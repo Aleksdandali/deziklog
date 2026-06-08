@@ -146,6 +146,7 @@ export interface Order {
   np_ttn: string | null;
   np_delivery_cost: number | null;
   notes: string | null;
+  payment_method: string | null;
   keycrm_order_id: number | null;
   created_at: string;
 }

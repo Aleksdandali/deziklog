@@ -84,6 +84,7 @@ export default function CartScreen() {
 
   // Delivery type
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('warehouse');
+  const [paymentMethod, setPaymentMethod] = useState<'nalozhka' | 'rozrahunok'>('nalozhka');
   const [addressStreet, setAddressStreet] = useState('');
   const [addressBuilding, setAddressBuilding] = useState('');
   const [addressApartment, setAddressApartment] = useState('');
@@ -276,6 +277,7 @@ export default function CartScreen() {
         address_street: deliveryType === 'address' ? addressStreet.trim() : undefined,
         address_building: deliveryType === 'address' ? addressBuilding.trim() : undefined,
         address_apartment: deliveryType === 'address' ? addressApartment.trim() : undefined,
+        payment_method: paymentMethod,
       }, items.map((i) => ({
         product_id: i.product.id,
         quantity: i.quantity,
@@ -577,6 +579,27 @@ export default function CartScreen() {
                 </View>
               </>
             )}
+
+            {/* Payment method */}
+            <Text style={[s.sectionLabel, { marginTop: 8 }]}>Оплата</Text>
+            <View style={s.toggleRow}>
+              <TouchableOpacity
+                style={[s.toggleChip, paymentMethod === 'nalozhka' && s.toggleChipActive]}
+                onPress={() => { Haptics.selectionAsync(); setPaymentMethod('nalozhka'); }}
+                activeOpacity={0.8}
+              >
+                <Feather name="truck" size={14} color={paymentMethod === 'nalozhka' ? '#fff' : COLORS.textSecondary} />
+                <Text style={[s.toggleChipText, paymentMethod === 'nalozhka' && s.toggleChipTextActive]}>Накладений платіж</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.toggleChip, paymentMethod === 'rozrahunok' && s.toggleChipActive]}
+                onPress={() => { Haptics.selectionAsync(); setPaymentMethod('rozrahunok'); }}
+                activeOpacity={0.8}
+              >
+                <Feather name="credit-card" size={14} color={paymentMethod === 'rozrahunok' ? '#fff' : COLORS.textSecondary} />
+                <Text style={[s.toggleChipText, paymentMethod === 'rozrahunok' && s.toggleChipTextActive]}>Розрахунковий рахунок</Text>
+              </TouchableOpacity>
+            </View>
 
             {/* Order summary */}
             <View style={s.orderSummary}>

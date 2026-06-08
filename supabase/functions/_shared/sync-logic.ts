@@ -47,6 +47,40 @@ async function findBuyerByPhone(
   return undefined;
 }
 
+/** App payment-method key → matcher for the KeyCRM payment-method name. */
+const PAYMENT_NAME_MATCH: Record<string, RegExp> = {
+  // "Накладений платіж" / "Наложенный платеж" / "Післяплата"
+  nalozhka: /накладен|наложен|післяплат|пiсляплат/i,
+  // "Оплата на розрахунковий рахунок …" (NOT the bare "Безготівковий розрахунок")
+  rozrahunok: /розрахунков\w*\s+рахун/i,
+};
+
+/**
+ * Resolve a KeyCRM payment_method_id by matching the tenant's configured method
+ * name (so we don't hardcode tenant-specific numeric ids). Returns undefined on
+ * any failure — the caller then syncs the order without a payment line.
+ */
+async function resolveKeycrmPaymentMethodId(
+  key: string,
+  kcHeaders: Record<string, string>,
+): Promise<number | undefined> {
+  const re = PAYMENT_NAME_MATCH[key];
+  if (!re) return undefined;
+  try {
+    const res = await fetchWithRetry(
+      `${KEYCRM_API_URL}/order/payment-method?limit=50`,
+      { headers: kcHeaders },
+      { timeoutMs: 8000, retries: 1, label: "keycrm:payment-methods" },
+    );
+    if (!res.ok) return undefined;
+    const data = await res.json();
+    const list: Array<{ id: number; name: string }> = data?.data ?? (Array.isArray(data) ? data : []);
+    return list.find((m) => re.test(m?.name || ""))?.id;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function syncOrderToKeyCRM(
   adminClient: SupabaseClient,
   orderId: string,
@@ -199,6 +233,29 @@ export async function syncOrderToKeyCRM(
         : { name: item.product_name, sku: item.product_id, price: item.price_at_order, quantity: item.quantity };
     }),
   };
+
+  // Attach the chosen payment method to the KeyCRM order. Resolved by name (no
+  // hardcoded tenant ids) and best-effort: if it can't be resolved the order
+  // still syncs, just without a payment line. payment_method is re-read here so
+  // we don't depend on the claim RPC's column list.
+  try {
+    const { data: pmRow } = await adminClient
+      .from("orders").select("payment_method").eq("id", orderId).maybeSingle();
+    const pmKey = pmRow?.payment_method as string | null;
+    if (pmKey) {
+      const pmId = await resolveKeycrmPaymentMethodId(pmKey, kcHeaders);
+      if (pmId) {
+        const orderTotal = (items || []).reduce(
+          (sum: number, it: { price_at_order?: number; quantity?: number }) =>
+            sum + (it.price_at_order || 0) * (it.quantity || 0), 0);
+        keycrmPayload.payments = [{ payment_method_id: pmId, amount: orderTotal, status: "not_paid" }];
+      } else {
+        console.warn("KeyCRM payment method not resolved for key:", pmKey);
+      }
+    }
+  } catch (e) {
+    console.warn("KeyCRM payment attach failed:", e);
+  }
 
   // retries:0 — POST /order is non-idempotent. The helper gives us a hard
   // timeout (the hang that previously caused the duplicate-order window) WITHOUT
