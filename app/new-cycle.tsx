@@ -5,15 +5,15 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
-import { createSession, updateSession, uploadSessionPhoto } from '../lib/api';
+import { createSession, updateSession, uploadSessionPhoto, getInstruments } from '../lib/api';
 import { useAuth, useSessionGuard } from '../lib/auth-context';
 import { COLORS } from '../lib/constants';
 import { RADII } from '../lib/theme';
-import { getDefaultPreset, type SteriType } from '../lib/steri-config';
+import { getDefaultPreset, getPresetsForType, type SteriType } from '../lib/steri-config';
 import CameraCapture from '../components/CameraCapture';
 import RotatedImage from '../components/RotatedImage';
 
@@ -43,10 +43,12 @@ export default function NewCycleScreen() {
   const [sterilizerId, setSterilizerId] = useState<string | null>(null);
   const [sterilizerName, setSterilizerName] = useState('');
   const [sterilizerType, setSterilizerType] = useState<SteriType | null>(null);
+  const [customSterilizer, setCustomSterilizer] = useState(false);
 
   // Instruments
   const [selectedInstruments, setSelectedInstruments] = useState<Record<string, number>>({});
   const [customInstrument, setCustomInstrument] = useState('');
+  const [savedInstruments, setSavedInstruments] = useState<string[]>([]);
 
   const INSTRUMENT_PRESETS = [
     'Кусачки для кутикули',
@@ -102,6 +104,8 @@ export default function NewCycleScreen() {
   // Mode
   const [temperature, setTemperature] = useState('180');
   const [durationInput, setDurationInput] = useState('60');
+  const [presetId, setPresetId] = useState<string | null>('dry_heat_180');
+  const [customMode, setCustomMode] = useState(false);
 
   // Employee
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
@@ -114,7 +118,7 @@ export default function NewCycleScreen() {
     if (!userId) return;
     (async () => {
       try {
-        const { data } = await supabase.from('sterilizers').select('*').eq('user_id', userId);
+        const { data } = await supabase.from('sterilizers').select('*').eq('user_id', userId).eq('is_archived', false);
         const list = data ?? [];
         setSterilizers(list);
         if (list.length >= 1) {
@@ -125,6 +129,7 @@ export default function NewCycleScreen() {
           setSterilizerType(type);
           const preset = getDefaultPreset(type);
           if (preset) {
+            setPresetId(preset.id);
             setTemperature(String(preset.temperature));
             setDurationInput(String(preset.duration));
           }
@@ -137,6 +142,9 @@ export default function NewCycleScreen() {
           setEmployeeId(empList[0].id);
           setEmployeeName(empList[0].name);
         }
+
+        const instr = await getInstruments(userId);
+        setSavedInstruments(instr.map((i) => i.name));
       } catch (err) {
         if (__DEV__) console.error('Failed to load sterilizers/employees:', err);
       }
@@ -146,16 +154,41 @@ export default function NewCycleScreen() {
   // ── Select sterilizer ─────────────────────────────────
 
   const handleSelectSterilizer = (s: SterilizerRow) => {
+    setCustomSterilizer(false);
     setSterilizerName(s.name);
     setSterilizerId(s.id);
     const type = (s.type as SteriType) ?? null;
     setSterilizerType(type);
     const preset = getDefaultPreset(type);
     if (preset) {
+      setPresetId(preset.id);
+      setCustomMode(false);
       setTemperature(String(preset.temperature));
       setDurationInput(String(preset.duration));
     }
   };
+
+  // ── Select sterilization mode preset ──────────────────
+
+  const handleSelectPreset = (id: string, temp: number, dur: number) => {
+    setPresetId(id);
+    setCustomMode(false);
+    setTemperature(String(temp));
+    setDurationInput(String(dur));
+  };
+
+  const handleSelectCustomSterilizer = () => {
+    setCustomSterilizer(true);
+    setSterilizerId(null);
+    setSterilizerName('');
+    setSterilizerType(null);
+  };
+
+  // Build the instrument chip list: saved instruments first, then presets (deduped by name)
+  const instrumentChips = [...savedInstruments, ...INSTRUMENT_PRESETS.filter((p) => !savedInstruments.includes(p))];
+
+  // Mode presets filtered by the selected sterilizer type
+  const modePresets = getPresetsForType(sterilizerType);
 
   // ── Validate & start ──────────────────────────────────
 
@@ -344,22 +377,25 @@ export default function NewCycleScreen() {
 
         {/* Sterilizer */}
         <Text style={st.label}>Стерилізатор</Text>
-        {sterilizers.length > 1 ? (
-          <View style={st.chips}>
-            {sterilizers.map((s) => {
-              const active = sterilizerName === s.name;
-              return (
-                <TouchableOpacity key={s.id} style={[st.chip, active && st.chipActive]} onPress={() => handleSelectSterilizer(s)} activeOpacity={0.8}>
-                  <Text style={[st.chipText, active && st.chipTextActive]}>{s.name}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        ) : sterilizers.length === 1 ? (
-          <View style={st.readonlyField}>
-            <MaterialCommunityIcons name="radiator" size={16} color={COLORS.brand} />
-            <Text style={st.readonlyText}>{sterilizerName}</Text>
-          </View>
+        {sterilizers.length >= 1 ? (
+          <>
+            <View style={st.chips}>
+              {sterilizers.map((s) => {
+                const active = !customSterilizer && sterilizerId === s.id;
+                return (
+                  <TouchableOpacity key={s.id} style={[st.chip, active && st.chipActive]} onPress={() => handleSelectSterilizer(s)} activeOpacity={0.8}>
+                    <Text style={[st.chipText, active && st.chipTextActive]}>{s.name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+              <TouchableOpacity style={[st.chip, customSterilizer && st.chipActive]} onPress={handleSelectCustomSterilizer} activeOpacity={0.8}>
+                <Text style={[st.chipText, customSterilizer && st.chipTextActive]}>Інший</Text>
+              </TouchableOpacity>
+            </View>
+            {customSterilizer && (
+              <TextInput style={st.input} placeholder="Назва стерилізатора" placeholderTextColor={COLORS.textTertiary} value={sterilizerName} onChangeText={setSterilizerName} maxLength={100} />
+            )}
+          </>
         ) : (
           <>
             <TextInput style={st.input} placeholder="Назва стерилізатора" placeholderTextColor={COLORS.textTertiary} value={sterilizerName} onChangeText={setSterilizerName} maxLength={100} />
@@ -394,7 +430,7 @@ export default function NewCycleScreen() {
         {/* Instruments — quick select + custom */}
         <Text style={st.label}>Інструменти</Text>
         <View style={st.instrumentChips}>
-          {INSTRUMENT_PRESETS.map((name) => {
+          {instrumentChips.map((name) => {
             const active = !!selectedInstruments[name];
             return (
               <TouchableOpacity key={name} style={[st.chip, active && st.chipActive]} onPress={() => toggleInstrument(name)} activeOpacity={0.8}>
@@ -459,18 +495,33 @@ export default function NewCycleScreen() {
           })}
         </View>
 
-        {/* Mode: temp + time in one row */}
+        {/* Mode: preset picker (filtered by sterilizer type) + manual override */}
         <Text style={st.label}>Режим</Text>
-        <View style={st.modeRow}>
-          <View style={st.modeField}>
-            <Text style={st.modeFieldLabel}>°C</Text>
-            <TextInput style={st.modeInput} keyboardType="number-pad" value={temperature} onChangeText={setTemperature} />
-          </View>
-          <View style={st.modeField}>
-            <Text style={st.modeFieldLabel}>хв</Text>
-            <TextInput style={st.modeInput} keyboardType="number-pad" value={durationInput} onChangeText={setDurationInput} />
-          </View>
+        <View style={st.chips}>
+          {modePresets.map((p) => {
+            const active = !customMode && presetId === p.id;
+            return (
+              <TouchableOpacity key={p.id} style={[st.chip, active && st.chipActive]} onPress={() => handleSelectPreset(p.id, p.temperature, p.duration)} activeOpacity={0.8}>
+                <Text style={[st.chipText, active && st.chipTextActive]}>{p.sublabel}</Text>
+              </TouchableOpacity>
+            );
+          })}
+          <TouchableOpacity style={[st.chip, customMode && st.chipActive]} onPress={() => setCustomMode(true)} activeOpacity={0.8}>
+            <Text style={[st.chipText, customMode && st.chipTextActive]}>Інший режим</Text>
+          </TouchableOpacity>
         </View>
+        {customMode && (
+          <View style={st.modeRow}>
+            <View style={st.modeField}>
+              <Text style={st.modeFieldLabel}>°C</Text>
+              <TextInput style={st.modeInput} keyboardType="number-pad" value={temperature} onChangeText={setTemperature} />
+            </View>
+            <View style={st.modeField}>
+              <Text style={st.modeFieldLabel}>хв</Text>
+              <TextInput style={st.modeInput} keyboardType="number-pad" value={durationInput} onChangeText={setDurationInput} />
+            </View>
+          </View>
+        )}
 
         {/* Photo preview if retaking */}
         {photoBefore && (

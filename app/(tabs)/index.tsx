@@ -188,7 +188,12 @@ export default function HomeScreen() {
             sessions.slice(0, 3).map((sess) => {
               const passed = sess.result === 'success';
               return (
-                <View key={sess.id} style={s.entryCard}>
+                <TouchableOpacity
+                  key={sess.id}
+                  style={s.entryCard}
+                  activeOpacity={0.7}
+                  onPress={() => router.push(`/cycle/${sess.id}`)}
+                >
                   <View style={[s.entryDot, { backgroundColor: passed ? COLORS.success : COLORS.danger }]} />
                   <View style={s.entryBody}>
                     <Text style={s.entryInstruments} numberOfLines={1}>{sess.instrument_names}</Text>
@@ -198,7 +203,7 @@ export default function HomeScreen() {
                     <Text style={s.entryDuration}>{formatDuration(sess.duration_minutes)}</Text>
                     <Text style={s.entryTime}>{formatTime(sess.created_at)}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })
           )}

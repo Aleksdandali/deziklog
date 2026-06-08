@@ -119,6 +119,7 @@ export async function getSterilizers(userId: string): Promise<Sterilizer[]> {
     .from('sterilizers')
     .select('*')
     .eq('user_id', userId)
+    .eq('is_archived', false)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data ?? [];

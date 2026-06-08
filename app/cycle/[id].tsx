@@ -284,7 +284,7 @@ export default function CycleDetailScreen() {
             style={[st.igBtnWrap, { opacity: sharing ? 0.6 : 1 }]}
           >
             <LinearGradient
-              colors={['#833AB4', '#C13584', '#E1306C', '#F77737']}
+              colors={[COLORS.brandDark, COLORS.brand]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={st.igBtnInner}
@@ -394,7 +394,7 @@ const st = StyleSheet.create({
   photoEmpty: { height: 160, borderRadius: RADII.lg, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center' },
 
   // Instagram
-  igBtnWrap: { marginTop: 28, borderRadius: 16, shadowColor: '#C13584', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8 },
+  igBtnWrap: { marginTop: 28, borderRadius: 16, shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8 },
   igBtnInner: { flexDirection: 'row', height: 56, borderRadius: 16, alignItems: 'center', paddingHorizontal: 18, gap: 12 },
   igIconWrap: { width: 34, height: 34, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   igBtnText: { fontSize: 15, fontWeight: '600', color: '#FFFFFF', letterSpacing: 0.2 },

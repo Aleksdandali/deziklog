@@ -40,6 +40,7 @@ export interface Sterilizer {
   type: string | null;
   brand: string | null;
   created_at: string;
+  is_archived?: boolean;
 }
 
 export interface SterilizationCycle {

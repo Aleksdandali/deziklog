@@ -24,6 +24,7 @@ export interface PouchSize {
 // ── Sterilization Presets ────────────────────────────────
 
 export const STERI_PRESETS: SteriPreset[] = [
+  // ── Сухожар / повітряна стерилізація (режими затв. МОЗ України) ──
   {
     id: 'dry_heat_180',
     label: 'Сухожар',
@@ -34,6 +35,25 @@ export const STERI_PRESETS: SteriPreset[] = [
     recommended: true,
     description: 'Рекомендований режим для крафт-пакетів Dezik та металевих інструментів',
   },
+  {
+    id: 'dry_heat_200',
+    label: 'Сухожар',
+    sublabel: '200°C · 30 хв',
+    temperature: 200,
+    duration: 30,
+    type: 'dry_heat',
+    description: 'Швидкий високотемпературний режим',
+  },
+  {
+    id: 'dry_heat_160',
+    label: 'Сухожар',
+    sublabel: '160°C · 150 хв',
+    temperature: 160,
+    duration: 150,
+    type: 'dry_heat',
+    description: 'Щадний режим для термочутливих інструментів',
+  },
+  // ── Автоклав / парова стерилізація ──
   {
     id: 'autoclave_134',
     label: 'Автоклав',
@@ -52,6 +72,15 @@ export const STERI_PRESETS: SteriPreset[] = [
     duration: 20,
     type: 'autoclave',
     description: 'Стандартний режим автоклавування',
+  },
+  {
+    id: 'autoclave_134_prion',
+    label: 'Автоклав',
+    sublabel: '134°C · 18 хв (пріон)',
+    temperature: 134,
+    duration: 18,
+    type: 'autoclave',
+    description: 'Протипріонний режим — повне знищення стійких збудників',
   },
 ];
 

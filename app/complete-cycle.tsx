@@ -86,12 +86,16 @@ export default function CompleteCycleScreen() {
     : null;
   const isSufficient = durationStatus === 'sufficient';
 
-  // Block "success" if cycle lasted less than 60 minutes
-  const MIN_CYCLE_MINUTES = 60;
-  const canMarkSuccess = actualMinutes === null || actualMinutes >= MIN_CYCLE_MINUTES;
+  // Block "success" if the cycle ran less than the selected mode's minimum time.
+  // recommendedMinutes comes from timerData.duration (the chosen mode's min exposure).
+  // If no minimum is known (<= 0), don't block.
+  const canMarkSuccess =
+    actualMinutes === null || recommendedMinutes <= 0 || actualMinutes >= recommendedMinutes;
 
   const handleUploadAndConfirm = async () => {
-    if (!photoAfter) { Alert.alert('Зробіть фото індикатора ПІСЛЯ'); return; }
+    // Photo "ПІСЛЯ" is only required when the cycle could still pass. If it ended
+    // before the minimum time, there is no after-photo to take — go straight to "повторити".
+    if (canMarkSuccess && !photoAfter) { Alert.alert('Зробіть фото індикатора ПІСЛЯ'); return; }
     if (!selectedResult) { Alert.alert('Оберіть результат'); return; }
     if (!sessionId) return;
 
@@ -99,11 +103,11 @@ export default function CompleteCycleScreen() {
     const nowMs = Date.now();
     const finalActualMinutes = timerData ? Math.round((nowMs - timerData.startedAt) / 60000) : null;
 
-    // Hard block: cannot mark success if < 60 min
-    if (selectedResult === 'success' && finalActualMinutes !== null && finalActualMinutes < MIN_CYCLE_MINUTES) {
+    // Hard block: cannot mark success below the selected mode's minimum time
+    if (selectedResult === 'success' && finalActualMinutes !== null && recommendedMinutes > 0 && finalActualMinutes < recommendedMinutes) {
       Alert.alert(
         'Недостатній час',
-        `Мінімальний час стерилізації — ${MIN_CYCLE_MINUTES} хв. Пройшло лише ${finalActualMinutes} хв.\n\nНеможливо зберегти як успішну.`,
+        `Мінімальний час стерилізації — ${recommendedMinutes} хв. Пройшло лише ${finalActualMinutes} хв.\n\nНеможливо зберегти як успішну.`,
       );
       setSelectedResult(null);
       return;
@@ -131,7 +135,9 @@ export default function CompleteCycleScreen() {
   };
 
   const doSave = async (finalActualMinutes: number | null) => {
-    if (!photoAfter || !selectedResult || !sessionId) return;
+    if (!selectedResult || !sessionId) return;
+    // Photo is mandatory only when the cycle could still pass; early-finish saves go through without it.
+    if (canMarkSuccess && !photoAfter) return;
 
     setSaving(true);
     try {
@@ -171,7 +177,7 @@ export default function CompleteCycleScreen() {
         return;
       }
 
-      const path = await uploadSessionPhoto(uid, sessionId, 'after', photoAfter);
+      const path = photoAfter ? await uploadSessionPhoto(uid, sessionId, 'after', photoAfter) : null;
       const finalStatus = selectedResult === 'success' ? 'completed' : 'failed';
       const endedAt = new Date().toISOString();
 
@@ -263,7 +269,7 @@ export default function CompleteCycleScreen() {
               style={[s.igBtnWrap, { opacity: sharing ? 0.6 : 1 }]}
             >
               <LinearGradient
-                colors={['#833AB4', '#C13584', '#E1306C', '#F77737']}
+                colors={[COLORS.brandDark, COLORS.brand]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={s.igBtnInner}
@@ -356,8 +362,9 @@ export default function CompleteCycleScreen() {
             </View>
           )}
 
-          {/* Duration warning */}
-          {durationStatus === 'insufficient' && (
+          {/* Duration warning — only when the cycle still passed the minimum.
+              Below-minimum (early finish) is covered by the dedicated banner below. */}
+          {durationStatus === 'insufficient' && canMarkSuccess && (
             <View style={s.warningBanner}>
               <Feather name="alert-triangle" size={16} color={COLORS.warning} />
               <Text style={s.warningText}>
@@ -366,8 +373,16 @@ export default function CompleteCycleScreen() {
             </View>
           )}
 
-          {/* Photo after */}
-          {photoAfter ? (
+          {/* Photo after — only when the cycle reached the minimum time.
+              If it ended early it can't pass, so an after-photo is pointless. */}
+          {!canMarkSuccess ? (
+            <View style={s.warningBanner}>
+              <Feather name="info" size={16} color={COLORS.warning} />
+              <Text style={s.warningText}>
+                Цикл завершено раніше мінімального часу — фото ПІСЛЯ не потрібне. Результат: повторити стерилізацію.
+              </Text>
+            </View>
+          ) : photoAfter ? (
             <View style={s.previewWrap}>
               <RotatedImage uri={photoAfter} style={s.preview} />
               <View style={s.previewActions}>
@@ -386,7 +401,7 @@ export default function CompleteCycleScreen() {
           )}
 
           {/* Before/After comparison */}
-          {photoAfter && photoBeforeUri && (
+          {canMarkSuccess && photoAfter && photoBeforeUri && (
             <View style={s.compareSection}>
               <Text style={s.compareSectionTitle}>Порівняння</Text>
               <View style={s.compareRow}>
@@ -410,9 +425,9 @@ export default function CompleteCycleScreen() {
                 <Feather name="info" size={16} color={COLORS.brand} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={s.infoBannerTitle}>Мінімальний час стерилізації — {MIN_CYCLE_MINUTES} хв</Text>
+                <Text style={s.infoBannerTitle}>Мінімальний час стерилізації — {recommendedMinutes} хв</Text>
                 <Text style={s.infoBannerText}>
-                  Для сухожарової стерилізації при 180°C потрібно щонайменше 60 хвилин. Пройшло лише {actualMinutes} хв — позначити як успішну неможливо.
+                  Для обраного режиму ({timerData?.temperature ?? '—'}°C) потрібно щонайменше {recommendedMinutes} хв. Пройшло лише {actualMinutes} хв — позначити як успішну неможливо.
                 </Text>
               </View>
             </View>
@@ -431,7 +446,7 @@ export default function CompleteCycleScreen() {
               if (!canMarkSuccess) {
                 Alert.alert(
                   'Недостатній час',
-                  `Мінімальний час стерилізації — ${MIN_CYCLE_MINUTES} хв. Пройшло лише ${actualMinutes} хв.\n\nНеможливо позначити як успішну.`,
+                  `Мінімальний час стерилізації — ${recommendedMinutes} хв. Пройшло лише ${actualMinutes} хв.\n\nНеможливо позначити як успішну.`,
                 );
                 return;
               }
@@ -445,7 +460,7 @@ export default function CompleteCycleScreen() {
               <Text style={s.resultDesc}>
                 {canMarkSuccess
                   ? 'Стерилізація пройшла успішно'
-                  : `Мінімум ${MIN_CYCLE_MINUTES} хв для підтвердження`}
+                  : `Мінімум ${recommendedMinutes} хв для підтвердження`}
               </Text>
             </View>
             {!canMarkSuccess && (
@@ -555,7 +570,7 @@ const s = StyleSheet.create({
   doneSub: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
   gradientInner: { flexDirection: 'row', height: 54, borderRadius: RADII.lg, alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 32 },
   gradientText: { fontSize: 16, fontWeight: '700', color: '#fff' },
-  igBtnWrap: { marginBottom: 12, borderRadius: RADII.lg + 2, shadowColor: '#C13584', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 14, elevation: 8 },
+  igBtnWrap: { marginBottom: 12, borderRadius: RADII.lg + 2, shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 14, elevation: 8 },
   igBtnInner: { flexDirection: 'row', height: 60, borderRadius: RADII.lg + 2, alignItems: 'center', paddingHorizontal: 20, gap: 14 },
   igIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   igBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },

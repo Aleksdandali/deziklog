@@ -21,6 +21,7 @@ interface SterilizerRow {
   brand: string | null;
   image_path: string | null;
   created_at: string;
+  is_archived: boolean;
 }
 
 export default function SterilizersScreen() {
@@ -46,6 +47,7 @@ export default function SterilizersScreen() {
       .from('sterilizers')
       .select('*')
       .eq('user_id', userId)
+      .eq('is_archived', false)
       .order('created_at');
     if (error && __DEV__) console.error('Sterilizers error:', error.message);
     setItems(data ?? []);
@@ -159,12 +161,26 @@ export default function SterilizersScreen() {
   };
 
   const handleDelete = (id: string, name: string) => {
-    Alert.alert('Видалити стерилізатор?', `"${name}" буде видалено назавжди.`, [
+    Alert.alert('Прибрати зі списку?', `"${name}" більше не показуватиметься у списку.`, [
       { text: 'Скасувати', style: 'cancel' },
-      { text: 'Видалити', style: 'destructive', onPress: async () => {
+      { text: 'Прибрати', style: 'destructive', onPress: async () => {
         if (!userId) return;
+        // Try a hard delete first (works for sterilizers never used in a cycle).
         const { error } = await supabase.from('sterilizers').delete().eq('id', id).eq('user_id', userId);
-        if (error && __DEV__) console.error('Delete sterilizer error:', error.message);
+        if (error) {
+          // Referenced by journal entries (FK) — archive instead so history stays intact.
+          const { error: archErr } = await supabase
+            .from('sterilizers')
+            .update({ is_archived: true })
+            .eq('id', id)
+            .eq('user_id', userId);
+          if (archErr) {
+            if (__DEV__) console.error('Archive sterilizer error:', archErr.message);
+            Alert.alert('Помилка', 'Не вдалося прибрати стерилізатор. Спробуйте ще раз.');
+            return;
+          }
+          Alert.alert('Прибрано', 'Стерилізатор приховано зі списку. Записи в журналі стерилізацій збережено.');
+        }
         load();
       }},
     ]);
