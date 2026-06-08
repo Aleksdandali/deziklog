@@ -6,8 +6,23 @@
  * Uses service_role to delete user from auth + cascade data.
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+
+// Purge every object under `${userId}/…` from a private per-user bucket.
+// Files live two levels deep (userId/<entityId>/<file>): cycle-photos holds
+// userId/<sessionId>/before.jpg + userId/sterilizer/<id>.jpg, solution-photos
+// holds userId/<solutionId>/photo.jpg.
+async function purgeUserBucket(admin: SupabaseClient, bucket: string, userId: string) {
+  const { data: folders } = await admin.storage.from(bucket).list(userId);
+  if (!folders?.length) return;
+  for (const folder of folders) {
+    const { data: files } = await admin.storage.from(bucket).list(`${userId}/${folder.name}`);
+    if (files?.length) {
+      await admin.storage.from(bucket).remove(files.map((f) => `${userId}/${folder.name}/${f.name}`));
+    }
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -47,21 +62,9 @@ Deno.serve(async (req) => {
     );
 
     // Delete user data in order (respecting foreign keys)
-    // 1. Storage files
-    const { data: photos } = await adminClient.storage
-      .from("cycle-photos")
-      .list(userId);
-    if (photos?.length) {
-      for (const folder of photos) {
-        const { data: files } = await adminClient.storage
-          .from("cycle-photos")
-          .list(`${userId}/${folder.name}`);
-        if (files?.length) {
-          const paths = files.map((f) => `${userId}/${folder.name}/${f.name}`);
-          await adminClient.storage.from("cycle-photos").remove(paths);
-        }
-      }
-    }
+    // 1. Storage files — every private per-user bucket.
+    await purgeUserBucket(adminClient, "cycle-photos", userId);
+    await purgeUserBucket(adminClient, "solution-photos", userId);
 
     // 2. Order items (via orders)
     const { data: orders } = await adminClient
@@ -84,6 +87,7 @@ Deno.serve(async (req) => {
     await adminClient.from("employees").delete().eq("user_id", userId);
     await adminClient.from("ai_chat_usage").delete().eq("user_id", userId);
     await adminClient.from("keycrm_lookup_usage").delete().eq("user_id", userId);
+    await adminClient.from("keycrm_history_usage").delete().eq("user_id", userId);
     await adminClient.from("profiles").delete().eq("id", userId);
 
     // 4. Delete auth user
