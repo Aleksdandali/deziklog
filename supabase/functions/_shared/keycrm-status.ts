@@ -22,13 +22,22 @@ export type AppOrderStatus =
   | 'delivered'
   | 'canceled';
 
-/** KeyCRM status_id → app status. Keys are numeric IDs from the KeyCRM tenant. */
+/**
+ * KeyCRM status_id → app status. Keys are the numeric IDs from THIS KeyCRM
+ * tenant's funnel (verified live via GET /order/status):
+ *   1 new · 4 Ожидаем оплату · 8 🚚Передан на сборку · 10 💳наложка ·
+ *   12 completed · 19 canceled · 22 Підтверджено ботом.
+ * (The old 2/3 ids did NOT exist in this tenant — confirmations/cancellations
+ * via 22/19 were silently dropped before this fix.)
+ */
 export const KEYCRM_STATUS_MAP: Record<number, AppOrderStatus> = {
-  1: 'pending',     // new
-  2: 'confirmed',   // confirmed
-  3: 'canceled',    // canceled
-  8: 'processing',  // 🚚 Передан на сборку
-  12: 'delivered',  // completed
+  1: 'pending',      // new
+  4: 'confirmed',    // 💲 Ожидаем оплату
+  8: 'processing',   // 🚚 Передан на сборку
+  10: 'confirmed',   // 💳 наложка
+  12: 'delivered',   // completed
+  19: 'canceled',    // canceled
+  22: 'confirmed',   // Підтверджено ботом
 };
 
 /** Webhook may send status as a string name instead of an id. */

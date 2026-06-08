@@ -47,39 +47,16 @@ async function findBuyerByPhone(
   return undefined;
 }
 
-/** App payment-method key → matcher for the KeyCRM payment-method name. */
-const PAYMENT_NAME_MATCH: Record<string, RegExp> = {
-  // "Накладений платіж" / "Наложенный платеж" / "Післяплата"
-  nalozhka: /накладен|наложен|післяплат|пiсляплат/i,
-  // "Оплата на розрахунковий рахунок …" (NOT the bare "Безготівковий розрахунок")
-  rozrahunok: /розрахунков\w*\s+рахун/i,
-};
-
 /**
- * Resolve a KeyCRM payment_method_id by matching the tenant's configured method
- * name (so we don't hardcode tenant-specific numeric ids). Returns undefined on
- * any failure — the caller then syncs the order without a payment line.
+ * App payment-method key → KeyCRM payment_method_id (this tenant's dictionary,
+ * GET /order/payment-method):
+ *   7  = Наложенный платеж, 15 = Оплата на рахунок.
+ * Hardcoded after confirming the live ids — reliable and 1 fewer API call/order.
  */
-async function resolveKeycrmPaymentMethodId(
-  key: string,
-  kcHeaders: Record<string, string>,
-): Promise<number | undefined> {
-  const re = PAYMENT_NAME_MATCH[key];
-  if (!re) return undefined;
-  try {
-    const res = await fetchWithRetry(
-      `${KEYCRM_API_URL}/order/payment-method?limit=50`,
-      { headers: kcHeaders },
-      { timeoutMs: 8000, retries: 1, label: "keycrm:payment-methods" },
-    );
-    if (!res.ok) return undefined;
-    const data = await res.json();
-    const list: Array<{ id: number; name: string }> = data?.data ?? (Array.isArray(data) ? data : []);
-    return list.find((m) => re.test(m?.name || ""))?.id;
-  } catch {
-    return undefined;
-  }
-}
+const PAYMENT_METHOD_IDS: Record<string, number> = {
+  nalozhka: 7,
+  rozrahunok: 15,
+};
 
 export async function syncOrderToKeyCRM(
   adminClient: SupabaseClient,
@@ -242,17 +219,12 @@ export async function syncOrderToKeyCRM(
     const { data: pmRow } = await adminClient
       .from("orders").select("payment_method").eq("id", orderId).maybeSingle();
     const pmKey = pmRow?.payment_method as string | null;
-    if (pmKey) {
-      const pmId = await resolveKeycrmPaymentMethodId(pmKey, kcHeaders);
-      if (pmId) {
-        const orderTotal = (items || []).reduce(
-          (sum: number, it: { price_at_order?: number; quantity?: number }) =>
-            sum + (it.price_at_order || 0) * (it.quantity || 0), 0);
-        keycrmPayload.payments = [{ payment_method_id: pmId, amount: orderTotal, status: "not_paid" }];
-      } else {
-        console.warn("KeyCRM payment method not resolved for key:", pmKey);
-      }
-    }
+    // Top-level payment_method_id = the order's chosen payment method (a label).
+    // NOT a payments[] entry — that would record an actual payment and mark the
+    // order paid, which is wrong for cash-on-delivery / invoice.
+    const pmId = pmKey ? PAYMENT_METHOD_IDS[pmKey] : undefined;
+    if (pmId) keycrmPayload.payment_method_id = pmId;
+    else if (pmKey) console.warn("KeyCRM: unknown payment_method key:", pmKey);
   } catch (e) {
     console.warn("KeyCRM payment attach failed:", e);
   }
