@@ -268,20 +268,16 @@ export default function CompleteCycleScreen() {
               disabled={sharing}
               style={[s.igBtnWrap, { opacity: sharing ? 0.6 : 1 }]}
             >
-              <LinearGradient
-                colors={[COLORS.brandDark, COLORS.brand]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={s.igBtnInner}
-              >
+              <View style={s.igBtnInner}>
                 <View style={s.igIconWrap}>
                   <Feather name="instagram" size={20} color="#FFFFFF" />
                 </View>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text style={s.igBtnText}>{sharing ? 'Підготовка...' : 'Поділитись в Stories'}</Text>
                   <Text style={s.igBtnHint}>Покажіть клієнтам вашу відповідальність</Text>
                 </View>
-              </LinearGradient>
+                <Feather name="chevron-right" size={18} color={COLORS.textTertiary} />
+              </View>
             </TouchableOpacity>
           )}
 
@@ -570,11 +566,11 @@ const s = StyleSheet.create({
   doneSub: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
   gradientInner: { flexDirection: 'row', height: 54, borderRadius: RADII.lg, alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 32 },
   gradientText: { fontSize: 16, fontWeight: '700', color: '#fff' },
-  igBtnWrap: { marginBottom: 12, borderRadius: RADII.lg + 2, shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 14, elevation: 8 },
-  igBtnInner: { flexDirection: 'row', height: 60, borderRadius: RADII.lg + 2, alignItems: 'center', paddingHorizontal: 20, gap: 14 },
-  igIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  igBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-  igBtnHint: { fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 1 },
+  igBtnWrap: { marginBottom: 12, borderRadius: RADII.lg + 2 },
+  igBtnInner: { flexDirection: 'row', minHeight: 60, borderRadius: RADII.lg + 2, alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 14, backgroundColor: COLORS.brandLight, borderWidth: 1, borderColor: 'rgba(75,86,158,0.14)' },
+  igIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center' },
+  igBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  igBtnHint: { fontSize: 11, color: COLORS.textSecondary, marginTop: 1 },
   secondaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14, marginTop: 8 },
   secondaryBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.textSecondary },
 });

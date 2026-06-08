@@ -5,7 +5,6 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Sharing from 'expo-sharing';
 import ViewShot from 'react-native-view-shot';
 import { getSessionById, getPhotoUrl, type SterilizationSession } from '../../lib/api';
@@ -283,12 +282,7 @@ export default function CycleDetailScreen() {
             disabled={sharing}
             style={[st.igBtnWrap, { opacity: sharing ? 0.6 : 1 }]}
           >
-            <LinearGradient
-              colors={[COLORS.brandDark, COLORS.brand]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={st.igBtnInner}
-            >
+            <View style={st.igBtnInner}>
               <View style={st.igIconWrap}>
                 <Feather name="instagram" size={18} color="#FFFFFF" />
               </View>
@@ -296,8 +290,8 @@ export default function CycleDetailScreen() {
                 <Text style={st.igBtnText}>{sharing ? 'Підготовка...' : 'Поділитись в Stories'}</Text>
                 <Text style={st.igBtnHint}>Покажіть клієнтам вашу відповідальність</Text>
               </View>
-              <Feather name="chevron-right" size={18} color="rgba(255,255,255,0.5)" />
-            </LinearGradient>
+              <Feather name="chevron-right" size={18} color={COLORS.textTertiary} />
+            </View>
           </TouchableOpacity>
         )}
 
@@ -394,11 +388,11 @@ const st = StyleSheet.create({
   photoEmpty: { height: 160, borderRadius: RADII.lg, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center' },
 
   // Instagram
-  igBtnWrap: { marginTop: 28, borderRadius: 16, shadowColor: COLORS.brand, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8 },
-  igBtnInner: { flexDirection: 'row', height: 56, borderRadius: 16, alignItems: 'center', paddingHorizontal: 18, gap: 12 },
-  igIconWrap: { width: 34, height: 34, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  igBtnText: { fontSize: 15, fontWeight: '600', color: '#FFFFFF', letterSpacing: 0.2 },
-  igBtnHint: { fontSize: 11, color: 'rgba(255,255,255,0.65)', marginTop: 2, letterSpacing: 0.1 },
+  igBtnWrap: { marginTop: 28, borderRadius: 16 },
+  igBtnInner: { flexDirection: 'row', minHeight: 56, borderRadius: 16, alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 12, backgroundColor: COLORS.brandLight, borderWidth: 1, borderColor: 'rgba(75,86,158,0.14)' },
+  igIconWrap: { width: 34, height: 34, borderRadius: 10, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center' },
+  igBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.text, letterSpacing: 0.2 },
+  igBtnHint: { fontSize: 11, color: COLORS.textSecondary, marginTop: 2, letterSpacing: 0.1 },
 
   // Export
   exportBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 52, borderRadius: 16, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white, marginTop: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
