@@ -13,6 +13,27 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// Actionable category for cycle-completion alerts: a "Зробити фото ПІСЛЯ" button
+// that opens the app straight to the after-photo flow.
+Notifications.setNotificationCategoryAsync('cycle-done', [
+  { identifier: 'TAKE_AFTER_PHOTO', buttonTitle: 'Зробити фото ПІСЛЯ', options: { opensAppToForeground: true } },
+]).catch(() => {});
+
+// Android: a dedicated HIGH-importance channel for cycle-completion alerts, so
+// the banner + sound + vibration break through even when the phone is on silent
+// or locked. Created eagerly at module load — a scheduled local notification
+// needs its channel to exist before push registration runs.
+if (Platform.OS === 'android') {
+  Notifications.setNotificationChannelAsync('cycle', {
+    name: 'Завершення циклу',
+    importance: Notifications.AndroidImportance.HIGH,
+    sound: 'default',
+    vibrationPattern: [0, 300, 200, 300],
+    lightColor: '#4b569e',
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+  }).catch(() => {});
+}
+
 // ── Permission & Push Token ─────────────────────────────
 
 export async function requestNotificationPermissions(): Promise<boolean> {
@@ -132,12 +153,107 @@ export async function cancelSolutionNotifications(solutionId: string): Promise<v
 }
 
 /**
- * Clear cycle timer notifications when a cycle is canceled.
+ * Schedule ALL cycle-completion alerts UP FRONT, at cycle start, with OS
+ * time-interval triggers — so they fire even when the app is backgrounded,
+ * locked, or killed (the common case for a 60-min cycle in a busy salon).
+ * The on-screen JS timer only updates the ring; it must NOT be the alert source.
+ *
+ * Idempotent: fixed identifiers mean re-calling REPLACES the schedule (used by
+ * the timer-screen foreground self-heal). Gated on notification_cycle_done for
+ * the "done"+nudges; the 60-min overheat cap always fires (safety).
+ */
+export async function scheduleCycleNotifications(
+  userId: string,
+  sessionId: string,
+  startedAtMs: number,
+  recommendedMinutes: number,
+): Promise<void> {
+  let doneAllowed = true;
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('notification_cycle_done')
+      .eq('id', userId)
+      .maybeSingle();
+    doneAllowed = data?.notification_cycle_done !== false;
+  } catch {
+    doneAllowed = true; // fail-open: a missed sterilization record is worse than an extra ping
+  }
+
+  const granted = await requestNotificationPermissions();
+  if (!granted) return; // in-app green "ГОТОВО" state (widget/timer) carries it
+
+  const MAX_CYCLE_SECONDS = 60 * 60;
+  const ESCALATION_OFFSETS_SEC = [120, 300]; // gentle nudges at +2 / +5 min
+  const elapsed = Math.floor((Date.now() - startedAtMs) / 1000);
+  const recSec = recommendedMinutes * 60;
+  const navData = { screen: 'complete-cycle', sessionId };
+
+  if (doneAllowed) {
+    const doneIn = Math.max(1, recSec - elapsed);
+    await Notifications.scheduleNotificationAsync({
+      identifier: `timer-done-${sessionId}`,
+      content: {
+        title: 'Час стерилізації досягнуто',
+        body: 'Мінімальний час пройшов. Зробіть фото індикатора ПІСЛЯ і завершіть цикл.',
+        sound: 'default',
+        interruptionLevel: 'timeSensitive',
+        categoryIdentifier: 'cycle-done',
+        data: navData,
+      },
+      trigger: { type: 'timeInterval', seconds: doneIn, channelId: 'cycle' } as any,
+    }).catch(() => {});
+
+    // Gentle escalation — NOT timeSensitive, so these obey Focus/DND.
+    for (let i = 0; i < ESCALATION_OFFSETS_SEC.length; i++) {
+      const nudgeIn = Math.max(1, recSec - elapsed + ESCALATION_OFFSETS_SEC[i]);
+      await Notifications.scheduleNotificationAsync({
+        identifier: `timer-nudge-${sessionId}-${i}`,
+        content: {
+          title: 'Цикл готовий',
+          body: 'Не забудьте зробити фото індикатора ПІСЛЯ та завершити запис.',
+          sound: 'default',
+          categoryIdentifier: 'cycle-done',
+          data: navData,
+        },
+        trigger: { type: 'timeInterval', seconds: nudgeIn, channelId: 'cycle' } as any,
+      }).catch(() => {});
+    }
+  }
+
+  // Hard overheat cap — always scheduled (ignores the comfort pref). Skipped when
+  // it would coincide with "done" (dry-heat min 60min == cap), to avoid a
+  // contradictory done+overheat pair.
+  const capIn = Math.max(1, MAX_CYCLE_SECONDS - elapsed);
+  if (capIn > recSec) {
+    await Notifications.scheduleNotificationAsync({
+      identifier: `timer-cap-${sessionId}`,
+      content: {
+        title: 'Завершіть цикл',
+        body: 'Минула 1 година. Подальший нагрів може пошкодити інструменти.',
+        sound: 'default',
+        interruptionLevel: 'timeSensitive',
+        categoryIdentifier: 'cycle-done',
+        data: navData,
+      },
+      trigger: { type: 'timeInterval', seconds: capIn, channelId: 'cycle' } as any,
+    }).catch(() => {});
+  }
+}
+
+/**
+ * Clear cycle timer notifications when a cycle is canceled OR completed.
  * Cancels any pending schedule AND dismisses an already-delivered banner from
- * the tray, so the master doesn't see "час досягнуто" after aborting.
+ * the tray, so the master doesn't see "час досягнуто" after aborting/finishing.
  */
 export async function cancelCycleNotifications(sessionId: string): Promise<void> {
-  for (const id of [`timer-done-${sessionId}`, `timer-cap-${sessionId}`]) {
+  const ids = [
+    `timer-done-${sessionId}`,
+    `timer-cap-${sessionId}`,
+    `timer-nudge-${sessionId}-0`,
+    `timer-nudge-${sessionId}-1`,
+  ];
+  for (const id of ids) {
     await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
     await Notifications.dismissNotificationAsync(id).catch(() => {});
   }

@@ -14,7 +14,7 @@ import ViewShot from 'react-native-view-shot';
 import { updateSession, uploadSessionPhoto, getSessionById, SessionConflictError } from '../lib/api';
 import { useAuth, useSessionGuard } from '../lib/auth-context';
 import { supabase } from '../lib/supabase';
-import { notifyCycleDone } from '../lib/notifications';
+import { notifyCycleDone, cancelCycleNotifications } from '../lib/notifications';
 import { COLORS } from '../lib/constants';
 import { RADII } from '../lib/theme';
 import { getDurationStatus } from '../lib/steri-config';
@@ -168,6 +168,7 @@ export default function CompleteCycleScreen() {
         if (__DEV__) console.warn('[complete-cycle] pre-validation failed:', err);
       }
       if (existing === null) {
+        await cancelCycleNotifications(sessionId);
         await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
         Alert.alert('Сесію не знайдено', 'Можливо, її було видалено.', [
           { text: 'OK', onPress: () => router.replace('/(tabs)') },
@@ -176,6 +177,7 @@ export default function CompleteCycleScreen() {
         return;
       }
       if (existing && existing.status !== 'in_progress') {
+        await cancelCycleNotifications(sessionId);
         await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
         Alert.alert('Цикл вже завершено', 'Цей сеанс уже було збережено в журналі.', [
           { text: 'OK', onPress: () => router.replace('/(tabs)/journal') },
@@ -207,6 +209,7 @@ export default function CompleteCycleScreen() {
         throw e;
       }
 
+      await cancelCycleNotifications(sessionId);
       await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
       if (finalActualMinutes !== null) setActualMinutes(finalActualMinutes);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

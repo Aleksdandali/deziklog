@@ -8,9 +8,8 @@ import * as Haptics from 'expo-haptics';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Circle as SvgCircle } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
 import { updateSession, getSessionById } from '../lib/api';
-import { cancelCycleNotifications } from '../lib/notifications';
+import { cancelCycleNotifications, scheduleCycleNotifications } from '../lib/notifications';
 import { useSessionGuard } from '../lib/auth-context';
 import { COLORS, FONT } from '../lib/constants';
 import { RADII } from '../lib/theme';
@@ -101,6 +100,11 @@ export default function TimerScreen() {
       // Clamp at mount too — covers the case where the user minimized the
       // app well past the cap and came back later.
       setElapsed(Math.min(MAX_CYCLE_SECONDS, Math.floor((Date.now() - data.startedAt) / 1000)));
+      // Self-heal: re-arm the pre-scheduled alerts (idempotent — fixed ids
+      // replace). Backfills cycles started before this build, Android reboots
+      // that drop alarms, and clock drift. If already past the minimum, the
+      // "done" alert fires ~immediately and the in-app green state shows.
+      scheduleCycleNotifications(uid, data.sessionId, data.startedAt, data.duration).catch(() => {});
     })();
   }, []);
 
@@ -133,38 +137,17 @@ export default function TimerScreen() {
       if (newElapsed > 0 && newElapsed % 60 === 0) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
-      // Haptic + local notification when recommended time reached
+      // Foreground-only haptic when reached. The actual ALERT (sound/banner) is
+      // scheduled AHEAD of time at cycle start (lib/notifications
+      // scheduleCycleNotifications), so it fires even when backgrounded/locked —
+      // this interval only runs on-screen and must NOT be the notification source.
       if (newElapsed === recSec && recSec > 0) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Notifications.scheduleNotificationAsync({
-          identifier: `timer-done-${timerData.sessionId}`,
-          content: {
-            title: 'Час стерилізації досягнуто',
-            body: 'Мінімальний час пройшов. Можна завершувати цикл.',
-            // See notifications.ts: 'default' (not true) is the canonical
-            // form that actually rings on iOS + uses the channel sound on
-            // Android.
-            sound: 'default',
-            interruptionLevel: 'timeSensitive',
-          },
-          trigger: null,
-        }).catch(() => {});
       }
-      // Hard cap: fire a stronger "stop the cycle" notification once and
-      // stop the interval entirely. `identifier` is deterministic so retries
-      // dedup; `setInterval` is cleared so we don't spam.
+      // Hard cap: stop the interval entirely (overheat protection). The cap
+      // banner is the pre-scheduled timer-cap notification.
       if (capped) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        Notifications.scheduleNotificationAsync({
-          identifier: `timer-cap-${timerData.sessionId}`,
-          content: {
-            title: 'Завершіть цикл',
-            body: 'Минула 1 година. Подальший нагрів може пошкодити інструменти.',
-            sound: 'default',
-            interruptionLevel: 'timeSensitive',
-          },
-          trigger: null,
-        }).catch(() => {});
         if (timerRef.current) {
           clearInterval(timerRef.current);
           timerRef.current = null;
@@ -286,7 +269,7 @@ export default function TimerScreen() {
         <View style={[s.statusPill, { backgroundColor: isCapped ? COLORS.danger + '18' : isReached ? COLORS.success + '18' : almostDone ? COLORS.warning + '18' : COLORS.brand + '12' }]}>
           <View style={[s.statusDot, { backgroundColor: ringColor }]} />
           <Text style={[s.statusText, { color: ringColor }]}>
-            {isCapped ? 'Завершіть цикл — 1 година' : isReached ? 'Мінімальний час досягнуто' : almostDone ? 'Майже готово' : 'Йде стерилізація'}
+            {isCapped ? 'Завершіть цикл — 1 година' : isReached ? 'Готово — зробіть фото ПІСЛЯ' : almostDone ? 'Майже готово' : 'Йде стерилізація'}
           </Text>
         </View>
 

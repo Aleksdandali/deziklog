@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { createSession, updateSession, uploadSessionPhoto, getInstruments } from '../lib/api';
+import { scheduleCycleNotifications } from '../lib/notifications';
 import { useAuth, useSessionGuard } from '../lib/auth-context';
 import { COLORS } from '../lib/constants';
 import { RADII } from '../lib/theme';
@@ -267,15 +268,20 @@ export default function NewCycleScreen() {
         started_at: now,
       });
 
+      const startedAtMs = Date.now();
       await AsyncStorage.setItem(ACTIVE_TIMER_KEY, JSON.stringify({
         sessionId: sess.id,
         duration: dur,
-        startedAt: Date.now(),
+        startedAt: startedAtMs,
         sterilizerName: sterilizerName.trim(),
         temperature: temp,
         instruments: instrumentsText.trim(),
         photoBeforeUri: photoUri,
       }));
+
+      // Schedule the completion/escalation/overheat alerts AHEAD of time so they
+      // fire even if the phone is locked or the app is killed during the cycle.
+      await scheduleCycleNotifications(uid, sess.id, startedAtMs, dur);
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       router.replace(`/timer?sessionId=${sess.id}&duration=${dur}`);

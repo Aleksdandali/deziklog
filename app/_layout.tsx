@@ -67,11 +67,13 @@ function RootNavigator() {
 
   // Handle notification taps — navigate to relevant screen
   useEffect(() => {
-    notifResponseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as Record<string, string> | undefined;
+    const route = (data?: Record<string, string>) => {
       if (!data?.screen) return;
       try {
-        if (data.screen === 'order' && data.orderId) {
+        if (data.screen === 'complete-cycle' && data.sessionId) {
+          // Cycle-done alert → straight to the after-photo flow for that session.
+          router.push(`/complete-cycle?sessionId=${data.sessionId}` as any);
+        } else if (data.screen === 'order' && data.orderId) {
           router.push(`/order/${data.orderId}` as any);
         } else if (data.screen === 'journal') {
           router.push('/(tabs)/journal' as any);
@@ -79,6 +81,17 @@ function RootNavigator() {
       } catch (err) {
         console.warn('Notification navigation failed:', err);
       }
+    };
+
+    // Cold start: the app was LAUNCHED by tapping a notification. The live
+    // listener does NOT fire for that launching tap — and a 60-min cycle almost
+    // always ends with the app killed, so this is the common path.
+    Notifications.getLastNotificationResponseAsync()
+      .then((response) => route(response?.notification.request.content.data as Record<string, string> | undefined))
+      .catch(() => {});
+
+    notifResponseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
+      route(response.notification.request.content.data as Record<string, string> | undefined);
     });
 
     return () => {

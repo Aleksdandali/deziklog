@@ -116,7 +116,7 @@ export default function ActiveTimerWidget() {
         </View>
         <View style={styles.info}>
           <Text style={styles.label}>
-            {isReached ? 'Можна завершувати' : 'Стерилізація в процесі'}
+            {isReached ? 'ГОТОВО — зробіть фото ПІСЛЯ' : 'Стерилізація в процесі'}
           </Text>
           <Text style={styles.time}>{`${min}:${sec} пройшло`}</Text>
         </View>
