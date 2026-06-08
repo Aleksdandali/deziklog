@@ -71,7 +71,8 @@ Deno.serve(async (req) => {
         description: p.description || "",
         category: p.category?.name || "",
         currency_code: "UAH",
-        weight: 0.5,
+        // K7: use per-product weight when set; fall back to 0.5kg for legacy rows.
+        weight: typeof p.weight === "number" && p.weight > 0 ? p.weight : 0.5,
         unit_type: "pc",
       }));
 

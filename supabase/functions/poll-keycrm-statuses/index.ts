@@ -1,12 +1,13 @@
 /**
  * Poll KeyCRM for order status changes.
  * Called by cron every 5 minutes or manually.
- * Checks all synced orders that are not yet delivered/canceled,
- * compares status with KeyCRM, and updates if changed.
+ * Checks synced orders that are not yet delivered/canceled, least-recently
+ * polled first (cursor), compares status with KeyCRM, and updates if changed.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { fetchWithRetry } from "../_shared/fetch-retry.ts";
 import { sendExpoPush, buildPushMessage } from "../_shared/expo-push.ts";
 import { timingSafeEqual } from "../_shared/timing-safe.ts";
 import { mapKeyCRMStatus, STATUS_LABELS } from "../_shared/keycrm-status.ts";
@@ -40,13 +41,14 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Get all orders that are synced but not in final state
+    // Synced, non-final orders — least-recently-polled first (M8 cursor) so that
+    // with >50 active orders the oldest still get checked instead of starving.
     const { data: orders, error } = await adminClient
       .from("orders")
-      .select("id, user_id, keycrm_order_id, status")
+      .select("id, user_id, keycrm_order_id, status, keycrm_status_changed_at")
       .not("keycrm_order_id", "is", null)
       .not("status", "in", '("delivered","canceled")')
-      .order("created_at", { ascending: false })
+      .order("last_polled_at", { ascending: true, nullsFirst: true })
       .limit(50);
 
     if (error || !orders?.length) {
@@ -62,26 +64,58 @@ Deno.serve(async (req) => {
     const results: any[] = [];
 
     for (const order of orders) {
+      const polledAt = new Date().toISOString();
       try {
-        const res = await fetch(
+        const res = await fetchWithRetry(
           `${KEYCRM_API_URL}/order/${order.keycrm_order_id}`,
           { headers: kcHeaders },
+          { timeoutMs: 8000, retries: 2, label: "keycrm:order-poll" },
         );
 
         if (!res.ok) {
           console.warn(`KeyCRM order ${order.keycrm_order_id}: ${res.status}`);
+          // Still advance the cursor so a persistently-erroring order doesn't
+          // block the rest of the queue forever.
+          await adminClient.from("orders").update({ last_polled_at: polledAt }).eq("id", order.id);
           continue;
         }
 
         const kcOrder = await res.json();
         const newStatus = mapKeyCRMStatus(kcOrder.status_id);
 
-        if (!newStatus || newStatus === order.status) continue;
+        // M9: surface unmapped statuses instead of silently dropping them.
+        if (!newStatus) {
+          console.error("[poll] unmapped KeyCRM status_id", {
+            order_id: order.id.slice(0, 8),
+            keycrm_order_id: order.keycrm_order_id,
+            status_id: kcOrder.status_id,
+          });
+          await adminClient.from("orders").update({ last_polled_at: polledAt }).eq("id", order.id);
+          continue;
+        }
 
-        // Update status in DB
+        if (newStatus === order.status) {
+          await adminClient.from("orders").update({ last_polled_at: polledAt }).eq("id", order.id);
+          continue;
+        }
+
+        // M3: monotonic guard — don't let a stale poll snapshot overwrite a newer
+        // change already applied (e.g. by the realtime webhook).
+        const changedAt: string | null =
+          kcOrder.status_changed_at ?? kcOrder.updated_at ?? null;
+        if (changedAt && order.keycrm_status_changed_at &&
+            new Date(changedAt).getTime() < new Date(order.keycrm_status_changed_at).getTime()) {
+          await adminClient.from("orders").update({ last_polled_at: polledAt }).eq("id", order.id);
+          continue;
+        }
+
         await adminClient
           .from("orders")
-          .update({ status: newStatus })
+          .update({
+            status: newStatus,
+            keycrm_status_changed_at: changedAt ?? polledAt,
+            last_polled_at: polledAt,
+          })
           .eq("id", order.id);
 
         // Send push notification
@@ -100,7 +134,7 @@ Deno.serve(async (req) => {
               `Ваше замовлення ${label}.`,
               { orderId: order.id, screen: "order" },
             ),
-          ]);
+          ], adminClient);
         }
 
         updated++;
@@ -115,6 +149,8 @@ Deno.serve(async (req) => {
         await new Promise((r) => setTimeout(r, 300));
       } catch (e) {
         console.warn(`Poll error for order ${order.id.slice(0, 8)}:`, e);
+        // Best-effort cursor advance even on error.
+        try { await adminClient.from("orders").update({ last_polled_at: polledAt }).eq("id", order.id); } catch { /* ignore */ }
       }
     }
 

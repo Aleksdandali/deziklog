@@ -6,6 +6,8 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAllKeycrmProducts, syncStockToDb } from "./keycrm-stock.ts";
 import { redact } from "./redact.ts";
+import { fetchWithRetry } from "./fetch-retry.ts";
+import { toE164, phonesMatchE164, buyerPhones } from "./phone.ts";
 import { FREE_SHIPPING_THRESHOLD } from "./shipping-policy.ts";
 
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
@@ -14,16 +16,6 @@ const NP_API_URL = "https://api.novaposhta.ua/v2.0/json/";
 // FREE_SHIPPING_THRESHOLD is defined in ./shipping-policy.ts (shared with create-np-ttn).
 export { FREE_SHIPPING_THRESHOLD };
 
-/** Normalize any phone string to E.164 (+380XXXXXXXXX). */
-function toE164(phone: string | null | undefined): string {
-  const d = String(phone || "").replace(/\D/g, "");
-  if (!d) return "";
-  if (d.startsWith("380")) return `+${d}`;
-  if (d.startsWith("0") && d.length === 10) return `+38${d}`;
-  if (d.length === 9) return `+380${d}`;
-  return d.startsWith("+") ? d : `+${d}`;
-}
-
 /** Search KeyCRM buyer by phone, trying multiple historical formats. */
 async function findBuyerByPhone(
   phone: string,
@@ -31,18 +23,25 @@ async function findBuyerByPhone(
 ): Promise<number | undefined> {
   const e164 = toE164(phone);
   const digits = e164.replace(/\D/g, "");
-  const variants = Array.from(new Set([e164, digits, digits.slice(2)])); // +380…, 380…, 0XXXXXXXXX
+  // +380… and 380… both normalize back to the same E.164 for verification.
+  // The bare-national `0XXXXXXXXX` (slice(2)) variant was DROPPED (H5): KeyCRM's
+  // filter[phone] is loose/substring, so a national-format query could match a
+  // different buyer and leak their identity/history.
+  const variants = Array.from(new Set([e164, digits]));
 
   for (const v of variants) {
     if (!v) continue;
     try {
-      const res = await fetch(
+      const res = await fetchWithRetry(
         `${KEYCRM_API_URL}/buyer?filter[phone]=${encodeURIComponent(v)}&limit=1`,
         { headers: kcHeaders },
+        { timeoutMs: 8000, retries: 2, label: "keycrm:buyer-find" },
       );
       if (!res.ok) continue;
       const data = await res.json();
-      if (data?.data?.length > 0) return data.data[0].id;
+      const b = data?.data?.[0];
+      // H5: only trust a match whose OWN phone equals our user's phone (E.164).
+      if (b?.id && buyerPhones(b).some((p) => phonesMatchE164(p, e164))) return b.id;
     } catch (_) { /* try next */ }
   }
   return undefined;
@@ -130,11 +129,11 @@ export async function syncOrderToKeyCRM(
     // Already cached — update buyer data in KeyCRM
     buyerId = profile.keycrm_buyer_id;
     try {
-      await fetch(`${KEYCRM_API_URL}/buyer/${buyerId}`, {
+      await fetchWithRetry(`${KEYCRM_API_URL}/buyer/${buyerId}`, {
         method: "PUT",
         headers: kcHeaders,
         body: JSON.stringify({ full_name: buyerName, phone: buyerPhone, email: userEmail || undefined }),
-      });
+      }, { timeoutMs: 8000, retries: 1, label: "keycrm:buyer-update" });
     } catch (e) {
       console.warn("KeyCRM buyer update failed:", e);
     }
@@ -145,11 +144,12 @@ export async function syncOrderToKeyCRM(
     // If not found — create
     if (!buyerId) {
       try {
-        const buyerRes = await fetch(`${KEYCRM_API_URL}/buyer`, {
+        // retries:0 — POST /buyer is non-idempotent (would create duplicates).
+        const buyerRes = await fetchWithRetry(`${KEYCRM_API_URL}/buyer`, {
           method: "POST",
           headers: kcHeaders,
           body: JSON.stringify({ full_name: buyerName, phone: buyerPhone, email: userEmail || undefined }),
-        });
+        }, { timeoutMs: 8000, retries: 0, label: "keycrm:buyer-create" });
         const buyerData = await buyerRes.json();
         if (buyerRes.ok && buyerData.id) buyerId = buyerData.id;
         else console.warn("KeyCRM buyer create:", redact(buyerData));
@@ -200,11 +200,14 @@ export async function syncOrderToKeyCRM(
     }),
   };
 
-  const keycrmRes = await fetch(`${KEYCRM_API_URL}/order`, {
+  // retries:0 — POST /order is non-idempotent. The helper gives us a hard
+  // timeout (the hang that previously caused the duplicate-order window) WITHOUT
+  // retrying a request that may have already created the order.
+  const keycrmRes = await fetchWithRetry(`${KEYCRM_API_URL}/order`, {
     method: "POST",
     headers: kcHeaders,
     body: JSON.stringify(keycrmPayload),
-  });
+  }, { timeoutMs: 12000, retries: 0, label: "keycrm:order-create" });
 
   const keycrmData = await keycrmRes.json();
 
@@ -217,10 +220,47 @@ export async function syncOrderToKeyCRM(
 
   const keycrmOrderId = keycrmData.id;
 
+  // 5a. H1/M1: persist keycrm_order_id IMMEDIATELY, before any further external
+  // call (NP TTN). The claim RPC guards on `keycrm_order_id IS NULL`, so from
+  // this point the order can never be re-claimed/re-POSTed even if this isolate
+  // dies mid-NP-block. Status 'order_created' = KeyCRM order exists, shipping
+  // may still be in progress.
+  {
+    const { error: persistErr } = await adminClient.from("orders").update({
+      keycrm_order_id: keycrmOrderId,
+      keycrm_sync_status: "order_created",
+      keycrm_sync_error: null,
+    }).eq("id", orderId);
+    if (persistErr) {
+      // KeyCRM order exists but we couldn't record its id. Do NOT route through
+      // markFailed (a retry would re-POST a duplicate). Flag for manual review.
+      console.error(`CRITICAL: KeyCRM order ${keycrmOrderId} created but id persist failed:`, persistErr.message);
+      await adminClient.from("orders").update({
+        keycrm_sync_status: "order_created_unpersisted",
+        keycrm_sync_error: `KeyCRM order ${keycrmOrderId} created but id persist failed: ${persistErr.message}`.slice(0, 1000),
+      }).eq("id", orderId).is("keycrm_order_id", null);
+      return { success: false, error: "keycrm_order_id persist failed", keycrm_order_id: keycrmOrderId };
+    }
+  }
+
   // 5. NP TTN (optional — only for warehouse delivery with NP refs)
   // Skip if already created on a previous attempt to avoid duplicate shipping labels.
   let ttn: string | null = order.np_ttn ?? null;
-  if (!ttn && order.city_ref && NP_API_KEY && (deliveryType === "warehouse" ? order.warehouse_ref : order.address_street)) {
+  // L5: NP sender refs are required to create a TTN. If any is missing, the
+  // request would silently fail and the order would be marked synced with no
+  // shipping label. Detect that explicitly and warn instead of relying on `!`.
+  const npSender = {
+    CitySender: Deno.env.get("NP_SENDER_ADDRESS_REF") ?? "",
+    Sender: Deno.env.get("NP_SENDER_REF") ?? "",
+    SenderAddress: Deno.env.get("NP_SENDER_WAREHOUSE_REF") ?? "",
+    ContactSender: Deno.env.get("NP_SENDER_CONTACT_REF") ?? "",
+    SendersPhone: Deno.env.get("NP_SENDER_PHONE") ?? "",
+  };
+  const npSenderConfigured = Object.values(npSender).every((v) => v.length > 0);
+  if (!ttn && !npSenderConfigured) {
+    console.warn(`[NP TTN] sender env(s) missing — skipping TTN for order ${order.id.slice(0, 8)}`);
+  }
+  if (!ttn && npSenderConfigured && order.city_ref && NP_API_KEY && (deliveryType === "warehouse" ? order.warehouse_ref : order.address_street)) {
     try {
       const payerType = order.total_amount >= FREE_SHIPPING_THRESHOLD ? "Sender" : "Recipient";
       const serviceType = deliveryType === "address" ? "WarehouseDoors" : "WarehouseWarehouse";
@@ -230,9 +270,7 @@ export async function syncOrderToKeyCRM(
         DateTime: new Date().toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric" }),
         CargoType: "Parcel", Weight: "1", ServiceType: serviceType, SeatsAmount: "1",
         Description: `Замовлення #${order.id.slice(0, 8)}`, Cost: String(order.total_amount),
-        CitySender: Deno.env.get("NP_SENDER_ADDRESS_REF")!, Sender: Deno.env.get("NP_SENDER_REF")!,
-        SenderAddress: Deno.env.get("NP_SENDER_WAREHOUSE_REF")!, ContactSender: Deno.env.get("NP_SENDER_CONTACT_REF")!,
-        SendersPhone: Deno.env.get("NP_SENDER_PHONE")!,
+        ...npSender,
         CityRecipient: order.city_ref,
         RecipientsPhone: recipientPhone, NewAddress: "1",
         RecipientCityName: order.city_name || "",
@@ -246,22 +284,26 @@ export async function syncOrderToKeyCRM(
         methodProperties.RecipientAddressName = `${order.address_street || ""} ${order.address_building || ""}`.trim();
       }
 
-      const npRes = await fetch(NP_API_URL, {
+      // retries:0 — InternetDocument.save is non-idempotent (would create a
+      // duplicate shipping label). Timeout only.
+      const npRes = await fetchWithRetry(NP_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apiKey: NP_API_KEY, modelName: "InternetDocument", calledMethod: "save", methodProperties }),
-      });
+      }, { timeoutMs: 8000, retries: 0, label: "np:ttn-save" });
       const npData = await npRes.json();
       if (npData.success && npData.data?.[0]) {
         ttn = npData.data[0].IntDocNumber;
         const deliveryCost = npData.data[0].CostOnSite;
+        // M1: persist the TTN we just paid NP to create BEFORE any further hop,
+        // so an isolate death after this cannot orphan the label.
+        await adminClient.from("orders").update({ np_ttn: ttn, np_delivery_cost: deliveryCost ? Number(deliveryCost) : null }).eq("id", orderId);
         try {
-          await fetch(`${KEYCRM_API_URL}/order/${keycrmOrderId}`, {
+          await fetchWithRetry(`${KEYCRM_API_URL}/order/${keycrmOrderId}`, {
             method: "PUT", headers: kcHeaders,
             body: JSON.stringify({ shipping: { tracking_code: ttn } }),
-          });
+          }, { timeoutMs: 8000, retries: 1, label: "keycrm:order-ttn" });
         } catch { /* non-critical */ }
-        await adminClient.from("orders").update({ np_ttn: ttn, np_delivery_cost: deliveryCost ? Number(deliveryCost) : null }).eq("id", orderId);
       } else {
         console.warn("NP TTN failed:", redact(npData.errors || npData.warnings));
       }
@@ -270,9 +312,8 @@ export async function syncOrderToKeyCRM(
     }
   }
 
-  // 6. Mark synced
+  // 6. Mark synced (keycrm_order_id + np_ttn already persisted above).
   await adminClient.from("orders").update({
-    keycrm_order_id: keycrmOrderId,
     keycrm_sync_status: "synced",
     keycrm_sync_error: null,
   }).eq("id", orderId);

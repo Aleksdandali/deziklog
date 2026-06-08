@@ -4,6 +4,9 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { fetchWithRetry } from "../_shared/fetch-retry.ts";
+import { redact } from "../_shared/redact.ts";
+import { buyerPhones, phonesMatchE164 } from "../_shared/phone.ts";
 
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
 const TIMEOUT_MS = 5000;
@@ -42,32 +45,34 @@ Deno.serve(async (req) => {
       return jsonRes({ found: false });
     }
 
-    // KeyCRM may store phones in mixed formats; try E.164, 380…, 0… variants.
+    // KeyCRM may store phones as E.164 or 380… — both normalize to the same
+    // E.164 for verification. The bare-national 0XXXXXXXXX variant is DROPPED
+    // (H5): filter[phone] is loose, so a national query could match a different
+    // buyer and leak their name/email/address.
     const phoneE164 = user.phone.startsWith("+") ? user.phone : `+${user.phone}`;
     const digits = phoneE164.replace(/\D/g, "");
-    const variants = Array.from(new Set([phoneE164, digits, digits.slice(2)]));
-
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    const variants = Array.from(new Set([phoneE164, digits]));
 
     let buyer: { id?: number; full_name?: string; email?: string; address?: string } | null = null;
     try {
       for (const v of variants) {
         if (!v) continue;
-        const res = await fetch(
+        const res = await fetchWithRetry(
           `${KEYCRM_API_URL}/buyer?filter[phone]=${encodeURIComponent(v)}&limit=1&include=addresses`,
           {
             headers: {
               Authorization: `Bearer ${KEYCRM_API_KEY}`,
               Accept: "application/json",
             },
-            signal: ctrl.signal,
           },
+          { timeoutMs: TIMEOUT_MS, retries: 2, label: "keycrm:buyer-lookup" },
         );
         if (!res.ok) continue;
         const data = await res.json();
         if (data?.data?.length > 0) {
           const b = data.data[0];
+          // H5: only trust a buyer whose own phone equals the user's (E.164).
+          if (!buyerPhones(b).some((p) => phonesMatchE164(p, phoneE164))) continue;
           // Prefer the explicit `city` field — full `address` may be the entire
           // delivery line ("Київ, вул. Лесі Українки, 23, кв. 5") and would look
           // wrong inside the form's "Місто" input.
@@ -82,9 +87,7 @@ Deno.serve(async (req) => {
         }
       }
     } catch (e) {
-      console.warn("[lookup-keycrm-buyer] KeyCRM error:", (e as Error).message);
-    } finally {
-      clearTimeout(timer);
+      console.warn("[lookup-keycrm-buyer] KeyCRM error:", redact((e as Error).message));
     }
 
     if (!buyer) return jsonRes({ found: false });
@@ -103,7 +106,7 @@ Deno.serve(async (req) => {
       address: buyer.address,
     });
   } catch (err) {
-    console.warn("[lookup-keycrm-buyer] error:", (err as Error).message);
+    console.warn("[lookup-keycrm-buyer] error:", redact((err as Error).message));
     return jsonRes({ found: false });
   }
 });

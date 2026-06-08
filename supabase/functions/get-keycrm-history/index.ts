@@ -12,6 +12,9 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { fetchWithRetry } from "../_shared/fetch-retry.ts";
+import { redact } from "../_shared/redact.ts";
+import { buyerPhones, phonesMatchE164 } from "../_shared/phone.ts";
 
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
 const TIMEOUT_MS = 8000;
@@ -106,30 +109,27 @@ Deno.serve(async (req) => {
       (synced ?? []).map((r: { keycrm_order_id: number }) => r.keycrm_order_id),
     );
 
-    // 3. Fetch from KeyCRM.
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    // 3. Fetch from KeyCRM. buyer_id was verified by exact phone match (or came
+    //    from the cached, already-verified profile.keycrm_buyer_id), so this is
+    //    a safe GET to retry on transient 429/5xx.
     let raw: KeyCRMOrder[] = [];
-    try {
+    {
       const url =
         `${KEYCRM_API_URL}/order?filter[buyer_id]=${buyerId}` +
         `&include=products.offer,status` +
         `&sort=-created_at&limit=${PAGE_LIMIT}`;
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         headers: {
           Authorization: `Bearer ${KEYCRM_API_KEY}`,
           Accept: "application/json",
         },
-        signal: ctrl.signal,
-      });
+      }, { timeoutMs: TIMEOUT_MS, retries: 2, label: "keycrm:history" });
       if (!res.ok) {
         console.warn("[get-keycrm-history] KeyCRM status:", res.status);
         return jsonRes({ orders: [] });
       }
       const data = await res.json();
       raw = Array.isArray(data?.data) ? data.data : [];
-    } finally {
-      clearTimeout(timer);
     }
 
     // 4. Normalize + dedupe.
@@ -139,7 +139,7 @@ Deno.serve(async (req) => {
 
     return jsonRes({ orders: normalized });
   } catch (err) {
-    console.warn("[get-keycrm-history] error:", (err as Error).message);
+    console.warn("[get-keycrm-history] error:", redact((err as Error).message));
     return jsonRes({ orders: [] });
   }
 });
@@ -147,32 +147,31 @@ Deno.serve(async (req) => {
 async function findBuyerIdByPhone(rawPhone: string, apiKey: string): Promise<number | null> {
   const phoneE164 = rawPhone.startsWith("+") ? rawPhone : `+${rawPhone}`;
   const digits = phoneE164.replace(/\D/g, "");
-  const variants = Array.from(new Set([phoneE164, digits, digits.slice(2)]));
+  // slice(2) national variant DROPPED (H5) — see phone.ts / sync-logic.
+  const variants = Array.from(new Set([phoneE164, digits]));
 
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
     for (const v of variants) {
       if (!v) continue;
-      const res = await fetch(
+      const res = await fetchWithRetry(
         `${KEYCRM_API_URL}/buyer?filter[phone]=${encodeURIComponent(v)}&limit=1`,
         {
           headers: {
             Authorization: `Bearer ${apiKey}`,
             Accept: "application/json",
           },
-          signal: ctrl.signal,
         },
+        { timeoutMs: TIMEOUT_MS, retries: 2, label: "keycrm:history-buyer" },
       );
       if (!res.ok) continue;
       const data = await res.json();
       const b = data?.data?.[0];
-      if (b?.id) return b.id as number;
+      // H5: only accept a buyer whose own phone exactly matches (E.164), so a
+      // loose KeyCRM match can't expose another person's order history.
+      if (b?.id && buyerPhones(b).some((p) => phonesMatchE164(p, phoneE164))) return b.id as number;
     }
   } catch (e) {
-    console.warn("[get-keycrm-history] buyer lookup error:", (e as Error).message);
-  } finally {
-    clearTimeout(timer);
+    console.warn("[get-keycrm-history] buyer lookup error:", redact((e as Error).message));
   }
   return null;
 }

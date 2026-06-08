@@ -10,8 +10,10 @@
 // (filled by reconcileKeycrmIds; see _shared/keycrm-products-lookup.ts).
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchWithRetry } from "./fetch-retry.ts";
 
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
+const MAX_PAGES = 20;
 
 export interface KeycrmProduct {
   id: number;
@@ -20,6 +22,9 @@ export interface KeycrmProduct {
   quantity?: number | null;
   in_reserve?: number | null;
   has_offers?: boolean;
+  // Image fields (used by restore-product-images; KeyCRM returns them on /products).
+  thumbnail_url?: string | null;
+  attachments_data?: string[];
 }
 
 export type StockOutcome =
@@ -52,9 +57,9 @@ export async function fetchAllKeycrmProducts(apiKey: string): Promise<Map<number
   const limit = 50;
   while (true) {
     const url = `${KEYCRM_API_URL}/products?limit=${limit}&page=${page}`;
-    const res = await fetch(url, {
+    const res = await fetchWithRetry(url, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
-    });
+    }, { timeoutMs: 8000, retries: 2, label: "keycrm:products-page" });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       throw new Error(`KeyCRM HTTP ${res.status}: ${body.slice(0, 300)}`);
@@ -65,7 +70,12 @@ export async function fetchAllKeycrmProducts(apiKey: string): Promise<Map<number
     const lastPage = json?.last_page ?? json?.meta?.last_page ?? 1;
     if (page >= lastPage || list.length === 0) break;
     page++;
-    if (page > 20) break;
+    if (page > MAX_PAGES) {
+      // L3: don't silently truncate the catalog — surface that the cap was hit
+      // so a growing catalog (>1000 products) is noticed instead of half-synced.
+      console.error(`[keycrm-stock] page cap ${MAX_PAGES} reached (last_page=${lastPage}); catalog truncated — raise MAX_PAGES.`);
+      break;
+    }
   }
   return byId;
 }

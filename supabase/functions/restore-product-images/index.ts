@@ -14,17 +14,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { timingSafeEqual } from "../_shared/timing-safe.ts";
 import { reconcileKeycrmIds } from "../_shared/keycrm-products-lookup.ts";
+import { fetchAllKeycrmProducts, type KeycrmProduct } from "../_shared/keycrm-stock.ts";
 
-const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
 const BUCKET = "product-images";
-
-interface KeycrmProduct {
-  id: number;
-  sku: string | null;
-  name: string;
-  thumbnail_url?: string | null;
-  attachments_data?: string[]; // plain URL strings
-}
 
 function extFromUrl(url: string, fallback = "jpg"): string {
   const clean = url.split("?")[0].toLowerCase();
@@ -38,31 +30,6 @@ function contentTypeFromExt(ext: string): string {
   if (ext === "webp") return "image/webp";
   if (ext === "gif") return "image/gif";
   return "image/jpeg";
-}
-
-async function fetchAllKeycrmProducts(apiKey: string): Promise<Map<number, KeycrmProduct>> {
-  // Paginate full product list, key map by KeyCRM internal id.
-  const byId = new Map<number, KeycrmProduct>();
-  let page = 1;
-  const limit = 50;
-  while (true) {
-    const url = `${KEYCRM_API_URL}/products?limit=${limit}&page=${page}`;
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`KeyCRM HTTP ${res.status}: ${body.slice(0, 300)}`);
-    }
-    const json = await res.json();
-    const list: KeycrmProduct[] = json?.data ?? [];
-    for (const p of list) byId.set(p.id, p);
-    const lastPage = json?.last_page ?? json?.meta?.last_page ?? 1;
-    if (page >= lastPage || list.length === 0) break;
-    page++;
-    if (page > 20) break;
-  }
-  return byId;
 }
 
 function pickImageUrl(p: KeycrmProduct): string | null {
