@@ -10,7 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ReAnimated, { FadeIn } from 'react-native-reanimated';
 import ViewShot from 'react-native-view-shot';
-import { updateSession, uploadSessionPhoto, getSessionById } from '../lib/api';
+import { updateSession, uploadSessionPhoto, getSessionById, SessionConflictError } from '../lib/api';
 import { useAuth, useSessionGuard } from '../lib/auth-context';
 import { supabase } from '../lib/supabase';
 import { notifyCycleDone } from '../lib/notifications';
@@ -54,6 +54,10 @@ export default function CompleteCycleScreen() {
   const [profileData, setProfileData] = useState<{ salon_name: string | null; city: string | null }>({ salon_name: null, city: null });
 
   const storyRef = useRef<ViewShot>(null);
+  // Synchronous in-flight guard. `saving` (state) flips a tick late, so a fast
+  // double-tap can enter doSave twice before the button disables — this ref
+  // blocks re-entry immediately.
+  const savingRef = useRef(false);
 
   // Load profile data for story card
   useEffect(() => {
@@ -135,10 +139,12 @@ export default function CompleteCycleScreen() {
   };
 
   const doSave = async (finalActualMinutes: number | null) => {
+    if (savingRef.current) return;
     if (!selectedResult || !sessionId) return;
     // Photo is mandatory only when the cycle could still pass; early-finish saves go through without it.
     if (canMarkSuccess && !photoAfter) return;
 
+    savingRef.current = true;
     setSaving(true);
     try {
       const uid = await getUid();
@@ -181,12 +187,24 @@ export default function CompleteCycleScreen() {
       const finalStatus = selectedResult === 'success' ? 'completed' : 'failed';
       const endedAt = new Date().toISOString();
 
-      await updateSession(sessionId, uid, {
-        photo_after_path: path,
-        ended_at: endedAt,
-        result: selectedResult,
-        status: finalStatus,
-      });
+      try {
+        // Atomic guard: completes only if the session is STILL in_progress.
+        await updateSession(sessionId, uid, {
+          photo_after_path: path,
+          ended_at: endedAt,
+          result: selectedResult,
+          status: finalStatus,
+        }, { expectedStatus: 'in_progress' });
+      } catch (e) {
+        if (e instanceof SessionConflictError) {
+          await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
+          Alert.alert('Цикл вже завершено', 'Цей сеанс уже було збережено в журналі.', [
+            { text: 'OK', onPress: () => router.replace('/(tabs)/journal') },
+          ]);
+          return;
+        }
+        throw e;
+      }
 
       await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
       if (finalActualMinutes !== null) setActualMinutes(finalActualMinutes);
@@ -200,6 +218,7 @@ export default function CompleteCycleScreen() {
       Alert.alert('Помилка', err instanceof Error ? err.message : 'Не вдалось зберегти');
     } finally {
       setSaving(false);
+      savingRef.current = false;
     }
   };
 

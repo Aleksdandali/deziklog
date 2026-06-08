@@ -201,6 +201,19 @@ export async function createSession(userId: string, session: {
   return data;
 }
 
+/**
+ * Thrown by updateSession when an `expectedStatus` guard matches zero rows —
+ * i.e. the session already moved out of that status (e.g. completed on another
+ * device or by a racing double-tap). Lets callers distinguish "lost the race"
+ * from a real DB error.
+ */
+export class SessionConflictError extends Error {
+  constructor(public readonly sessionId: string) {
+    super('session_conflict');
+    this.name = 'SessionConflictError';
+  }
+}
+
 export async function updateSession(
   sessionId: string,
   userId: string,
@@ -208,14 +221,30 @@ export async function updateSession(
     'status' | 'started_at' | 'ended_at'
     | 'photo_before_path' | 'photo_after_path'
     | 'result'>>,
+  opts?: { expectedStatus?: SterilizationSession['status'] },
 ): Promise<SterilizationSession> {
-  const { data, error } = await supabase
+  const query = supabase
     .from('sterilization_sessions')
     .update(updates)
     .eq('id', sessionId)
-    .eq('user_id', userId)
-    .select()
-    .single();
+    .eq('user_id', userId);
+
+  // Optimistic-concurrency guard: only write when the row is STILL in the
+  // expected status, pushing the check into the UPDATE itself so it's atomic
+  // at the DB. A double-tap or a second device can't both flip
+  // in_progress → completed — the loser matches zero rows and gets a
+  // SessionConflictError instead of silently overwriting ended_at/result.
+  if (opts?.expectedStatus) {
+    const { data, error } = await query
+      .eq('status', opts.expectedStatus)
+      .select()
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new SessionConflictError(sessionId);
+    return data;
+  }
+
+  const { data, error } = await query.select().single();
   if (error) throw error;
   return data;
 }

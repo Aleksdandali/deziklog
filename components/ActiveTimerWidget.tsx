@@ -8,6 +8,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../lib/constants';
 
 const ACTIVE_TIMER_KEY = 'active_timer';
+// Mirror the timer screen's hard overheat cap (timer.tsx): past 60 min the
+// cycle must be finalized, so the widget freezes its count there too.
+const MAX_CYCLE_SECONDS = 60 * 60;
 
 interface TimerData {
   sessionId: string;
@@ -21,7 +24,7 @@ interface TimerData {
 export default function ActiveTimerWidget() {
   const router = useRouter();
   const [timerData, setTimerData] = useState<TimerData | null>(null);
-  const [remaining, setRemaining] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
 
   // Re-check AsyncStorage every time Home tab gains focus.
   // `cancelled` guards against the race where focus is lost during the
@@ -38,14 +41,15 @@ export default function ActiveTimerWidget() {
       if (stored) {
         const data: TimerData = JSON.parse(stored);
         setTimerData(data);
-        const durationSec = data.duration * 60;
-        const elapsed = Math.floor((Date.now() - data.startedAt) / 1000);
-        setRemaining(Math.max(0, durationSec - elapsed));
+        // Count UP elapsed time, clamped at the overheat cap — mirrors the
+        // timer screen exactly so Home and the timer never disagree.
+        const tick = () => Math.min(MAX_CYCLE_SECONDS, Math.floor((Date.now() - data.startedAt) / 1000));
+        setElapsed(tick());
 
         interval = setInterval(() => {
-          const el = Math.floor((Date.now() - data.startedAt) / 1000);
-          const rem = Math.max(0, durationSec - el);
-          setRemaining(rem);
+          const el = tick();
+          setElapsed(el);
+          if (el >= MAX_CYCLE_SECONDS && interval) { clearInterval(interval); interval = null; }
         }, 1000);
       } else {
         setTimerData(null);
@@ -61,9 +65,13 @@ export default function ActiveTimerWidget() {
 
   if (!timerData) return null;
 
-  const min = String(Math.floor(remaining / 60)).padStart(2, '0');
-  const sec = String(remaining % 60).padStart(2, '0');
-  const isDone = remaining === 0;
+  const durationSec = timerData.duration * 60;
+  // "Reached" = minimum exposure time hit. The cycle is NOT auto-finished —
+  // the master still has to open the timer and complete it (mirrors timer.tsx
+  // `isReached`, which shows "готово", not "завершено").
+  const isReached = durationSec > 0 && elapsed >= durationSec;
+  const min = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const sec = String(elapsed % 60).padStart(2, '0');
 
   return (
     <TouchableOpacity
@@ -71,19 +79,19 @@ export default function ActiveTimerWidget() {
       onPress={() => router.push(`/timer?sessionId=${timerData.sessionId}&duration=${timerData.duration}`)}
     >
       <LinearGradient
-        colors={isDone ? [COLORS.success, '#2E7D32'] : [COLORS.brand, COLORS.brandDark]}
+        colors={isReached ? [COLORS.success, '#2E7D32'] : [COLORS.brand, COLORS.brandDark]}
         style={styles.widget}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
       >
         <View style={styles.iconWrap}>
-          <Feather name={isDone ? 'check-circle' : 'clock'} size={24} color={COLORS.white} />
+          <Feather name={isReached ? 'check-circle' : 'clock'} size={24} color={COLORS.white} />
         </View>
         <View style={styles.info}>
           <Text style={styles.label}>
-            {isDone ? 'Стерилізація завершена!' : 'Стерилізація в процесі'}
+            {isReached ? 'Можна завершувати' : 'Стерилізація в процесі'}
           </Text>
-          <Text style={styles.time}>{isDone ? 'Зробіть фото ПІСЛЯ' : `${min}:${sec} залишилось`}</Text>
+          <Text style={styles.time}>{`${min}:${sec} пройшло`}</Text>
         </View>
         <Feather name="chevron-right" size={20} color="rgba(255,255,255,0.7)" />
       </LinearGradient>

@@ -15,6 +15,14 @@ const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 /** Daily per-user cap. Counter resets at UTC midnight via DATE column. */
 const DAILY_LIMIT = 30;
 
+// Per-field input caps. The daily limit bounds CALL COUNT but not per-call
+// size, so without these one allowed call can still carry near-max input
+// tokens (cost amplification). Cap the message and each history item, and
+// keep only the last N turns of context.
+const MAX_MESSAGE_CHARS = 4000;
+const MAX_HISTORY_ITEMS = 10;
+const MAX_HISTORY_ITEM_CHARS = 2000;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -70,14 +78,23 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
+    if (message.length > MAX_MESSAGE_CHARS) {
+      return new Response(
+        JSON.stringify({ reply: `Повідомлення задовге (максимум ${MAX_MESSAGE_CHARS} символів). Будь ласка, скоротіть запит.` }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     // Build messages array with conversation history
     const messages: Array<{ role: string; content: string }> = [];
 
     if (history && Array.isArray(history)) {
-      for (const msg of history.slice(-10)) {
-        if (msg.role && msg.content) {
-          messages.push({ role: msg.role, content: msg.content });
+      for (const msg of history.slice(-MAX_HISTORY_ITEMS)) {
+        // Whitelist role (Anthropic only accepts user/assistant) and cap each
+        // item's length so echoed history can't inflate input-token cost.
+        const role = msg?.role === "user" || msg?.role === "assistant" ? msg.role : null;
+        if (role && typeof msg.content === "string" && msg.content) {
+          messages.push({ role, content: msg.content.slice(0, MAX_HISTORY_ITEM_CHARS) });
         }
       }
     }
