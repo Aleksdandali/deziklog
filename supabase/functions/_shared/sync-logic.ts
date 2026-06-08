@@ -6,12 +6,13 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAllKeycrmProducts, syncStockToDb } from "./keycrm-stock.ts";
 import { redact } from "./redact.ts";
+import { FREE_SHIPPING_THRESHOLD } from "./shipping-policy.ts";
 
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
 const NP_API_URL = "https://api.novaposhta.ua/v2.0/json/";
 
-/** Orders >= this amount (UAH) get free shipping (sender pays) */
-export const FREE_SHIPPING_THRESHOLD = 2000;
+// FREE_SHIPPING_THRESHOLD is defined in ./shipping-policy.ts (shared with create-np-ttn).
+export { FREE_SHIPPING_THRESHOLD };
 
 /** Normalize any phone string to E.164 (+380XXXXXXXXX). */
 function toE164(phone: string | null | undefined): string {

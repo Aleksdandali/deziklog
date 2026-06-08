@@ -71,3 +71,10 @@ export const SHADOW = {
 
 /** Milliseconds in one day — used for daysLeft calculations */
 export const MS_PER_DAY = 86_400_000;
+
+/**
+ * Orders >= this amount (UAH) get free shipping (sender pays). Display-only on
+ * the client — the server is authoritative (mirrors FREE_SHIPPING_THRESHOLD in
+ * supabase/functions/_shared/shipping-policy.ts; keep the two values in sync).
+ */
+export const FREE_SHIPPING_THRESHOLD = 2000;

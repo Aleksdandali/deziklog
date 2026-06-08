@@ -8,7 +8,6 @@
 //
 // Auth: `x-cron-secret` header matching CRON_SECRET env.
 // Modes:
-//   GET  ?probe=1   → returns raw first-page KeyCRM /products response.
 //   GET  ?dry_run=1 → returns the would-be in_stock changes, no writes.
 //   POST (default)  → applies updates.
 
@@ -17,8 +16,6 @@ import { corsHeaders } from "../_shared/cors.ts";
 import { timingSafeEqual } from "../_shared/timing-safe.ts";
 import { fetchAllKeycrmProducts, syncStockToDb } from "../_shared/keycrm-stock.ts";
 import { reconcileKeycrmIds } from "../_shared/keycrm-products-lookup.ts";
-
-const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -37,28 +34,7 @@ Deno.serve(async (req) => {
   }
 
   const url = new URL(req.url);
-  const probe = url.searchParams.get("probe") === "1";
   const dryRun = url.searchParams.get("dry_run") === "1";
-
-  if (probe) {
-    const [rp, ro] = await Promise.all([
-      fetch(`${KEYCRM_API_URL}/products?limit=3`, {
-        headers: { Authorization: `Bearer ${keycrmKey}`, Accept: "application/json" },
-      }),
-      fetch(`${KEYCRM_API_URL}/offers?limit=3`, {
-        headers: { Authorization: `Bearer ${keycrmKey}`, Accept: "application/json" },
-      }),
-    ]);
-    const [jp, jo] = await Promise.all([
-      rp.json().catch(() => null),
-      ro.json().catch(() => null),
-    ]);
-    return jsonRes({
-      probe: true,
-      products: { status: rp.status, body: jp },
-      offers: { status: ro.status, body: jo },
-    });
-  }
 
   try {
     const keycrmMap = await fetchAllKeycrmProducts(keycrmKey);

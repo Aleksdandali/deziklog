@@ -16,7 +16,7 @@ import { useCart, CartItem } from '../lib/cart-context';
 import { useAuth, useSessionGuard } from '../lib/auth-context';
 import { createOrder, searchNPCities, getNPWarehouses, resolveNPCityByName, getProfile, getProductsStockStatus } from '../lib/api';
 import { supabase } from '../lib/supabase';
-import { COLORS, FONT, RADIUS } from '../lib/constants';
+import { COLORS, FONT, RADIUS, FREE_SHIPPING_THRESHOLD } from '../lib/constants';
 import type { NPCity, NPWarehouse, DeliveryType, Profile } from '../lib/types';
 import { formatPrice } from '../lib/formatters';
 
@@ -585,8 +585,8 @@ export default function CartScreen() {
               </View>
               <View style={s.summaryRow}>
                 <Text style={s.summaryLabel}>Доставка</Text>
-                <Text style={[s.summaryValue, total >= 2000 && { color: COLORS.success }]}>
-                  {total >= 2000 ? 'Безкоштовно' : 'За тарифами НП'}
+                <Text style={[s.summaryValue, total >= FREE_SHIPPING_THRESHOLD && { color: COLORS.success }]}>
+                  {total >= FREE_SHIPPING_THRESHOLD ? 'Безкоштовно' : 'За тарифами НП'}
                 </Text>
               </View>
               <View style={[s.summaryRow, { borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 12, marginTop: 4 }]}>
@@ -658,7 +658,7 @@ export default function CartScreen() {
 
       {/* Bottom */}
       <View style={s.cartFooter}>
-        {total >= 2000 && (
+        {total >= FREE_SHIPPING_THRESHOLD && (
           <View style={s.freeShipping}>
             <Text style={s.freeShippingText}>Безкоштовна доставка!</Text>
           </View>

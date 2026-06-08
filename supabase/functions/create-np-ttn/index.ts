@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { redact } from "../_shared/redact.ts";
+import { FREE_SHIPPING_THRESHOLD } from "../_shared/shipping-policy.ts";
 
 const NP_API_URL = "https://api.novaposhta.ua/v2.0/json/";
 const NP_API_KEY = Deno.env.get("NOVA_POSHTA_API_KEY")!;
@@ -71,8 +72,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Free shipping for orders >= 2000 UAH
-    const payerType = order.total_amount >= 2000 ? "Sender" : "Recipient";
+    // Free shipping for orders >= FREE_SHIPPING_THRESHOLD UAH (sender pays)
+    const payerType = order.total_amount >= FREE_SHIPPING_THRESHOLD ? "Sender" : "Recipient";
 
     const npPayload = {
       apiKey: NP_API_KEY,

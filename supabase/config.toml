@@ -377,6 +377,16 @@ deno_version = 2
 [functions.ai-assistant]
 verify_jwt = true
 
+# Externally-invoked functions whose callers do NOT send a Supabase JWT. They
+# authenticate in-code and fail closed, and MUST keep verify_jwt = false —
+# otherwise a redeploy would make the gateway 401 their legitimate callers.
+# Pinned here so the auth posture is reproducible from source, not just dashboard.
+[functions.keycrm-order-webhook]
+verify_jwt = false  # auth via x-webhook-secret (KEYCRM_WEBHOOK_SECRET)
+
+[functions.send-sms-hook]
+verify_jwt = false  # auth via Standard Webhooks signature (SEND_SMS_HOOK_SECRET)
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 

@@ -140,8 +140,11 @@ Deno.serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
+    // Log full detail server-side only; never leak internal/upstream error text
+    // (env var names, raw Claude API body) to the client.
+    console.error("[ai-assistant]", err);
     return new Response(
-      JSON.stringify({ reply: `Помилка: ${(err as Error).message}` }),
+      JSON.stringify({ reply: "Сталася помилка. Спробуйте пізніше." }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }

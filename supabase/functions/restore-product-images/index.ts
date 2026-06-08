@@ -127,34 +127,6 @@ Deno.serve(async (req) => {
 
   const url = new URL(req.url);
   const dryRun = url.searchParams.get("dry_run") === "1";
-  const probe = url.searchParams.get("probe") === "1";
-  const listNames = url.searchParams.get("list_names") === "1";
-
-  // PROBE: dump raw first page of KeyCRM products to inspect shape
-  if (probe) {
-    const r = await fetch(`${KEYCRM_API_URL}/products?limit=3`, {
-      headers: { Authorization: `Bearer ${keycrmKey}`, Accept: "application/json" },
-    });
-    const j = await r.json().catch(() => null);
-    return new Response(JSON.stringify({ probe: true, status: r.status, body: j }, null, 2), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  // LIST_NAMES: dump all KeyCRM product names + thumbnails for mapping
-  if (listNames) {
-    const map = await fetchAllKeycrmProducts(keycrmKey);
-    const items = Array.from(map.values()).map((p) => ({
-      id: p.id,
-      name: p.name,
-      sku: p.sku,
-      thumbnail: pickImageUrl(p),
-    }));
-    return new Response(JSON.stringify({ list_names: true, total: items.length, items }, null, 2), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
 
