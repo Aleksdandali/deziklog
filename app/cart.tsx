@@ -584,20 +584,18 @@ export default function CartScreen() {
             <Text style={[s.sectionLabel, { marginTop: 8 }]}>Оплата</Text>
             <View style={s.toggleRow}>
               <TouchableOpacity
-                style={[s.toggleChip, paymentMethod === 'nalozhka' && s.toggleChipActive]}
+                style={[s.toggleChip, s.payChip, paymentMethod === 'nalozhka' && s.toggleChipActive]}
                 onPress={() => { Haptics.selectionAsync(); setPaymentMethod('nalozhka'); }}
                 activeOpacity={0.8}
               >
-                <Feather name="truck" size={14} color={paymentMethod === 'nalozhka' ? '#fff' : COLORS.textSecondary} />
-                <Text style={[s.toggleChipText, paymentMethod === 'nalozhka' && s.toggleChipTextActive]}>Накладений платіж</Text>
+                <Text style={[s.toggleChipText, s.payChipText, paymentMethod === 'nalozhka' && s.toggleChipTextActive]} numberOfLines={2}>Накладений платіж</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[s.toggleChip, paymentMethod === 'rozrahunok' && s.toggleChipActive]}
+                style={[s.toggleChip, s.payChip, paymentMethod === 'rozrahunok' && s.toggleChipActive]}
                 onPress={() => { Haptics.selectionAsync(); setPaymentMethod('rozrahunok'); }}
                 activeOpacity={0.8}
               >
-                <Feather name="credit-card" size={14} color={paymentMethod === 'rozrahunok' ? '#fff' : COLORS.textSecondary} />
-                <Text style={[s.toggleChipText, paymentMethod === 'rozrahunok' && s.toggleChipTextActive]}>Розрахунковий рахунок</Text>
+                <Text style={[s.toggleChipText, s.payChipText, paymentMethod === 'rozrahunok' && s.toggleChipTextActive]} numberOfLines={2}>Розрахунковий рахунок</Text>
               </TouchableOpacity>
             </View>
 
@@ -766,6 +764,8 @@ const s = StyleSheet.create({
   toggleChipActive: { borderColor: COLORS.brand, backgroundColor: COLORS.brand },
   toggleChipText: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
   toggleChipTextActive: { color: '#fff' },
+  payChip: { minHeight: 50, paddingHorizontal: 8 },
+  payChipText: { textAlign: 'center', lineHeight: 17 },
 
   // Address fields
   addressRow: { flexDirection: 'row', gap: 12, marginTop: 4 },

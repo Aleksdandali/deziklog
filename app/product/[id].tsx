@@ -39,6 +39,35 @@ function stripHtml(html: string): string {
     .trim();
 }
 
+// Dezik product descriptions are stored as ONE flat paragraph (no markup), with
+// section headers ("Призначення", "Сфера застосування", …) inline. Split them
+// back into header + body sections for a readable layout. Unknown text before
+// the first header is the intro block.
+const SECTION_HEADERS = [
+  'Призначення', 'Принцип дії', 'Дія', 'Переваги', 'Сфера застосування',
+  'Обмеження', 'Протипоказання', 'Склад', 'Спосіб використання',
+  'Як використовувати', 'Застосування', 'Приготування розчину', 'Очищення',
+  'Дезінфекція', 'Стерилізація', 'Зберігання', 'Запобіжні заходи', 'Важливо',
+  'Характеристики', 'Комплектація', 'Інформація про продукт', 'Про продукт',
+];
+
+function parseDescription(text: string): { header?: string; body: string }[] {
+  const sorted = [...SECTION_HEADERS].sort((a, b) => b.length - a.length);
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`\\s*(${sorted.map(esc).join('|')})\\s+`, 'g');
+  const parts = text.split(re); // [intro, h1, b1, h2, b2, …]
+  const out: { header?: string; body: string }[] = [];
+  const intro = parts[0]?.trim();
+  if (intro) out.push({ body: intro });
+  for (let i = 1; i < parts.length; i += 2) {
+    const header = parts[i]?.trim();
+    // Put numbered steps ("1. …") on their own lines.
+    const body = (parts[i + 1] || '').trim().replace(/\s+(\d+\.\s)/g, '\n$1');
+    if (header || body) out.push({ header, body });
+  }
+  return out;
+}
+
 export default function ProductDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -164,8 +193,11 @@ export default function ProductDetailScreen() {
             <View style={s.divider} />
             <View style={s.descSection}>
               <Text style={s.descTitle}>Опис</Text>
-              {description.split(/\n{2,}/).map((para, i) => (
-                <Text key={i} style={[s.descText, i > 0 && { marginTop: 14 }]}>{para.trim()}</Text>
+              {parseDescription(description).map((sec, i) => (
+                <View key={i} style={i > 0 ? { marginTop: 16 } : undefined}>
+                  {sec.header ? <Text style={s.descHeader}>{sec.header}</Text> : null}
+                  {sec.body ? <Text style={s.descText}>{sec.body}</Text> : null}
+                </View>
               ))}
             </View>
           </>
@@ -250,6 +282,7 @@ const s = StyleSheet.create({
   divider: { height: 1, backgroundColor: COLORS.border, marginHorizontal: 24, marginTop: 24 },
   descSection: { paddingHorizontal: 24, paddingTop: 22 },
   descTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text, marginBottom: 12, letterSpacing: 0.2 },
+  descHeader: { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 5 },
   descText: { fontSize: 15, color: COLORS.textSecondary, lineHeight: 24 },
 
   specsSection: { paddingHorizontal: 24, paddingTop: 22 },
