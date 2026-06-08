@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { AppText as Text, AppTextInput as TextInput } from '../components/AppText';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -33,6 +34,7 @@ const PACK_OPTIONS = [
 
 export default function NewCycleScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const getUid = useSessionGuard();
   const userId = session?.user?.id;
@@ -327,7 +329,7 @@ export default function NewCycleScreen() {
         <View style={st.previewOverlay} />
 
         {/* Top bar */}
-        <SafeAreaView style={st.previewTopBar}>
+        <View style={[st.previewTopBar, { paddingTop: insets.top }]}>
           <View style={st.previewHeader}>
             <TouchableOpacity style={st.previewCloseBtn} onPress={() => { setPhotoPreview(null); }}>
               <Feather name="x" size={20} color="#fff" />
@@ -335,10 +337,10 @@ export default function NewCycleScreen() {
             <Text style={st.previewTitle}>Фото індикатора</Text>
             <View style={{ width: 40 }} />
           </View>
-        </SafeAreaView>
+        </View>
 
         {/* Bottom actions */}
-        <SafeAreaView style={st.previewBottom}>
+        <View style={[st.previewBottom, { paddingBottom: insets.bottom + 16 }]}>
           <Text style={st.previewHint}>Переконайтеся, що індикатор чітко видно</Text>
           <View style={st.previewActions}>
             <TouchableOpacity style={st.retakeBtn} onPress={handleRetakePhoto} activeOpacity={0.85}>
@@ -358,7 +360,7 @@ export default function NewCycleScreen() {
               </LinearGradient>
             </TouchableOpacity>
           </View>
-        </SafeAreaView>
+        </View>
       </View>
     );
   }
@@ -620,9 +622,9 @@ const st = StyleSheet.create({
   previewHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
   previewCloseBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
   previewTitle: { fontSize: 16, fontWeight: '600', color: '#fff' },
-  // Extra bottom padding for iPhone X+ home-indicator clearance. SafeAreaView
-  // with `position: absolute` is unreliable, so we hard-pad here.
-  previewBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingBottom: 28, zIndex: 10 },
+  // Bottom inset is applied dynamically inline via useSafeAreaInsets
+  // (insets.bottom + 16) — adaptive across devices / home-indicator heights.
+  previewBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingTop: 16, zIndex: 10 },
   previewHint: { fontSize: 13, color: 'rgba(255,255,255,0.85)', textAlign: 'center', marginBottom: 14 },
   previewActions: { flexDirection: 'row', gap: 12, alignItems: 'stretch' },
   // Equal split — retake is a primary alternative, not a secondary nudge.
