@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, SafeAreaView, Linking } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, SafeAreaView, Linking } from 'react-native';
+import { AppText as Text } from './AppText';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView,
+  View, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView,
   Alert, ActivityIndicator,
 } from 'react-native';
+import { AppText as Text } from '../../components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';

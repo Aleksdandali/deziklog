@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity,
+  View, FlatList, StyleSheet, SafeAreaView, TouchableOpacity,
   Alert, RefreshControl, ActivityIndicator,
 } from 'react-native';
+import { AppText as Text } from '../../components/AppText';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';

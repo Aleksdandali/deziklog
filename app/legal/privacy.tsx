@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
+import { View, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
+import { AppText as Text } from '../../components/AppText';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { COLORS } from '../../lib/constants';

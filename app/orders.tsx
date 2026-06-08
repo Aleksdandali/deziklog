@@ -5,9 +5,10 @@
 
 import React, { useState, useCallback, useRef } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity,
+  View, FlatList, StyleSheet, SafeAreaView, TouchableOpacity,
   RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
+import { AppText as Text } from '../components/AppText';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';

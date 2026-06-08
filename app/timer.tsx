@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Animated, Easing, Alert,
+  View, TouchableOpacity, StyleSheet, SafeAreaView, Animated, Easing, Alert,
 } from 'react-native';
+import { AppText as Text } from '../components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -10,7 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { updateSession, getSessionById } from '../lib/api';
 import { useSessionGuard } from '../lib/auth-context';
-import { COLORS } from '../lib/constants';
+import { COLORS, FONT } from '../lib/constants';
 import { RADII } from '../lib/theme';
 import { formatElapsed } from '../lib/steri-config';
 
@@ -385,7 +386,7 @@ const s = StyleSheet.create({
   timerCenter: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   timeRow: { flexDirection: 'row', alignItems: 'baseline' },
   timeDigit: { fontSize: 44, fontWeight: '200', color: COLORS.text, fontVariant: ['tabular-nums'], letterSpacing: 2 },
-  timeColon: { fontSize: 44, fontWeight: '200', color: COLORS.text, marginHorizontal: 2 },
+  timeColon: { fontSize: 44, fontWeight: '200', fontFamily: FONT.extralight, color: COLORS.text, marginHorizontal: 2 },
   timerLabel: { fontSize: 12, fontWeight: '600', color: COLORS.textSecondary, letterSpacing: 1, marginTop: 4 },
 
   recommendedRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },

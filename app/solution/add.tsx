@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, Alert, Image,
+  View, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, Alert, Image,
 } from 'react-native';
+import { AppText as Text } from '../../components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';

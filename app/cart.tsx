@@ -1,9 +1,10 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity,
-  TextInput, Alert, KeyboardAvoidingView, Platform, ScrollView,
+  View, FlatList, StyleSheet, SafeAreaView, TouchableOpacity,
+  Alert, KeyboardAvoidingView, Platform, ScrollView,
   ActivityIndicator, Animated, LayoutAnimation, UIManager,
 } from 'react-native';
+import { AppText as Text, AppTextInput as TextInput } from '../components/AppText';
 import { useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';

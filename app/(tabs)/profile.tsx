@@ -1,9 +1,10 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity,
-  TextInput, Alert, Switch, ActivityIndicator, LayoutAnimation, UIManager, Platform,
+  View, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity,
+  Alert, Switch, ActivityIndicator, LayoutAnimation, UIManager, Platform,
   KeyboardAvoidingView,
 } from 'react-native';
+import { AppText as Text, AppTextInput as TextInput } from '../../components/AppText';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';

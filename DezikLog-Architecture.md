@@ -1,726 +1,190 @@
-# Dezik Log — Архітектурний документ для Cursor
-## MVP v0.1 | Expo React Native
+# Dezik SteriLog — Архітектурний документ
+
+## Production · Expo SDK 55 · React Native · Supabase
+
+> Цей документ описує **реальну** архітектуру застосунку станом на поточну гілку.
+> Він замінив застарілий MVP-документ (expo-sqlite / Zustand / статичний каталог),
+> який описував інший, нереалізований застосунок. Якщо код і документ розходяться —
+> джерело правди це код; онови документ.
 
 ---
 
-## РОЛЬ
+## 0. Що це і для кого
 
-Ти — Senior React Native Developer. Ти реалізуєш мобільний додаток **Dezik Log** — журнал контролю стерилізації для nail-майстрів. Ти працюєш строго по цьому документу. Не придумуй — реалізуй по специфікації.
+**Dezik SteriLog** — мобільний застосунок для nail/beauty-майстрів України, що поєднує:
 
----
+1. **Журнал контролю стерилізації** — облік циклів стерилізації з фото індикатора (до/після), таймером витримки та експортом у PDF за **формою №257/о** (наказ МОЗ), готовою до перевірки.
+2. **Магазин розхідників DEZIK** — каталог, кошик, оформлення з доставкою Нова Пошта, синхронізація замовлень із KeyCRM.
 
-## 0. ЗАМКНУТИЙ ЦИКЛ (КЛЮЧОВА ЛОГІКА)
+Стратегія: володіти щоденним робочим процесом майстра (логування стерилізації), а потім монетизувати попит на розхідники, який цей процес породжує.
 
-Весь додаток побудований як замкнута екосистема. Кожна дія майстра логічно веде до наступної і замикається на продукцію DEZIK:
+### Замкнутий цикл (цільова філософія)
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                                                     │
-│  СТЕРИЛІЗАЦІЯ                                       │
-│  Майстер завантажує інструменти в стерилізатор      │
-│         ↓                                           │
-│  ЖУРНАЛ                                             │
-│  Записує цикл в Dezik Log                           │
-│  (1 пакет використано, розчин витрачається)          │
-│         ↓                                           │
-│  ТРЕКІНГ ВИТРАТ                                     │
-│  Додаток автоматично рахує:                         │
-│  - скільки пакетів використано за місяць             │
-│  - скільки розчину витрачено                         │
-│  - коли треба замовити нові матеріали                │
-│         ↓                                           │
-│  ПІДКАЗКА                                           │
-│  "Ви використали ~150 пакетів. Замовити зі          │
-│   знижкою 10%?" (SmartSuggestion на Home + Catalog) │
-│         ↓                                           │
-│  ПОКУПКА                                            │
-│  Кнопка "Купити" → dezik.com.ua (UTM з додатку)     │
-│         ↓                                           │
-│  ОТРИМАННЯ МАТЕРІАЛІВ                               │
-│  Нові пакети DEZIK, розчин Деланол                  │
-│         ↓                                           │
-│  СТЕРИЛІЗАЦІЯ (знову по колу)                       │
-│                                                     │
-└─────────────────────────────────────────────────────┘
+Стерилізація → Журнал (1 пакет/розчин витрачено) → Трекінг витрат
+   → Підказка дозамовити → Покупка → Нові матеріали → Стерилізація…
 ```
 
-### Точки замикання:
+Точки замикання, що **реалізовані**: PDF-звіт із брендом DEZIK; Instagram-Stories шеринг успішного циклу (`lib/share-instagram.ts`); калькулятор/AI-асистент по розчинах, що тягне майстра назад між циклами.
 
-**Журнал → Каталог:** Кожен завершений цикл = 1 використаний пакет. Після N циклів — банер "Час замовити пакети". В деталях запису (journal/[id]) — посилання "Потрібні нові пакети?" → каталог.
-
-**Таймер → Інструкції:** На екрані таймера (поки чекає) — блок "Порада": коротка порада зі стерилізації (контент з фізичного журналу DEZIK). Внизу: "Більше порад → Каталог/Інструкції".
-
-**Профіль → Нагадування → Журнал:** Нагадування "Час стерилізувати" → майстер відкриває додаток → новий цикл → журнал → трекінг витрат → покупка.
-
-**Каталог → Стерилізація:** Після покупки (перехід на dezik.com.ua) — push через 3 дні: "Отримали замовлення? Не забудьте записати стерилізацію в журнал!"
-
-**PDF → Бренд:** Кожен PDF-звіт має футер "Згенеровано в Dezik Log by DEZIK · dezik.com.ua". Інспектор бачить бренд DEZIK. Сарафанне радіо.
-
-**Фізичний журнал → Додаток:** На обкладинці фізичного журналу DEZIK — QR-код → App Store/Google Play. Майстер, який купив журнал, завантажує додаток.
+Точка, яку варто **повернути** (наразі відсутня): автоматичний трекінг споживання → таймчасна підказка дозамовлення (`SmartSuggestion`). Журнал уже генерує сигнал споживання, але магазин його ще не використовує — дві половини стоять поруч, а не живлять одна одну. Це найвищий за важелем продуктовий пункт беклогу.
 
 ---
 
-## 1. СТЕК
+## 1. Стек (реальний)
 
 | Компонент | Технологія |
 |---|---|
-| Framework | Expo SDK 52+ (managed workflow) |
-| Мова | TypeScript |
-| Навігація | Expo Router (file-based routing) |
-| UI / Стилі | NativeWind v4 (Tailwind CSS for React Native) |
-| Локальна БД | expo-sqlite |
-| Таймер/Push | expo-notifications (local notifications) |
-| Камера | expo-image-picker |
-| PDF | expo-print + expo-sharing |
-| Іконки | lucide-react-native |
-| Стейт | Zustand |
-| Зберігання файлів | expo-file-system |
+| Framework | Expo SDK ~55 (managed), React 19 / RN 0.8x, New Architecture |
+| Мова | TypeScript (strict) |
+| Навігація | **expo-router** (file-based) |
+| Бекенд | **Supabase** — Auth + Postgres (RLS) + Storage + Edge Functions (Deno) |
+| Стан | **React Context** (`auth-context`, `cart-context`) — **без Redux/Zustand** |
+| Локальне сховище | **AsyncStorage** (сесія Supabase, активний таймер, легкий кеш) |
+| Стилі | **React Native StyleSheet** + токени з `lib/constants.ts` — **без NativeWind** |
+| Шрифт | Inter (`@expo-google-fonts/inter`) через обгортку `components/AppText` |
+| Графіка/анімація | react-native-svg, reanimated, lottie, expo-linear-gradient |
+| Іконки | lucide-react-native (таб-бар), @expo/vector-icons (Feather) |
+| Камера/медіа | expo-camera, expo-image-picker, expo-image, expo-media-library |
+| PDF/шеринг | expo-print, expo-sharing, react-native-view-shot, react-native-share |
+| Push | expo-notifications (локальні + через Supabase-вебхуки) |
 
-**НЕ ВИКОРИСТОВУЙ:** React Navigation (використовуй Expo Router), styled-components, Redux, AsyncStorage (використовуй expo-sqlite).
+> Чого **немає** (всупереч старому документу): `expo-sqlite`, `zustand`, `nativewind`, `lib/db.ts`, `lib/store.ts`, `data/catalog.json`.
 
 ---
 
-## 2. СТРУКТУРА ПРОЕКТУ
+## 2. Структура проєкту (маршрути)
 
 ```
-dezik-log/
-├── app/                          # Expo Router pages
-│   ├── _layout.tsx               # Root layout (tab navigation)
-│   ├── (tabs)/                   # Tab group
-│   │   ├── _layout.tsx           # Tab bar layout (5 tabs)
-│   │   ├── index.tsx             # Головна (Home)
-│   │   ├── journal.tsx           # Журнал стерилізації
-│   │   ├── catalog.tsx           # Каталог DEZIK
-│   │   └── profile.tsx           # Профіль
-│   ├── new-cycle.tsx             # Новий цикл (modal)
-│   ├── timer.tsx                 # Таймер (modal, fullscreen)
-│   ├── complete-cycle.tsx        # Завершення циклу (modal)
-│   ├── sterilizer/
-│   │   ├── add.tsx               # Додати стерилізатор
-│   │   └── [id].tsx              # Редагувати стерилізатор
-│   ├── journal/
-│   │   └── [id].tsx              # Деталі запису
-│   └── catalog/
-│       └── [id].tsx              # Деталі товару
-├── components/
-│   ├── ui/                       # Базові UI компоненти
-│   │   ├── Button.tsx
-│   │   ├── Card.tsx
-│   │   ├── Input.tsx
-│   │   ├── Select.tsx
-│   │   ├── SegmentedControl.tsx
-│   │   ├── Badge.tsx
-│   │   └── EmptyState.tsx
-│   ├── TimerRing.tsx             # Кругова шкала таймера (SVG)
-│   ├── CycleCard.tsx             # Картка циклу в журналі
-│   ├── StatsBlock.tsx            # Блок статистики (3 картки)
-│   ├── ActiveTimerWidget.tsx     # Віджет активного таймера на Home
-│   ├── CatalogItem.tsx           # Картка товару в каталозі
-│   └── SmartSuggestion.tsx       # Банер "Час замовити?"
-├── lib/
-│   ├── db.ts                     # SQLite: init, migrations, queries
-│   ├── store.ts                  # Zustand store
-│   ├── notifications.ts          # Local push notifications
-│   ├── pdf.ts                    # PDF generation
-│   ├── types.ts                  # TypeScript types
-│   └── constants.ts              # Кольори, режими, каталог
-├── assets/
-│   ├── images/                   # Іконки, лого DEZIK
-│   └── catalog/                  # Фото товарів DEZIK (локальні)
-└── data/
-    └── catalog.json              # Статичний каталог DEZIK
+app/
+├── _layout.tsx              # Root: завантаження шрифтів, auth-гейт, Stack
+├── auth.tsx                 # Вхід (телефон/email OTP)
+├── onboarding.tsx           # Онбординг / заповнення профілю
+├── new-cycle.tsx            # Створення циклу стерилізації
+├── timer.tsx                # Активний таймер (рахунок ВГОРУ, cap 60 хв)
+├── complete-cycle.tsx       # Завершення циклу (фото ПІСЛЯ, результат)
+├── cart.tsx                 # Кошик / оформлення (НП, профіль-префіл)
+├── ai-chat.tsx              # AI-асистент по розчинах (Claude)
+├── orders.tsx               # Історія замовлень (native + legacy KeyCRM)
+├── (tabs)/
+│   ├── _layout.tsx          # Таб-бар (5 вкладок)
+│   ├── index.tsx            # Головна
+│   ├── journal.tsx          # Журнал стерилізації
+│   ├── catalog.tsx          # Магазин
+│   ├── solutions.tsx        # Розчини (калькулятор/трекінг)
+│   └── profile.tsx          # Кабінет
+├── cycle/[id].tsx           # Деталі циклу (+ шеринг, PDF)
+├── cabinet/                 # employees · instruments · solutions · sterilizers
+├── solution/                # add · [id]
+├── product/[id].tsx         # Деталі товару
+├── order/[id].tsx           # Деталі замовлення
+├── guide/[id].tsx           # Інструкція/гайд
+└── legal/privacy.tsx        # Політика конфіденційності
 ```
 
----
-
-## 3. КОЛЬОРИ ТА ДИЗАЙН
-
-```typescript
-// lib/constants.ts
-
-export const COLORS = {
-  primary: '#4b569e',        // DEZIK brand — основний
-  primaryDark: '#363f75',    // Акцент, градієнти
-  primaryLight: '#eceef5',   // Фон карток, тінт
-
-  background: '#FFFFFF',     // Основний фон
-  surface: '#F8F9FC',        // Фон під картками
-  border: '#E5E7EB',         // Бордери
-
-  text: '#1B1B1B',           // Основний текст
-  textSecondary: '#6B7280',  // Вторинний текст
-  textTertiary: '#9CA3AF',   // Плейсхолдери
-
-  success: '#43A047',        // Індикатор спрацював
-  error: '#E53935',          // Індикатор не спрацював
-  warning: '#F9A825',        // Попередження
-
-  white: '#FFFFFF',
-};
-
-export const STERILIZATION_MODES = {
-  dry_heat: [
-    { id: 'dh-180-60', temp: 180, duration: 60, label: '180°C / 60 хв' },
-    { id: 'dh-160-150', temp: 160, duration: 150, label: '160°C / 150 хв' },
-  ],
-  autoclave: [
-    { id: 'ac-134-5', temp: 134, duration: 5, label: '134°C / 5 хв' },
-    { id: 'ac-121-20', temp: 121, duration: 20, label: '121°C / 20 хв' },
-  ],
-} as const;
-
-// Поради для таймера (замикання на каталог)
-export const STERILIZATION_TIPS = [
-  { text: 'Використовуйте індикатори 5 класу для найточнішого контролю стерилізації', link: 'indicators' },
-  { text: 'Розчин Деланолу зберігає активність до 14 діб. Не забувайте вчасно замінювати', link: 'delanol' },
-  { text: 'Правильний розмір пакета: 60×100 для фрез, 75×150 для пушера, 100×200 для комбі-набору', link: 'kraft-packs' },
-  { text: 'Біонол Форте має мийні властивості — два в одному: дезінфекція + очищення', link: 'bionol' },
-  { text: 'Після стерилізації пакет зберігає стерильність до 55 днів', link: 'kraft-packs' },
-  { text: 'Інструм очищує метал від нальоту та пригорілостей. Ідеально перед стерилізацією', link: 'instrum' },
-  { text: 'Регулярне ТО стерилізатора — запорука коректної роботи та точних результатів', link: 'sterilizers' },
-  { text: 'Деланол — єдиний засіб DEZIK зі спороцидною дією. Для холодної стерилізації', link: 'delanol' },
-] as const;
-```
-
-**Шрифт:** Системний (SF Pro на iOS, Roboto на Android). НЕ підключай зовнішні шрифти.
-
-**Стиль:** Чистий, мінімалістичний. Великі кнопки (h-14, мін 48px touch target). Rounded corners 14-16px. Card-based UI. Максимум 2 дії на екран.
-
-**Візуальний референс:** Figma Make прототип (в zip-файлі). Дотримуйся структури та пропорцій з прототипу.
+Вкладки (`app/(tabs)/_layout.tsx`): **Головна · Журнал · Магазин · Розчини · Кабінет**.
 
 ---
 
-## 4. ТИПИ ДАНИХ
+## 3. Дизайн-система
 
-```typescript
-// lib/types.ts
+**Єдине джерело токенів — `lib/constants.ts`.** `lib/theme.ts` — лише legacy-аліаси (`RADII`→`RADIUS`, `SHADOWS`→`SHADOW`), щоб старі імпорти резолвилися. Нові екрани імпортують з `constants`.
 
-export type SterilizationType = 'dry_heat' | 'autoclave';
-export type CycleStatus = 'running' | 'completed' | 'cancelled';
-export type IndicatorResult = 'passed' | 'failed';
+- `COLORS` — бренд (`brand #4b569e`, `brandDark`, `brandLight`), текст, поверхні, статуси (`success/danger/warning` + `*Bg`).
+- `RADIUS` — `sm:8 md:12 lg:14 xl:20 full:999 pill:40` (єдина шкала; `RADII` = аліас).
+- `SHADOW` — `sm/md` (за розміром) + `card/button` (семантичні); `SHADOWS` = аліас.
+- `SPACING` — `4/8/16/24/32/48`.
+- `FONT` — `extralight/light/regular/medium/semibold/bold/extrabold` → відповідні `Inter_*` фейси.
 
-export interface Sterilizer {
-  id: string;
-  name: string;                    // "Microstop M2"
-  type: SterilizationType;
-  serialNumber?: string;
-  photoUri?: string;
-  maintenanceDate?: string;        // ISO date
-  createdAt: string;               // ISO datetime
-}
+### Шрифт (важливо)
 
-export interface Cycle {
-  id: string;
-  sterilizerId: string;
-  sterilizationType: SterilizationType;
-  temperature: number;             // °C
-  durationMinutes: number;
-  instruments?: string;            // "Кусачки, пушер, фрези"
-  note?: string;
-  indicatorPhotoUri?: string;      // Local file URI
-  indicatorResult?: IndicatorResult;
-  startedAt: string;               // ISO datetime
-  completedAt?: string;            // ISO datetime
-  status: CycleStatus;
-  createdAt: string;
-}
+Inter завантажується у `app/_layout.tsx` як **окремі статичні фейси** (200…800). RN **ігнорує `fontWeight`**, коли задано іменований фейс, тому:
 
-export interface UserProfile {
-  name: string;
-  salonName?: string;
-  salonAddress?: string;
-  salonLogoUri?: string;
-  phone?: string;
-  email?: string;
-  language: 'uk' | 'ru';
-  reminderEnabled: boolean;
-  reminderIntervalHours: number;   // default: 2
-}
-
-export interface CatalogProduct {
-  id: string;
-  category: string;
-  title: string;
-  description: string;
-  priceRange: string;
-  imageUri: string;                // Local asset
-  buyUrl: string;                  // dezik.com.ua URL with UTM
-  icon: string;                    // Lucide icon name
-}
-```
+- **Не імпортуй `Text`/`TextInput` напряму з `react-native`.** Використовуй обгортки:
+  ```ts
+  import { AppText as Text, AppTextInput as TextInput } from '<rel>/components/AppText';
+  ```
+- `components/AppText.tsx` читає `fontWeight` і підставляє потрібний Inter-фейс через `lib/fonts.ts` (`fontFamilyForWeight`). Явно заданий `fontFamily` (включно з `monospace`) — зберігається.
+- Краєві випадки (`Animated.Text`, `tabBarLabelStyle`, `headerTitleStyle`) обгорткою не покриваються — став `fontFamily: FONT.*` напряму.
 
 ---
 
-## 5. ЛОКАЛЬНА БАЗА ДАНИХ (SQLite)
+## 4. Дані: типи, API-шар, контексти
 
-```typescript
-// lib/db.ts
+**`lib/types.ts`** — інтерфейси, що віддзеркалюють схему БД: `Profile` (вкл. `keycrm_buyer_id`, `expo_push_token`, `delivery_type: 'warehouse'|'address'`, `salon_name`, `city`), `Instrument`, `Sterilizer`, `Employee`, `Solution`, `Order`/`OrderItem`, `Product`/`ProductCategory`, `KeyCRMHistoryOrder`.
 
-import * as SQLite from 'expo-sqlite';
+**`lib/api.ts`** — репозиторій-шар над Supabase (профілі, інструменти, стерилізатори, працівники, розчини, сесії стерилізації, замовлення, товари). Тут живе виважена «бойова» логіка:
+- завантаження фото з ретраями та експоненційним backoff;
+- компенсуючий delete, щоб не лишати «осиротілих» замовлень;
+- **ціна/сума — авторитетні на сервері** (тригери БД; клієнтські значення ігноруються);
+- **атомарне завершення циклу** через `updateSession(..., { expectedStatus: 'in_progress' })` + `SessionConflictError`.
 
-const db = SQLite.openDatabaseSync('deziklog.db');
+> Конвенція: нові екрани мають ходити в БД **через `api.ts`**, а не робити `supabase.from(...)` напряму. Історично частина екранів порушує це — не множ борг.
 
-export function initDatabase() {
-  db.execSync(`
-    CREATE TABLE IF NOT EXISTS sterilizers (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      type TEXT NOT NULL CHECK(type IN ('dry_heat', 'autoclave')),
-      serial_number TEXT,
-      photo_uri TEXT,
-      maintenance_date TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
+**Жива таблиця сесій — `sterilization_sessions`** (інтерфейс `SterilizationSession` в `api.ts`, статуси `draft|in_progress|completed|failed|canceled`). Legacy-тип `SterilizationCycle` в `types.ts` лишився лише для маппінгу в PDF-генератор.
 
-    CREATE TABLE IF NOT EXISTS cycles (
-      id TEXT PRIMARY KEY,
-      sterilizer_id TEXT NOT NULL REFERENCES sterilizers(id),
-      sterilization_type TEXT NOT NULL,
-      temperature INTEGER NOT NULL,
-      duration_minutes INTEGER NOT NULL,
-      instruments TEXT,
-      note TEXT,
-      indicator_photo_uri TEXT,
-      indicator_result TEXT CHECK(indicator_result IN ('passed', 'failed')),
-      started_at TEXT NOT NULL,
-      completed_at TEXT,
-      status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running', 'completed', 'cancelled')),
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
+**Контексти:** `lib/auth-context.tsx` (стан авторизації — акуратний автомат Supabase-подій: окремо `INITIAL_SESSION`/`TOKEN_REFRESHED`/`SIGNED_OUT`, 5s-таймаут ініціалізації, refresh на foreground), `lib/cart-context.tsx` (кошик із персистом в AsyncStorage).
 
-    CREATE TABLE IF NOT EXISTS profile (
-      id INTEGER PRIMARY KEY CHECK(id = 1),
-      name TEXT NOT NULL DEFAULT '',
-      salon_name TEXT,
-      salon_address TEXT,
-      salon_logo_uri TEXT,
-      phone TEXT,
-      email TEXT,
-      language TEXT NOT NULL DEFAULT 'uk',
-      reminder_enabled INTEGER NOT NULL DEFAULT 1,
-      reminder_interval_hours INTEGER NOT NULL DEFAULT 2
-    );
-
-    INSERT OR IGNORE INTO profile (id) VALUES (1);
-
-    -- Трекінг витрат матеріалів
-    CREATE TABLE IF NOT EXISTS consumption (
-      id TEXT PRIMARY KEY,
-      cycle_id TEXT REFERENCES cycles(id),
-      item_type TEXT NOT NULL CHECK(item_type IN ('pack', 'solution')),
-      item_name TEXT,                -- "Крафт-пакет 100x200" або "Деланол 2%"
-      quantity INTEGER DEFAULT 1,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-  `);
-}
-
-// QUERIES — приклади
-
-export function getSterilizers(): Sterilizer[] {
-  return db.getAllSync('SELECT * FROM sterilizers ORDER BY created_at DESC');
-}
-
-export function addSterilizer(s: Omit<Sterilizer, 'id' | 'createdAt'>): string {
-  const id = generateId();
-  db.runSync(
-    'INSERT INTO sterilizers (id, name, type, serial_number, photo_uri, maintenance_date) VALUES (?, ?, ?, ?, ?, ?)',
-    [id, s.name, s.type, s.serialNumber || null, s.photoUri || null, s.maintenanceDate || null]
-  );
-  return id;
-}
-
-export function getCycles(filters?: { period?: string; sterilizerId?: string }): Cycle[] {
-  let query = 'SELECT * FROM cycles WHERE status != "cancelled"';
-  const params: any[] = [];
-
-  if (filters?.sterilizerId) {
-    query += ' AND sterilizer_id = ?';
-    params.push(filters.sterilizerId);
-  }
-
-  query += ' ORDER BY started_at DESC';
-  return db.getAllSync(query, params);
-}
-
-export function getMonthlyStats(year: number, month: number) {
-  const start = `${year}-${String(month).padStart(2, '0')}-01`;
-  const end = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-
-  return db.getFirstSync(`
-    SELECT
-      COUNT(*) as total,
-      SUM(CASE WHEN indicator_result = 'passed' THEN 1 ELSE 0 END) as passed,
-      SUM(CASE WHEN indicator_result = 'failed' THEN 1 ELSE 0 END) as failed
-    FROM cycles
-    WHERE status = 'completed'
-    AND started_at >= ? AND started_at < ?
-  `, [start, end]);
-}
-
-function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
-}
-
-// ТРЕКІНГ ВИТРАТ (замкнутий цикл)
-
-export function addConsumption(cycleId: string, itemType: 'pack' | 'solution', itemName?: string) {
-  const id = generateId();
-  db.runSync(
-    'INSERT INTO consumption (id, cycle_id, item_type, item_name) VALUES (?, ?, ?, ?)',
-    [id, cycleId, itemType, itemName || null]
-  );
-}
-
-export function getMonthlyConsumption(year: number, month: number) {
-  const start = `${year}-${String(month).padStart(2, '0')}-01`;
-  const end = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-
-  return db.getFirstSync(`
-    SELECT
-      SUM(CASE WHEN item_type = 'pack' THEN quantity ELSE 0 END) as packs_used,
-      SUM(CASE WHEN item_type = 'solution' THEN quantity ELSE 0 END) as solutions_used
-    FROM consumption
-    WHERE created_at >= ? AND created_at < ?
-  `, [start, end]);
-}
-
-// Розумна підказка: чи потрібно замовити матеріали?
-export function getSmartSuggestion(): { type: string; message: string; buyUrl: string } | null {
-  const now = new Date();
-  const stats = getMonthlyConsumption(now.getFullYear(), now.getMonth() + 1);
-
-  if (stats && stats.packs_used >= 50) {
-    return {
-      type: 'packs',
-      message: `Ви використали ~${stats.packs_used} пакетів цього місяця. Час замовити?`,
-      buyUrl: 'https://dezik.com.ua/paketi-dlya-sterilizacii/?utm_source=deziklog&utm_medium=app&utm_campaign=smart_suggestion',
-    };
-  }
-  return null;
-}
-```
+**Інше в `lib/`:** `supabase.ts` (клієнт + персист сесії), `cache.ts` (легкий кеш-шар), `formatters.ts`, `notifications.ts`, `pdf-export.ts` (форма №257/о), `steri-config.ts` (доменна логіка), `solutions-ai.ts`/`solution-utils.ts`, `guides-data.ts`, `share-instagram.ts`, `fonts.ts`.
 
 ---
 
-## 6. ZUSTAND STORE
+## 5. Бекенд: Supabase Edge Functions + інтеграції
 
-```typescript
-// lib/store.ts
+`supabase/functions/*` (Deno; кожна user-facing функція робить `auth.getUser()`, секрети лише в `Deno.env`, помилки — узагальнені для клієнта, деталі в лог):
 
-import { create } from 'zustand';
+| Функція | Призначення |
+|---|---|
+| `ai-assistant` | AI-асистент по розчинах (Claude API), денний ліміт + кепи на розмір вводу |
+| `send-sms-hook` | Auth-hook: OTP через SMSFly (Standard Webhooks підпис) |
+| `nova-poshta-proxy` | Проксі до API Нова Пошта (міста/відділення) |
+| `create-np-ttn` | Створення ТТН Нова Пошта для замовлення |
+| `sync-order-to-keycrm` | Синк замовлення в KeyCRM + запуск доставки |
+| `keycrm-order-webhook` | Вебхук нових замовлень із KeyCRM |
+| `poll-keycrm-statuses` | Cron: статуси замовлень із KeyCRM (~5 хв) |
+| `sync-keycrm-stock` | Cron: синк залишків товарів (~5 год) |
+| `sync-products-to-keycrm` | Синк каталогу товарів у KeyCRM |
+| `retry-failed-syncs` | Cron: ретрай невдалих синків |
+| `lookup-keycrm-buyer` | Пошук покупця KeyCRM за телефоном (legacy-замовлення) |
+| `get-keycrm-history` | Історія legacy-замовлень користувача з KeyCRM |
+| `refresh-stock` / `restore-product-images` | Ручний рефреш залишків / відновлення зображень |
+| `notify-cycle-idle` | Нотифікація простою активного циклу |
+| `delete-account` | Видалення акаунту + каскад даних |
+| `_shared/` | Спільні модулі: CORS, auth, KeyCRM, SMS, push, `sync-logic` |
 
-interface ActiveTimer {
-  cycleId: string;
-  sterilizerId: string;
-  sterilizerName: string;
-  temperature: number;
-  durationMinutes: number;
-  startedAt: string;
-  instruments?: string;
-}
+**Інтеграції:** Supabase (Auth/Postgres/Storage/Functions), KeyCRM (CRM + фулфілмент), Нова Пошта (доставка), Anthropic Claude (AI), SMSFly (OTP), Expo Push.
 
-interface AppStore {
-  activeTimer: ActiveTimer | null;
-  setActiveTimer: (timer: ActiveTimer | null) => void;
-}
-
-export const useAppStore = create<AppStore>((set) => ({
-  activeTimer: null,
-  setActiveTimer: (timer) => set({ activeTimer: timer }),
-}));
-```
-
----
-
-## 7. ЕКРАНИ — СПЕЦИФІКАЦІЯ
-
-### 7.1. Tab Bar Layout (`app/(tabs)/_layout.tsx`)
-
-5 вкладок:
-| Вкладка | Іконка (lucide) | Підпис |
-|---|---|---|
-| Головна | `Home` | Головна |
-| Журнал | `ClipboardList` | Журнал |
-| (центр) | — | — |
-| Каталог | `BookOpen` | Каталог |
-| Профіль | `User` | Профіль |
-
-Колір активної вкладки: `#4b569e`. Неактивна: `#9CA3AF`.
-
-### 7.2. Головна (`app/(tabs)/index.tsx`)
-
-Компоненти зверху вниз:
-1. **Header:** "Привіт, [ім'я]!" + кнопка дзвіночка (заглушка)
-2. **CTA кнопка:** "+Новий цикл стерилізації" — gradient primary → primaryDark. `router.push('/new-cycle')`
-3. **ActiveTimerWidget:** Показується тільки якщо є activeTimer в store. Кругова шкала + назва стерилізатора + відлік. Натиск → `/timer`
-4. **StatsBlock:** 3 картки в ряд — всього / успішних / невдалих за поточний місяць. Дані з `getMonthlyStats()`
-5. **Останні записи:** 3 останні цикли як `CycleCard`. Посилання "Всі →" → tab Журнал
-6. **SmartSuggestion:** Банер з getSmartSuggestion(). Показується тільки коли є підказка (>50 пакетів). Кнопка → dezik.com.ua з UTM. Це замикає Home на покупку.
-
-### 7.3. Новий цикл (`app/new-cycle.tsx`) — modal
-
-1. **Header:** "Новий цикл" + кнопка X (закрити)
-2. **Стерилізатор:** Select з збережених. Якщо порожній — кнопка "Додати стерилізатор" → `/sterilizer/add`
-3. **Тип:** SegmentedControl — Сухожар / Автоклав. Автозаповнення з обраного стерилізатора
-4. **Режим:** Картки з `STERILIZATION_MODES`. Selected = border primary + checkmark. + "Свій режим" (dashed border) → ручне введення temp + time
-5. **Інструменти:** TextInput, placeholder "Кусачки, пушер, фрези...", необов'язково
-6. **Кнопка "Старт":** Створює запис в cycles (status: running), встановлює activeTimer в store, schedule local notification на час завершення, `router.replace('/timer')`
-
-### 7.4. Таймер (`app/timer.tsx`) — modal, fullscreen
-
-1. **Header:** "Стерилізація" + кнопка X
-2. **TimerRing:** SVG кругова шкала 220x220. Stroke: primary. Відлік великими цифрами (48px font, tabular-nums)
-3. **Інфо-картка:** Температура, час, стерилізатор, інструменти
-4. **Кнопки:** "Скасувати" (outlined error) + "Завершити" (disabled поки таймер > 0, потім — primary)
-5. **Background timer:** useEffect з setInterval. При завершенні — local push notification
-6. **Порада (поки чекає):** Під інфо-карткою — блок "Порада" з випадковою порадою зі стерилізації (масив в constants.ts). Змінюється кожні 30 сек. Внизу поради: "Більше порад → Матеріали" → tab Каталог. Це замикає таймер на каталог.
-
-**КРИТИЧНО:** Таймер має працювати коли додаток у фоні. Використовуй expo-notifications для scheduled notification на точний час завершення. В додатку показуй різницю між `now` та `startedAt + durationMinutes`.
-
-### 7.5. Завершення циклу (`app/complete-cycle.tsx`) — modal
-
-1. **Header:** "Результат" + кнопка X
-2. **Фото індикатора:** Велика область з іконкою камери + dashed border. Натиск → expo-image-picker (камера або галерея). Після вибору — показати прев'ю
-3. **Результат:** 2 великі кнопки — "Спрацював" (зелений фон, ✓) / "Не спрацював" (білий фон, ✕). Обов'язковий вибір
-4. **Дата/час:** Автозаповнення (now). Можна редагувати
-5. **Примітка:** TextInput, необов'язково
-6. **"Зберегти":** Оновлює cycle в БД (status: completed, indicator_result, indicator_photo_uri, completed_at). **Додає запис в consumption (1 пакет використано).** Скидає activeTimer. `router.replace('/')`
-
-**Якщо "Не спрацював"** — Alert: "Увага! Інструменти потребують повторної стерилізації."
-
-**Після збереження — success screen з 2 кнопками:**
-- "На головну" → `/`
-- "Потрібні матеріали?" → `/catalog` (замикання циклу на каталог)
-
-### 7.6. Журнал (`app/(tabs)/journal.tsx`)
-
-1. **Header:** "Журнал" + кнопка "PDF" (справа)
-2. **Фільтр періоду:** Горизонтальний ScrollView — Тиждень / Місяць / Квартал / Рік / Все. Default: Місяць
-3. **Фільтр стерилізатора:** Select — "Всі" + список збережених
-4. **Лічильник:** "42 записи за березень 2026"
-5. **FlatList:** Картки CycleCard. Кожна: дата, час, режим, стерилізатор, статус. Натиск → `/journal/[id]`
-6. **PDF кнопка:** Генерує PDF через `lib/pdf.ts` → expo-sharing
-7. **Деталі запису (journal/[id]):** Повне фото індикатора, всі параметри, стерилізатор, примітка. Внизу — блок "Потрібні матеріали?" з посиланнями на відповідні товари в каталозі (пакети, розчин). Замикання журналу на каталог.
-
-### 7.7. Каталог (`app/(tabs)/catalog.tsx`)
-
-1. **Header:** "Матеріали"
-2. **FlatList:** Картки CatalogItem — іконка (lucide), назва, опис, ціна. Натиск → `/catalog/[id]`
-3. **SmartSuggestion:** Банер знизу — "Ви використали ~X пакетів. Час замовити?" Кнопка → Linking.openURL(dezik.com.ua + UTM)
-
-**Дані каталогу — з `data/catalog.json` (статичний).**
-
-**Замикання каталогу на стерилізацію:** В деталях кожного товару (catalog/[id]) — кнопка "Записати стерилізацію" → `/new-cycle`. Майстер купив матеріали → повертається в додаток → записує цикл.
-
-### 7.8. Профіль (`app/(tabs)/profile.tsx`)
-
-1. Аватар-заглушка
-2. Поля: ім'я, назва салону, адреса, телефон, email
-3. Логотип салону (image picker)
-4. Нагадування: Switch + Select інтервалу
-5. Мова: Українська / Російська (заглушка для MVP)
-6. "Видалити всі дані" (знизу, маленька)
+**Безпека (стан вище середнього):** RLS на всіх user-таблицях зі `auth.uid() = user_id`; серверно-керовані колонки (`price`, `total`, `status`, `role`, `keycrm_*`) під column-level REVOKE; тригери перерахунку ціни/суми закривають клас «маніпуляція ціною»; per-user денні ліміти на зовнішньо-платні ендпоінти; приватний bucket `cycle-photos` з per-user storage RLS і доступом лише за signed-URL. Міграції в `supabase/migrations/` читаються як лог аудиторської ремедіації.
 
 ---
 
-## 8. PDF ГЕНЕРАЦІЯ
+## 6. Доменна логіка стерилізації
 
-```typescript
-// lib/pdf.ts
+`lib/steri-config.ts` — чисті функції: пресети режимів, маппінг крафт-пакетів, мінімальний час витримки, статус тривалості.
 
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
+**Ключове продуктове рішення (інтегритет):** `complete-cycle.tsx` **жорстко блокує** позначення циклу «успішним», якщо він тривав менше мінімального часу витримки обраного режиму (заблокована опція + пояснення + окремий шлях «повторити» без фото ПІСЛЯ). Застосунок фізично не дає сертифікувати небезпечний цикл — саме на цьому тримається довіра до PDF-журналу.
 
-export async function generateSterilizationPDF(
-  cycles: Cycle[],
-  profile: UserProfile,
-  period: string
-) {
-  const html = `
-    <html>
-    <head>
-      <style>
-        body { font-family: -apple-system, sans-serif; padding: 40px; color: #1b1b1b; }
-        h1 { color: #4b569e; font-size: 22px; }
-        .header { display: flex; justify-content: space-between; margin-bottom: 30px; }
-        .salon-name { font-size: 18px; font-weight: 700; }
-        .period { color: #6b7280; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th { background: #eceef5; color: #4b569e; padding: 8px; text-align: left; font-size: 11px; }
-        td { padding: 8px; border-bottom: 1px solid #e5e7eb; font-size: 11px; }
-        .passed { color: #43A047; }
-        .failed { color: #E53935; }
-        .footer { margin-top: 40px; color: #9ca3af; font-size: 10px; text-align: center; }
-        .signature { margin-top: 30px; border-top: 1px solid #e5e7eb; padding-top: 15px; }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <div>
-          <div class="salon-name">${profile.salonName || 'Dezik Log'}</div>
-          <div style="color: #6b7280; font-size: 12px;">${profile.salonAddress || ''}</div>
-        </div>
-      </div>
-      <h1>Журнал контролю стерилізації</h1>
-      <div class="period">${period}</div>
-      <table>
-        <tr>
-          <th>№</th>
-          <th>Дата</th>
-          <th>Час</th>
-          <th>Стерилізатор</th>
-          <th>Режим</th>
-          <th>Інструменти</th>
-          <th>Результат</th>
-        </tr>
-        ${cycles.map((c, i) => `
-          <tr>
-            <td>${i + 1}</td>
-            <td>${formatDate(c.startedAt)}</td>
-            <td>${formatTime(c.startedAt)}</td>
-            <td>${c.sterilizerName || ''}</td>
-            <td>${c.temperature}°C / ${c.durationMinutes} хв</td>
-            <td>${c.instruments || '—'}</td>
-            <td class="${c.indicatorResult}">${c.indicatorResult === 'passed' ? 'Спрацював' : 'Не спрацював'}</td>
-          </tr>
-        `).join('')}
-      </table>
-      <div class="signature">
-        <p>Відповідальна особа: ${profile.name || '_______________'}</p>
-      </div>
-      <div class="footer">Згенеровано в Dezik Log by DEZIK · dezik.com.ua</div>
-    </body>
-    </html>
-  `;
-
-  const { uri } = await Print.printToFileAsync({ html });
-  await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
-}
-```
+**Таймер** (`timer.tsx`) рахує **вгору** (минув час), з жорстким cap 60 хв (захист від перегріву). «Мінімум досягнуто» ≠ «завершено»: майстер ще має відкрити завершення. Домашній віджет (`components/ActiveTimerWidget.tsx`) дзеркалить цю саму модель.
 
 ---
 
-## 9. LOCAL NOTIFICATIONS
+## 7. Принципи розробки
 
-```typescript
-// lib/notifications.ts
-
-import * as Notifications from 'expo-notifications';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
-
-export async function scheduleTimerNotification(durationMinutes: number) {
-  await Notifications.requestPermissionsAsync();
-
-  const id = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'Стерилізація завершена!',
-      body: 'Час дістати інструменти',
-      sound: true,
-    },
-    trigger: {
-      type: 'timeInterval',
-      seconds: durationMinutes * 60,
-      repeats: false,
-    },
-  });
-
-  return id;
-}
-
-export async function cancelNotification(id: string) {
-  await Notifications.cancelScheduledNotificationAsync(id);
-}
-```
+- **UX: максимум 2 ключові дії на екран** (зберігаємо як ціль; `new-cycle` — відомий виняток, кандидат на крокову декомпозицію).
+- **Дані — через `api.ts`-шар**, не `supabase.from(...)` напряму в екранах.
+- **Сервер — авторитет** для цін/сум/статусів; клієнт не виграє навіть у RLS-дозволеному UPDATE.
+- **Стилі — через токени `constants.ts`**; текст — лише через `AppText`/`AppTextInput`.
+- **Стан — React Context + локальний стан**, без Redux/Zustand. Серверних даних-лібрі (react-query) поки немає — кожен список робить власний cache-first → focus-refresh; кандидат на спільну абстракцію.
+- expo-router (file-based), safe-area скрізь, `ErrorBoundary` навколо дерева.
 
 ---
 
-## 10. КАТАЛОГ (СТАТИЧНИЙ)
+## 8. Відомий технічний борг (стисло)
 
-```json
-// data/catalog.json
-[
-  {
-    "id": "kraft-packs",
-    "category": "Крафт-пакети",
-    "title": "Пакети для стерилізації",
-    "description": "4 розміри: 60×100, 75×150, 100×200 мм. Білі та прозорі. З індикатором для парової та повітряної стерилізації.",
-    "priceRange": "від 155 грн / 100 шт",
-    "icon": "Package",
-    "buyUrl": "https://dezik.com.ua/paketi-dlya-sterilizacii/?utm_source=deziklog&utm_medium=app&utm_campaign=catalog"
-  },
-  {
-    "id": "delanol",
-    "category": "Дезінфекція",
-    "title": "Деланол",
-    "description": "Засіб для дезінфекції, ПСО та холодної стерилізації інструментів. Свідоцтво МОЗ.",
-    "priceRange": "від 405 грн / 1л",
-    "icon": "Droplets",
-    "buyUrl": "https://dezik.com.ua/dezinfekciya-antiseptiki/?utm_source=deziklog&utm_medium=app&utm_campaign=catalog"
-  },
-  {
-    "id": "bionol",
-    "category": "Дезінфекція",
-    "title": "Біонол Форте",
-    "description": "Засіб для дезінфекції інструментів та ПСО. Мийні властивості, пролонгована дія 3 год.",
-    "priceRange": "від 290 грн / 250мл",
-    "icon": "FlaskConical",
-    "buyUrl": "https://dezik.com.ua/dezinfekciya-antiseptiki/?utm_source=deziklog&utm_medium=app&utm_campaign=catalog"
-  },
-  {
-    "id": "instrum",
-    "category": "Очищення",
-    "title": "Інструм",
-    "description": "Засіб преміум-класу для очищення металевих інструментів від потемнінь, нальоту та пригорілостей.",
-    "priceRange": "від 185 грн",
-    "icon": "Wrench",
-    "buyUrl": "https://dezik.com.ua/?utm_source=deziklog&utm_medium=app&utm_campaign=catalog"
-  },
-  {
-    "id": "sterilizers",
-    "category": "Обладнання",
-    "title": "Стерилізатори",
-    "description": "Сухожари Міз-Ма ГП-10, ГП-20. Компактні, надійні. Для фізичної стерилізації.",
-    "priceRange": "від 13 850 грн",
-    "icon": "Thermometer",
-    "buyUrl": "https://dezik.com.ua/sterilizatori/?utm_source=deziklog&utm_medium=app&utm_campaign=catalog"
-  },
-  {
-    "id": "septonal",
-    "category": "Антисептики",
-    "title": "Септонал",
-    "description": "Антисептик для обробки рук та шкіри.",
-    "priceRange": "",
-    "icon": "Hand",
-    "buyUrl": "https://dezik.com.ua/?utm_source=deziklog&utm_medium=app&utm_campaign=catalog"
-  }
-]
-```
+- **Шар `api.ts` обходиться** частиною екранів (прямі `supabase.from`) — дублювання запитів.
+- **Немає серверного стейт-шару** — повторювана логіка завантаження/кешу по екранах.
+- **Тести проти копій** — частина suites тестують переписану вручну логіку, а не реальний код (особливо критично для pass/fail стерилізації та auth).
+- **Великі екрани** (`profile`, `cart`, `ai-chat`, `new-cycle`) змішують дані/логіку/презентацію.
+- **Замовлення лишаються клієнт-редагованими після синку** в KeyCRM (розходження БД ↔ фулфілмент).
 
----
-
-## 11. ПРАВИЛА ДЛЯ CURSOR
-
-1. **Не придумуй** — реалізуй строго по цьому документу
-2. **Мова інтерфейсу** — українська. Всі тексти, кнопки, підписи — українською
-3. **Колір #4b569e** — використовуй через COLORS constant, не хардкодь
-4. **NativeWind** — стилізація через className, не StyleSheet.create
-5. **Expo Router** — file-based routing, не React Navigation напряму
-6. **expo-sqlite** — синхронний API (openDatabaseSync, execSync, getAllSync, runSync)
-7. **Фото** — зберігай у expo-file-system, в БД тільки URI
-8. **Таймер** — розраховуй залишок від startedAt + duration, не від стейту
-9. **Іконки** — тільки lucide-react-native. Без емодзі
-10. **Tab bar** — підписи українською: Головна, Журнал, Каталог, Профіль
-11. **PDF** — генерація через HTML шаблон + expo-print
-12. **Safe Area** — SafeAreaView на всіх екранах
-13. **Haptic feedback** — expo-haptics на кнопках "Старт", "Зберегти"
-14. **Градієнт** — expo-linear-gradient для CTA кнопки
-15. **Максимум 2 дії на екран** — не перевантажуй UI
-16. **Замкнутий цикл** — кожен екран має точку переходу до іншого модуля: журнал → каталог, таймер → поради → каталог, завершення циклу → каталог, каталог → новий цикл. Не створюй тупикових екранів
+Деталі — у звіті аудиту (6 ревʼюерів). Пріоритезувати за важелем: повернути петлю дозамовлення (#5), реальні тести на compliance-шлях, транзакційне створення замовлення.

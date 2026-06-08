@@ -28,12 +28,15 @@ export const COLORS = {
   warningBg: '#FFFBEB',
 } as const;
 
+// Single canonical radius scale — superset of both legacy key sets.
+// `RADII` (lib/theme.ts) is an alias of this object, so both name sets resolve here.
 export const RADIUS = {
   sm: 8,
   md: 12,
-  lg: 16,
+  lg: 14, // unified to the cycle-flow value (13 files); Home + Catalog shift 16→14
   xl: 20,
-  full: 999,
+  full: 999, // pill button (constants legacy)
+  pill: 40, // pill chip (theme legacy)
 } as const;
 
 export const SPACING = {
@@ -46,12 +49,17 @@ export const SPACING = {
 } as const;
 
 export const FONT = {
+  extralight: 'Inter_200ExtraLight',
+  light: 'Inter_300Light',
   regular: 'Inter_400Regular',
   medium: 'Inter_500Medium',
   semibold: 'Inter_600SemiBold',
   bold: 'Inter_700Bold',
+  extrabold: 'Inter_800ExtraBold',
 } as const;
 
+// Single canonical shadow object — both size-named (sm/md) and semantic-named
+// (card/button) keys. `SHADOWS` (lib/theme.ts) is an alias of this object.
 export const SHADOW = {
   sm: {
     shadowColor: '#000',
@@ -66,6 +74,20 @@ export const SHADOW = {
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 4,
+  },
+  card: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  button: {
+    shadowColor: COLORS.brand,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
   },
 } as const;
 

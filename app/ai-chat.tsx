@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  View, Text, TextInput, FlatList, TouchableOpacity,
+  View, FlatList, TouchableOpacity,
   StyleSheet, SafeAreaView, KeyboardAvoidingView, Platform,
   ActivityIndicator, Keyboard, Alert,
 } from 'react-native';
+import { AppText as Text, AppTextInput as TextInput } from '../components/AppText';
+import type { TextInput as RNTextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -69,7 +71,7 @@ export default function AIChatScreen() {
   const router = useRouter();
   const { session: authSession } = useAuth();
   const flatListRef = useRef<FlatList>(null);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<RNTextInput>(null);
 
   // State
   const [sessions, setSessions] = useState<ChatSession[]>([]);

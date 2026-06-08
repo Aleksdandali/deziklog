@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity,
+  View, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity,
   Dimensions,
 } from 'react-native';
+import { AppText as Text } from '../../components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';

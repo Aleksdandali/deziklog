@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Platform, StyleSheet } from 'react-native';
 import { Home, BookOpen, ShoppingBag, Droplet, User } from 'lucide-react-native';
-import { COLORS } from '@/lib/constants';
+import { COLORS, FONT } from '@/lib/constants';
 
 type TabIconProps = { color: string; size: number };
 
@@ -68,6 +68,7 @@ const styles = StyleSheet.create({
   tabLabel: {
     fontSize: 10,
     fontWeight: '500',
+    fontFamily: FONT.medium,
     marginTop: 2,
     letterSpacing: 0.1,
   },

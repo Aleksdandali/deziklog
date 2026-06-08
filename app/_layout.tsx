@@ -6,10 +6,13 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import {
   useFonts,
+  Inter_200ExtraLight,
+  Inter_300Light,
   Inter_400Regular,
   Inter_500Medium,
   Inter_600SemiBold,
   Inter_700Bold,
+  Inter_800ExtraBold,
 } from '@expo-google-fonts/inter';
 import { AuthProvider, useAuth } from '../lib/auth-context';
 import { CartProvider } from '../lib/cart-context';
@@ -35,10 +38,13 @@ function RootNavigator() {
   const notifResponseListener = useRef<ReturnType<typeof Notifications.addNotificationResponseReceivedListener>>();
 
   const [fontsLoaded] = useFonts({
+    Inter_200ExtraLight,
+    Inter_300Light,
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
+    Inter_800ExtraBold,
   });
 
   useEffect(() => {
