@@ -160,15 +160,19 @@ export default function ProductDetailScreen() {
 
         {/* Description */}
         {description && (
-          <View style={s.descSection}>
-            <Text style={s.descTitle}>Опис</Text>
-            {description.split('\n\n').map((para, i) => (
-              <Text key={i} style={[s.descText, i > 0 && { marginTop: 10 }]}>{para}</Text>
-            ))}
-          </View>
+          <>
+            <View style={s.divider} />
+            <View style={s.descSection}>
+              <Text style={s.descTitle}>Опис</Text>
+              {description.split(/\n{2,}/).map((para, i) => (
+                <Text key={i} style={[s.descText, i > 0 && { marginTop: 14 }]}>{para.trim()}</Text>
+              ))}
+            </View>
+          </>
         )}
 
         {/* Specs */}
+        <View style={s.divider} />
         <View style={s.specsSection}>
           <Text style={s.specsTitle}>Характеристики</Text>
           {product.volume && <SpecRow label="Об'єм" value={product.volume} />}
@@ -243,12 +247,13 @@ const s = StyleSheet.create({
   stockBadgeTextOut: { color: COLORS.danger },
   price: { fontSize: 26, fontWeight: '700', color: COLORS.text },
 
-  descSection: { paddingHorizontal: 24, paddingTop: 24 },
-  descTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginBottom: 10 },
-  descText: { fontSize: 14, color: COLORS.text, lineHeight: 22 },
+  divider: { height: 1, backgroundColor: COLORS.border, marginHorizontal: 24, marginTop: 24 },
+  descSection: { paddingHorizontal: 24, paddingTop: 22 },
+  descTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text, marginBottom: 12, letterSpacing: 0.2 },
+  descText: { fontSize: 15, color: COLORS.textSecondary, lineHeight: 24 },
 
-  specsSection: { paddingHorizontal: 24, paddingTop: 24 },
-  specsTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginBottom: 12 },
+  specsSection: { paddingHorizontal: 24, paddingTop: 22 },
+  specsTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text, marginBottom: 12, letterSpacing: 0.2 },
   specRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   specLabel: { fontSize: 14, color: COLORS.textSecondary },
   specValue: { fontSize: 14, fontWeight: '500', color: COLORS.text },
