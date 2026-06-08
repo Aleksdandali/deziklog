@@ -20,8 +20,8 @@ export const COLORS = {
   borderLight: '#F3F4F6',
 
   // Status
-  success: '#22C55E',
-  successBg: '#F0FDF4',
+  success: '#10B981',
+  successBg: '#ECFDF5',
   danger: '#EF4444',
   dangerBg: '#FEF2F2',
   warning: '#F59E0B',

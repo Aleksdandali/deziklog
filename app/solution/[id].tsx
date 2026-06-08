@@ -221,7 +221,7 @@ export default function SolutionDetailScreen() {
           <TipRow icon="refresh-cw" text="Розчин можна використовувати багаторазово, якщо зовнішній вигляд не змінився." />
           <TipRow icon="alert-triangle" text="При зміні кольору, помутнінні або появі осаду — замініть розчин." />
           {status === 'expired' && (
-            <TipRow icon="trash-2" text="Протермінований розчин необхідно замінити на свіжий." color={COLORS.danger} />
+            <TipRow icon="trash-2" text="Термін вийшов — замініть розчин на свіжий." color={COLORS.danger} />
           )}
         </View>
 

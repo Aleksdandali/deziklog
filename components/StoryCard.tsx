@@ -32,8 +32,8 @@ export default function StoryCard({
           <Svg width={200} height={200} style={st.glow}>
             <Defs>
               <RadialGradient id="g" cx="50%" cy="50%" r="50%">
-                <Stop offset="0%" stopColor="#22C55E" stopOpacity="0.25" />
-                <Stop offset="100%" stopColor="#22C55E" stopOpacity="0" />
+                <Stop offset="0%" stopColor="#10B981" stopOpacity="0.25" />
+                <Stop offset="100%" stopColor="#10B981" stopOpacity="0" />
               </RadialGradient>
             </Defs>
             <Circle cx="100" cy="100" r="100" fill="url(#g)" />
@@ -49,8 +49,8 @@ export default function StoryCard({
                 <Stop offset="100%" stopColor="#4b569e" stopOpacity="0" />
               </RadialGradient>
               <RadialGradient id="corner2" cx="100%" cy="100%" r="60%">
-                <Stop offset="0%" stopColor="#22C55E" stopOpacity="0.05" />
-                <Stop offset="100%" stopColor="#22C55E" stopOpacity="0" />
+                <Stop offset="0%" stopColor="#10B981" stopOpacity="0.05" />
+                <Stop offset="100%" stopColor="#10B981" stopOpacity="0" />
               </RadialGradient>
             </Defs>
             <Rect width="360" height="640" fill="url(#corner1)" />
@@ -71,7 +71,7 @@ export default function StoryCard({
         {/* Shield badge with glow ring */}
         <View style={st.badgeWrap}>
           <View style={st.badgeRing}>
-            <LinearGradient colors={['#22C55E', '#16A34A']} style={st.badge}>
+            <LinearGradient colors={['#10B981', '#059669']} style={st.badge}>
               <Feather name="shield" size={26} color="#fff" />
             </LinearGradient>
           </View>
@@ -129,7 +129,7 @@ export default function StoryCard({
                         style={st.photo}
                       />
                     </View>
-                    <Text style={[st.photoLabel, { color: '#22C55E' }]}>ПІСЛЯ</Text>
+                    <Text style={[st.photoLabel, { color: '#10B981' }]}>ПІСЛЯ</Text>
                   </View>
                 )}
               </View>
@@ -214,7 +214,7 @@ const st = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   badgeLabel: {
-    fontSize: 11, fontWeight: '800', color: '#22C55E',
+    fontSize: 11, fontWeight: '800', color: '#10B981',
     letterSpacing: 2.5, textTransform: 'uppercase',
   },
   badgeUnderline: {
@@ -258,10 +258,10 @@ const st = StyleSheet.create({
   },
   resultIcon: {
     width: 20, height: 20, borderRadius: 10,
-    backgroundColor: '#22C55E',
+    backgroundColor: '#10B981',
     alignItems: 'center', justifyContent: 'center',
   },
-  resultText: { fontSize: 13, fontWeight: '700', color: '#22C55E' },
+  resultText: { fontSize: 13, fontWeight: '700', color: '#10B981' },
 
   // Photos
   photosRow: {
@@ -273,7 +273,7 @@ const st = StyleSheet.create({
     borderRadius: 12, borderWidth: 2,
     borderColor: '#E5E7EB', overflow: 'hidden',
   },
-  photoFrameAfter: { borderColor: '#22C55E' },
+  photoFrameAfter: { borderColor: '#10B981' },
   photo: { width: 80, height: 80, backgroundColor: '#F3F4F6' },
   photoLabel: {
     fontSize: 9, fontWeight: '800', color: '#9CA3AF',

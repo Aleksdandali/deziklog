@@ -15,6 +15,7 @@ import { useAuth, useSessionGuard } from '../lib/auth-context';
 import { COLORS } from '../lib/constants';
 import { RADII } from '../lib/theme';
 import { getDefaultPreset, getPresetsForType, type SteriType } from '../lib/steri-config';
+import { haptic } from '../lib/haptics';
 import CameraCapture from '../components/CameraCapture';
 import RotatedImage from '../components/RotatedImage';
 
@@ -63,6 +64,7 @@ export default function NewCycleScreen() {
   ];
 
   const toggleInstrument = (name: string) => {
+    haptic.select();
     setSelectedInstruments((prev) => {
       const next = { ...prev };
       if (next[name]) {
@@ -155,6 +157,7 @@ export default function NewCycleScreen() {
   // ── Select sterilizer ─────────────────────────────────
 
   const handleSelectSterilizer = (s: SterilizerRow) => {
+    haptic.select();
     setCustomSterilizer(false);
     setSterilizerName(s.name);
     setSterilizerId(s.id);
@@ -172,6 +175,7 @@ export default function NewCycleScreen() {
   // ── Select sterilization mode preset ──────────────────
 
   const handleSelectPreset = (id: string, temp: number, dur: number) => {
+    haptic.select();
     setPresetId(id);
     setCustomMode(false);
     setTemperature(String(temp));

@@ -10,6 +10,7 @@ import Svg, { Circle as SvgCircle } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { updateSession, getSessionById } from '../lib/api';
+import { cancelCycleNotifications } from '../lib/notifications';
 import { useSessionGuard } from '../lib/auth-context';
 import { COLORS, FONT } from '../lib/constants';
 import { RADII } from '../lib/theme';
@@ -222,6 +223,7 @@ export default function TimerScreen() {
               } catch (err) {
                 console.warn('Timer: failed to cancel session:', err);
               }
+              await cancelCycleNotifications(timerData.sessionId);
               await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
             }
             router.replace('/(tabs)');
@@ -263,7 +265,8 @@ export default function TimerScreen() {
   return (
     <SafeAreaView style={s.container}>
       <View style={s.header}>
-        <TouchableOpacity onPress={handleCancel} hitSlop={12}>
+        <TouchableOpacity onPress={handleCancel} hitSlop={12} style={s.cancelBtn} activeOpacity={0.7}>
+          <Feather name="x" size={15} color={COLORS.danger} />
           <Text style={s.cancelText}>Скасувати</Text>
         </TouchableOpacity>
         <Text style={s.headerTitle}>Стерилізація</Text>
@@ -371,6 +374,7 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
+  cancelBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADII.full, backgroundColor: COLORS.danger + '14' },
   cancelText: { fontSize: 14, fontWeight: '600', color: COLORS.danger },
   minimizeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   minimizeText: { fontSize: 14, fontWeight: '600', color: COLORS.brand },

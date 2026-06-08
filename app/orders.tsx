@@ -9,6 +9,7 @@ import {
   RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
 import { AppText as Text } from '../components/AppText';
+import { SkeletonEntryCard } from '../components/Skeleton';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
@@ -235,8 +236,8 @@ export default function OrdersScreen() {
       )}
 
       {loading ? (
-        <View style={st.centered}>
-          <ActivityIndicator color={COLORS.brand} />
+        <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+          <SkeletonEntryCard /><SkeletonEntryCard /><SkeletonEntryCard /><SkeletonEntryCard />
         </View>
       ) : totalCount === 0 ? (
         <View style={st.centered}>

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Product } from './types';
+import { haptic } from './haptics';
 
 const CART_STORAGE_KEY = 'dezik_cart';
 
@@ -58,6 +59,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [items]);
 
   const addItem = useCallback((product: Product) => {
+    haptic.press();
     setItems((prev) => {
       const existing = prev.find((i) => i.product.id === product.id);
       if (existing) {

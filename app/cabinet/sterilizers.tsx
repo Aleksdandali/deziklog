@@ -8,6 +8,8 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth-context';
 import { COLORS } from '../../lib/constants';
 import { uploadSterilizerPhoto, getPhotoUrl } from '../../lib/api';
+import { haptic } from '../../lib/haptics';
+import { SkeletonCard } from '../../components/Skeleton';
 import CameraCapture from '../../components/CameraCapture';
 
 const TYPE_OPTIONS = [
@@ -150,6 +152,7 @@ export default function SterilizersScreen() {
         if (imgErr) throw imgErr;
       }
 
+      haptic.success();
       closeForm();
       load();
     } catch (e: unknown) {
@@ -270,7 +273,9 @@ export default function SterilizersScreen() {
       })()}
 
       {loading ? (
-        <ActivityIndicator size="large" color={COLORS.brand} style={{ marginTop: 40 }} />
+        <View style={styles.listContent}>
+          <SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard />
+        </View>
       ) : (
         <FlatList
           data={items}

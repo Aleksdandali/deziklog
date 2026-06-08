@@ -568,7 +568,7 @@ const s = StyleSheet.create({
 
   // Result
   resultOption: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: RADII.lg, borderWidth: 1.5, borderColor: COLORS.border, marginBottom: 10 },
-  resultSuccess: { borderColor: COLORS.success, backgroundColor: '#f0faf3' },
+  resultSuccess: { borderColor: COLORS.success, backgroundColor: COLORS.successBg },
   resultFail: { borderColor: COLORS.danger, backgroundColor: '#fff5f5' },
   resultTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text },
   resultDesc: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },

@@ -7,6 +7,8 @@ import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth-context';
 import { COLORS } from '../../lib/constants';
+import { haptic } from '../../lib/haptics';
+import { SkeletonCard } from '../../components/Skeleton';
 
 interface InstrumentRow { id: string; name: string; created_at: string; }
 
@@ -37,13 +39,21 @@ export default function InstrumentsScreen() {
   const handleAdd = async () => {
     if (!newName.trim() || !userId) return;
     setAdding(true);
-    const { error } = await supabase
-      .from('instruments')
-      .insert({ user_id: userId, name: newName.trim() });
-    setAdding(false);
-    if (error) { if (__DEV__) console.error('Add instrument error:', error.message); Alert.alert('Помилка', error.message); return; }
-    setNewName('');
-    load();
+    try {
+      const { error } = await supabase
+        .from('instruments')
+        .insert({ user_id: userId, name: newName.trim() });
+      if (error) throw error;
+      haptic.success();
+      setNewName('');
+      load();
+    } catch (e: unknown) {
+      const msg = (e as { message?: string })?.message ?? 'Не вдалося додати інструмент';
+      if (__DEV__) console.error('Add instrument error:', msg);
+      Alert.alert('Помилка', msg);
+    } finally {
+      setAdding(false);
+    }
   };
 
   const handleDelete = (id: string, name: string) => {
@@ -82,7 +92,9 @@ export default function InstrumentsScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color={COLORS.brand} style={{ marginTop: 40 }} />
+        <View style={styles.listContent}>
+          <SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard />
+        </View>
       ) : (
         <FlatList
           data={items}

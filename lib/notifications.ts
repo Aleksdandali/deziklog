@@ -131,6 +131,18 @@ export async function cancelSolutionNotifications(solutionId: string): Promise<v
   await Notifications.cancelScheduledNotificationAsync(`solution-${solutionId}-expired`).catch(() => {});
 }
 
+/**
+ * Clear cycle timer notifications when a cycle is canceled.
+ * Cancels any pending schedule AND dismisses an already-delivered banner from
+ * the tray, so the master doesn't see "час досягнуто" after aborting.
+ */
+export async function cancelCycleNotifications(sessionId: string): Promise<void> {
+  for (const id of [`timer-done-${sessionId}`, `timer-cap-${sessionId}`]) {
+    await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
+    await Notifications.dismissNotificationAsync(id).catch(() => {});
+  }
+}
+
 // ── Cycle notifications (local) ─────────────────────────
 
 /** Show local notification when cycle completes. Checks notification_cycle_done flag. */

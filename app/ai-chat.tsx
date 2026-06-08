@@ -362,10 +362,10 @@ export default function AIChatScreen() {
       </View>
       <Text style={styles.consentTitle}>Як працює AI-асистент</Text>
       <Text style={styles.consentBody}>
-        Ваші запитання надсилаються до сервісу Anthropic (Claude) для обробки. Не вводьте конфіденційні дані — діагнози, паролі, дані пацієнтів.
+        Запитання обробляються зовнішнім ШІ-сервісом. Не пишіть приватне — паролі, діагнози, дані клієнтів.
       </Text>
       <Text style={styles.consentBody}>
-        Відповіді є довідковими. Завжди звіряйтеся з інструкцією виробника засобу.
+        Це підказки, а не офіційна інструкція. Перевіряйте по етикетці засобу.
       </Text>
       <TouchableOpacity style={styles.consentBtn} onPress={acceptConsent} activeOpacity={0.85}>
         <LinearGradient
@@ -390,9 +390,9 @@ export default function AIChatScreen() {
         </LinearGradient>
       </View>
 
-      <Text style={styles.emptyTitle}>AI-асистент по розчинам</Text>
+      <Text style={styles.emptyTitle}>Асистент по розчинах</Text>
       <Text style={styles.emptySubtitle}>
-        Підкажу як правильно розвести Деланол або Біонол форте, скільки тримати інструменти та які режими використовувати
+        Розведення Деланолу, Біонолу форте, час витримки та режими — питай прямо тут.
       </Text>
 
       <View style={styles.suggestionsWrap}>
