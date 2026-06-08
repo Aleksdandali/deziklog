@@ -478,7 +478,7 @@ export default function CartScreen() {
             <View style={s.toggleRow}>
               <TouchableOpacity
                 style={[s.toggleChip, deliveryType === 'warehouse' && s.toggleChipActive]}
-                onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setDeliveryType('warehouse'); }}
+                onPress={() => { Haptics.selectionAsync(); LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setDeliveryType('warehouse'); }}
                 activeOpacity={0.8}
               >
                 <Feather name="package" size={14} color={deliveryType === 'warehouse' ? '#fff' : COLORS.textSecondary} />
@@ -486,7 +486,7 @@ export default function CartScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[s.toggleChip, deliveryType === 'address' && s.toggleChipActive]}
-                onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setDeliveryType('address'); }}
+                onPress={() => { Haptics.selectionAsync(); LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setDeliveryType('address'); }}
                 activeOpacity={0.8}
               >
                 <Feather name="home" size={14} color={deliveryType === 'address' ? '#fff' : COLORS.textSecondary} />

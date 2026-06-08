@@ -18,6 +18,7 @@ import type { OrderItem, NPCity, NPWarehouse } from '../../lib/types';
 import { generateJournalPDF, loadCyclePhotos } from '../../lib/pdf-export';
 import { getCached, setCache } from '../../lib/cache';
 import { COLORS } from '../../lib/constants';
+import { haptic } from '../../lib/haptics';
 import { RADII } from '../../lib/theme';
 import type { UserRole, Order } from '../../lib/types';
 
@@ -817,7 +818,7 @@ function MenuItem({ icon, iconColor, iconBg, label, subtitle, onPress }: {
   icon: string; iconColor: string; iconBg: string; label: string; subtitle?: string; onPress: () => void;
 }) {
   return (
-    <TouchableOpacity style={s.menuItem} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={s.menuItem} onPress={() => { haptic.tap(); onPress(); }} activeOpacity={0.7}>
       <View style={[s.menuIcon, { backgroundColor: iconBg }]}>
         <MaterialCommunityIcons name={icon as any} size={20} color={iconColor} />
       </View>
@@ -834,7 +835,7 @@ function MenuItemFeather({ icon, iconColor, iconBg, label, subtitle, onPress }: 
   icon: string; iconColor: string; iconBg: string; label: string; subtitle?: string; onPress: () => void;
 }) {
   return (
-    <TouchableOpacity style={s.menuItem} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={s.menuItem} onPress={() => { haptic.tap(); onPress(); }} activeOpacity={0.7}>
       <View style={[s.menuIcon, { backgroundColor: iconBg }]}>
         <Feather name={icon as any} size={20} color={iconColor} />
       </View>
