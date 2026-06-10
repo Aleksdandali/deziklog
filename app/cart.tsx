@@ -60,6 +60,7 @@ export default function CartScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [ordering, setOrdering] = useState(false);
+  const orderingRef = useRef(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [confirmedTotal, setConfirmedTotal] = useState(0);
 
@@ -219,6 +220,9 @@ export default function CartScreen() {
   };
 
   const handleOrder = async () => {
+    // Synchronous re-entry guard: `disabled={ordering}` depends on a re-render,
+    // so two taps in the same frame both passed it and created duplicate orders.
+    if (orderingRef.current) return;
     if (items.length === 0) { Alert.alert('Кошик порожній'); return; }
     if (!firstName.trim()) { Alert.alert("Вкажіть ім'я в профілі"); return; }
     if (!selectedCity) { Alert.alert('Оберіть місто'); return; }
@@ -237,6 +241,7 @@ export default function CartScreen() {
       ? `${selectedCity.name}, ${selectedWarehouse!.description}`
       : `${selectedCity.name}, ${addressStreet.trim()} ${addressBuilding.trim()}${addressApartment.trim() ? ', кв. ' + addressApartment.trim() : ''}`;
 
+    orderingRef.current = true;
     setOrdering(true);
     try {
       const uid = await getUid();
@@ -379,6 +384,7 @@ export default function CartScreen() {
         Alert.alert('Помилка', `Не вдалось оформити замовлення.\n\n${parts.join('\n')}`);
       }
     } finally {
+      orderingRef.current = false;
       setOrdering(false);
     }
   };
