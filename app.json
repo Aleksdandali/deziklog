@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "description": "Цифровий журнал стерилізації для б'юті-майстрів",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.shineshopb2b.deziklog",
       "buildNumber": "4",
       "infoPlist": {

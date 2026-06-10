@@ -3,35 +3,45 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { supabase } from './supabase';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// This module is imported for its side effects at the very top of the app
+// (app/_layout.tsx), BEFORE any UI and OUTSIDE the ErrorBoundary. A class error
+// boundary cannot catch a throw that happens at module-load time, so a
+// synchronous throw from any native call here would crash the app on launch
+// with no UI. Guard the whole setup so notification wiring can never abort the
+// cold-launch path; the async `.catch()`es below still handle their rejections.
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
 
-// Actionable category for cycle-completion alerts: a "Зробити фото ПІСЛЯ" button
-// that opens the app straight to the after-photo flow.
-Notifications.setNotificationCategoryAsync('cycle-done', [
-  { identifier: 'TAKE_AFTER_PHOTO', buttonTitle: 'Зробити фото ПІСЛЯ', options: { opensAppToForeground: true } },
-]).catch(() => {});
+  // Actionable category for cycle-completion alerts: a "Зробити фото ПІСЛЯ" button
+  // that opens the app straight to the after-photo flow.
+  Notifications.setNotificationCategoryAsync('cycle-done', [
+    { identifier: 'TAKE_AFTER_PHOTO', buttonTitle: 'Зробити фото ПІСЛЯ', options: { opensAppToForeground: true } },
+  ]).catch(() => {});
 
-// Android: a dedicated HIGH-importance channel for cycle-completion alerts, so
-// the banner + sound + vibration break through even when the phone is on silent
-// or locked. Created eagerly at module load — a scheduled local notification
-// needs its channel to exist before push registration runs.
-if (Platform.OS === 'android') {
-  Notifications.setNotificationChannelAsync('cycle', {
-    name: 'Завершення циклу',
-    importance: Notifications.AndroidImportance.HIGH,
-    sound: 'default',
-    vibrationPattern: [0, 300, 200, 300],
-    lightColor: '#4b569e',
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-  }).catch(() => {});
+  // Android: a dedicated HIGH-importance channel for cycle-completion alerts, so
+  // the banner + sound + vibration break through even when the phone is on silent
+  // or locked. Created eagerly at module load — a scheduled local notification
+  // needs its channel to exist before push registration runs.
+  if (Platform.OS === 'android') {
+    Notifications.setNotificationChannelAsync('cycle', {
+      name: 'Завершення циклу',
+      importance: Notifications.AndroidImportance.HIGH,
+      sound: 'default',
+      vibrationPattern: [0, 300, 200, 300],
+      lightColor: '#4b569e',
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    }).catch(() => {});
+  }
+} catch {
+  // Never let notification setup abort module load on a cold launch.
 }
 
 // ── Permission & Push Token ─────────────────────────────
