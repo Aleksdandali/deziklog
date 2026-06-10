@@ -17,6 +17,7 @@ import { getProfile, getOrders, searchNPCities, getNPWarehouses, resolveNPCityBy
 import type { OrderItem, NPCity, NPWarehouse } from '../../lib/types';
 import { generateJournalPDF, loadCyclePhotos } from '../../lib/pdf-export';
 import { getCached, setCache } from '../../lib/cache';
+import { unregisterPushToken } from '../../lib/notifications';
 import { COLORS } from '../../lib/constants';
 import { haptic } from '../../lib/haptics';
 import { RADII } from '../../lib/theme';
@@ -287,7 +288,17 @@ export default function ProfileScreen() {
   const handleSignOut = () => {
     Alert.alert('Вийти з акаунту?', 'Ви зможете увійти знову в будь-який час', [
       { text: 'Скасувати', style: 'cancel' },
-      { text: 'Вийти', style: 'destructive', onPress: () => supabase.auth.signOut() },
+      {
+        text: 'Вийти',
+        style: 'destructive',
+        onPress: async () => {
+          // Detach the push token while the session is still alive — after
+          // signOut the RLS-scoped update is impossible, and the next user on
+          // this device would keep receiving the previous account's pushes.
+          if (userId) await unregisterPushToken(userId);
+          supabase.auth.signOut();
+        },
+      },
     ]);
   };
 
@@ -698,6 +709,14 @@ export default function ProfileScreen() {
             label="Експорт журналу PDF"
             subtitle="Завантажити журнал стерилізацій"
             onPress={handleExportPDF}
+          />
+          <MenuItemFeather
+            icon="shield"
+            iconColor="#2E7D32"
+            iconBg="#E8F5E9"
+            label="Політика конфіденційності"
+            subtitle="Які дані ми збираємо і кому передаємо"
+            onPress={() => router.push('/legal/privacy' as any)}
           />
         </View>
 
