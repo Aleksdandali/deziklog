@@ -502,13 +502,16 @@ export default function CompleteCycleScreen() {
           <TouchableOpacity
             style={[
               s.primaryBtn,
-              (!selectedResult || !photoAfter || saving) && { opacity: 0.55 },
+              (!selectedResult || (canMarkSuccess && !photoAfter) || saving) && { opacity: 0.55 },
               selectedResult === 'success' && { backgroundColor: COLORS.success },
               selectedResult === 'fail' && { backgroundColor: COLORS.danger },
             ]}
             disabled={saving}
             onPress={() => {
-              if (!photoAfter) { Alert.alert('Зробіть фото індикатора ПІСЛЯ'); return; }
+              // Early finish hides the photo UI entirely (no after-photo exists),
+              // so the photo demand applies only when the cycle could still pass —
+              // otherwise this button was a dead end and the cycle could never be saved.
+              if (canMarkSuccess && !photoAfter) { Alert.alert('Зробіть фото індикатора ПІСЛЯ'); return; }
               if (!selectedResult) { Alert.alert('Оберіть результат', 'Вкажіть, чи змінився індикатор.'); return; }
               handleUploadAndConfirm();
             }}
