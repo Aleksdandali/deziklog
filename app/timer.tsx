@@ -13,7 +13,7 @@ import { cancelCycleNotifications, scheduleCycleNotifications } from '../lib/not
 import { useSessionGuard } from '../lib/auth-context';
 import { COLORS, FONT } from '../lib/constants';
 import { RADII } from '../lib/theme';
-import { formatElapsed } from '../lib/steri-config';
+import { formatElapsed, getCapSeconds } from '../lib/steri-config';
 
 const RING_SIZE = 260;
 const RING_CX = RING_SIZE / 2;
@@ -21,11 +21,6 @@ const RING_CY = RING_SIZE / 2;
 const RING_R = 95;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_R;
 const ACTIVE_TIMER_KEY = 'active_timer';
-// Hard upper bound on any sterilization cycle. Dry-heat at 180°C beyond
-// 60 min damages instruments / blunts blades; autoclave never needs that
-// long either. Past this point the timer freezes and we push a strong
-// sound notification so the user finalizes the cycle.
-const MAX_CYCLE_SECONDS = 60 * 60;
 
 interface TimerData {
   sessionId: string;
@@ -99,7 +94,7 @@ export default function TimerScreen() {
       setTimerData(data);
       // Clamp at mount too — covers the case where the user minimized the
       // app well past the cap and came back later.
-      setElapsed(Math.min(MAX_CYCLE_SECONDS, Math.floor((Date.now() - data.startedAt) / 1000)));
+      setElapsed(Math.min(getCapSeconds(data.duration), Math.floor((Date.now() - data.startedAt) / 1000)));
       // Self-heal: re-arm the pre-scheduled alerts (idempotent — fixed ids
       // replace). Backfills cycles started before this build, Android reboots
       // that drop alarms, and clock drift. If already past the minimum, the
@@ -109,10 +104,11 @@ export default function TimerScreen() {
   }, []);
 
   const recommendedSeconds = (timerData?.duration ?? 0) * 60;
+  const capSeconds = getCapSeconds(timerData?.duration ?? null);
   const progress = recommendedSeconds > 0 ? Math.min(1, elapsed / recommendedSeconds) : 0;
   const isReached = elapsed >= recommendedSeconds && recommendedSeconds > 0;
   const almostDone = !isReached && recommendedSeconds > 0 && (recommendedSeconds - elapsed) <= 60;
-  const isCapped = elapsed >= MAX_CYCLE_SECONDS;
+  const isCapped = elapsed >= capSeconds;
 
   const { minutes: elapsedMin, seconds: elapsedSec } = formatElapsed(elapsed);
 
@@ -125,12 +121,13 @@ export default function TimerScreen() {
     // Clear any previous interval to prevent duplicates
     if (timerRef.current) clearInterval(timerRef.current);
 
+    const capSec = getCapSeconds(timerData.duration);
     timerRef.current = setInterval(() => {
       const rawElapsed = Math.floor((Date.now() - timerData.startedAt) / 1000);
       // Clamp at the hard upper bound — past this we stop counting AND stop
       // the interval (overheat protection).
-      const capped = rawElapsed >= MAX_CYCLE_SECONDS;
-      const newElapsed = capped ? MAX_CYCLE_SECONDS : rawElapsed;
+      const capped = rawElapsed >= capSec;
+      const newElapsed = capped ? capSec : rawElapsed;
       setElapsed(newElapsed);
       const recSec = recommendedSecondsRef.current;
       // Haptic every minute
@@ -269,7 +266,7 @@ export default function TimerScreen() {
         <View style={[s.statusPill, { backgroundColor: isCapped ? COLORS.danger + '18' : isReached ? COLORS.success + '18' : almostDone ? COLORS.warning + '18' : COLORS.brand + '12' }]}>
           <View style={[s.statusDot, { backgroundColor: ringColor }]} />
           <Text style={[s.statusText, { color: ringColor }]}>
-            {isCapped ? 'Завершіть цикл — 1 година' : isReached ? 'Готово — зробіть фото ПІСЛЯ' : almostDone ? 'Майже готово' : 'Йде стерилізація'}
+            {isCapped ? 'Зафіксуйте цикл у журналі' : isReached ? 'Готово — зробіть фото ПІСЛЯ' : almostDone ? 'Майже готово' : 'Йде стерилізація'}
           </Text>
         </View>
 
@@ -334,7 +331,7 @@ export default function TimerScreen() {
 
         <Text style={s.nextHint}>
           {isCapped
-            ? 'Минула 1 година — максимальний час циклу. Завершіть цикл, щоб не пошкодити інструменти.'
+            ? 'Стерилізатор вже завершив роботу. Зробіть фото індикатора ПІСЛЯ, щоб зберегти цикл у журналі.'
             : isReached
             ? 'Час достатній. Зробіть фото індикатора ПІСЛЯ для завершення.'
             : 'Після досягнення мінімального часу зробите фото для порівняння'}

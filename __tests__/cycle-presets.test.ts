@@ -29,8 +29,10 @@ function validateCycleParams(temperature: string, duration: string) {
 // ── Preset tests ────────────────────────────────────────
 
 describe('STERI_PRESETS', () => {
-  it('has exactly 3 presets', () => {
-    expect(STERI_PRESETS).toHaveLength(3);
+  it('covers both dry-heat and autoclave modes', () => {
+    expect(STERI_PRESETS).toHaveLength(6);
+    expect(STERI_PRESETS.filter((p) => p.type === 'dry_heat')).toHaveLength(3);
+    expect(STERI_PRESETS.filter((p) => p.type === 'autoclave')).toHaveLength(3);
   });
 
   it('all presets have unique IDs', () => {

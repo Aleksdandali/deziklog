@@ -158,6 +158,19 @@ export function getRecommendedMinutes(durationMinutes: number | null): number {
 }
 
 /**
+ * Upper bound for the on-screen timer, in seconds: recommended time + 30 min
+ * grace. The sterilizer switches itself off, so this is NOT overheat
+ * protection — it's the "цикл не зафіксовано" reminder threshold: past it the
+ * timer freezes and the alert nags the master to take the after-photo and
+ * save the journal record. Relative to the mode — a fixed 60-min cap used to
+ * freeze the 160°C/150 хв preset mid-cycle.
+ */
+export function getCapSeconds(recommendedMinutes: number | null): number {
+  const rec = recommendedMinutes && recommendedMinutes > 0 ? recommendedMinutes : 60;
+  return (rec + 30) * 60;
+}
+
+/**
  * Calculate actual elapsed minutes between two ISO timestamps.
  * Returns null if either timestamp is missing.
  */

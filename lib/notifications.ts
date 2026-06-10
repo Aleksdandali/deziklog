@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { supabase } from './supabase';
+import { getCapSeconds } from './steri-config';
 
 // This module is imported for its side effects at the very top of the app
 // (app/_layout.tsx), BEFORE any UI and OUTSIDE the ErrorBoundary. A class error
@@ -109,6 +110,24 @@ export async function registerPushToken(userId: string): Promise<string | null> 
   }
 }
 
+/**
+ * Detach this device's push token from the account. Must run BEFORE
+ * signOut() (needs the live session for the RLS-scoped update) — otherwise
+ * order/solution pushes for the previous account keep arriving on a shared
+ * salon device after the next user signs in.
+ */
+export async function unregisterPushToken(userId: string): Promise<void> {
+  try {
+    await supabase
+      .from('profiles')
+      .update({ expo_push_token: null })
+      .eq('id', userId);
+    if (__DEV__) console.log('[Push] Token unregistered');
+  } catch (err) {
+    if (__DEV__) console.log('[Push] Unregister failed:', err);
+  }
+}
+
 // ── Solution reminders (local) ──────────────────────────
 
 export async function scheduleSolutionReminder(
@@ -193,30 +212,38 @@ export async function scheduleCycleNotifications(
   const granted = await requestNotificationPermissions();
   if (!granted) return; // in-app green "ГОТОВО" state (widget/timer) carries it
 
-  const MAX_CYCLE_SECONDS = 60 * 60;
+  // Cap is relative to the mode (rec + 30 min) — a fixed 60-min cap used to
+  // contradict the 160°C/150 хв preset.
+  const capSeconds = getCapSeconds(recommendedMinutes);
   const ESCALATION_OFFSETS_SEC = [120, 300]; // gentle nudges at +2 / +5 min
   const elapsed = Math.floor((Date.now() - startedAtMs) / 1000);
   const recSec = recommendedMinutes * 60;
   const navData = { screen: 'complete-cycle', sessionId };
 
+  // An alert whose moment already passed must NOT be re-armed: fixed ids
+  // replace PENDING requests, but a delivered one can't be replaced — on the
+  // self-heal path (timer screen remount) re-scheduling it would fire a fresh
+  // banner+sound ~1 s later every time the master peeks at a finished cycle.
+
   if (doneAllowed) {
-    const doneIn = Math.max(1, recSec - elapsed);
-    await Notifications.scheduleNotificationAsync({
-      identifier: `timer-done-${sessionId}`,
-      content: {
-        title: 'Час стерилізації досягнуто',
-        body: 'Мінімальний час пройшов. Зробіть фото індикатора ПІСЛЯ і завершіть цикл.',
-        sound: 'default',
-        interruptionLevel: 'timeSensitive',
-        categoryIdentifier: 'cycle-done',
-        data: navData,
-      },
-      trigger: { type: 'timeInterval', seconds: doneIn, channelId: 'cycle' } as any,
-    }).catch(() => {});
+    if (elapsed < recSec) {
+      await Notifications.scheduleNotificationAsync({
+        identifier: `timer-done-${sessionId}`,
+        content: {
+          title: 'Час стерилізації досягнуто',
+          body: 'Мінімальний час пройшов. Зробіть фото індикатора ПІСЛЯ і завершіть цикл.',
+          sound: 'default',
+          interruptionLevel: 'timeSensitive',
+          categoryIdentifier: 'cycle-done',
+          data: navData,
+        },
+        trigger: { type: 'timeInterval', seconds: Math.max(1, recSec - elapsed), channelId: 'cycle' } as any,
+      }).catch(() => {});
+    }
 
     // Gentle escalation — NOT timeSensitive, so these obey Focus/DND.
     for (let i = 0; i < ESCALATION_OFFSETS_SEC.length; i++) {
-      const nudgeIn = Math.max(1, recSec - elapsed + ESCALATION_OFFSETS_SEC[i]);
+      if (elapsed >= recSec + ESCALATION_OFFSETS_SEC[i]) continue;
       await Notifications.scheduleNotificationAsync({
         identifier: `timer-nudge-${sessionId}-${i}`,
         content: {
@@ -226,27 +253,27 @@ export async function scheduleCycleNotifications(
           categoryIdentifier: 'cycle-done',
           data: navData,
         },
-        trigger: { type: 'timeInterval', seconds: nudgeIn, channelId: 'cycle' } as any,
+        trigger: { type: 'timeInterval', seconds: Math.max(1, recSec - elapsed + ESCALATION_OFFSETS_SEC[i]), channelId: 'cycle' } as any,
       }).catch(() => {});
     }
   }
 
-  // Hard overheat cap — always scheduled (ignores the comfort pref). Skipped when
-  // it would coincide with "done" (dry-heat min 60min == cap), to avoid a
-  // contradictory done+overheat pair.
-  const capIn = Math.max(1, MAX_CYCLE_SECONDS - elapsed);
-  if (capIn > recSec) {
+  // Final reminder at the cap — always scheduled (ignores the comfort pref).
+  // The sterilizer switches itself off, so nothing is at risk physically;
+  // what's at risk is the JOURNAL RECORD — without the after-photo the cycle
+  // never lands in the regulatory journal.
+  if (elapsed < capSeconds) {
     await Notifications.scheduleNotificationAsync({
       identifier: `timer-cap-${sessionId}`,
       content: {
-        title: 'Завершіть цикл',
-        body: 'Минула 1 година. Подальший нагрів може пошкодити інструменти.',
+        title: 'Цикл не зафіксовано в журналі',
+        body: 'Стерилізатор вже завершив роботу. Зробіть фото індикатора ПІСЛЯ та збережіть запис.',
         sound: 'default',
         interruptionLevel: 'timeSensitive',
         categoryIdentifier: 'cycle-done',
         data: navData,
       },
-      trigger: { type: 'timeInterval', seconds: capIn, channelId: 'cycle' } as any,
+      trigger: { type: 'timeInterval', seconds: Math.max(1, capSeconds - elapsed), channelId: 'cycle' } as any,
     }).catch(() => {});
   }
 }
