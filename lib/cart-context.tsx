@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Product } from './types';
 import { haptic } from './haptics';
+import { supabase } from './supabase';
 
 const CART_STORAGE_KEY = 'dezik_cart';
 
@@ -57,6 +58,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (!loaded.current) return;
     AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items)).catch(() => {});
   }, [items]);
+
+  // Drop the in-memory cart on sign-out. CartProvider stays mounted across
+  // the guest/authed branch switch in the root layout (only the inner Stack
+  // is keyed), so without this the persist effect above would immediately
+  // re-write the previous user's cart after storage-cleanup wipes it.
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') setItems([]);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   const addItem = useCallback((product: Product) => {
     haptic.press();

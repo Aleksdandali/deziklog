@@ -3,6 +3,7 @@ import { AppState, AppStateStatus, Alert } from 'react-native';
 import { Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { registerPushToken } from './notifications';
+import { clearUserScopedStorage, checkUserSwitch } from './storage-cleanup';
 
 // ── Types ─────────────────────────────────────────────────
 type AuthStatus = 'loading' | 'authed' | 'guest';
@@ -80,10 +81,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setSession(null);
           setProfileComplete(null);
           setStatus('guest');
+          // Wipe user-scoped AsyncStorage (cart, AI chats, PII caches, active
+          // timer). Hooked to the event — not the profile button — so it also
+          // covers session-expiry sign-outs and account deletion.
+          clearUserScopedStorage().catch(() => {});
         } else if (event === 'INITIAL_SESSION') {
           if (s) {
             sessionRef.current = s;
             setSession(s);
+            checkUserSwitch(s.user.id).catch(() => {});
             // status stays 'loading' until profile check
           } else if (!sessionRef.current) {
             setStatus('guest');
@@ -99,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // SIGNED_IN, USER_UPDATED
           sessionRef.current = s;
           setSession(s);
+          checkUserSwitch(s.user.id).catch(() => {});
           setStatus('loading'); // wait for profile check
         }
       },
