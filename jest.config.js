@@ -1,6 +1,7 @@
 /** @type {import('jest').Config} */
 module.exports = {
   testEnvironment: 'node',
+  globals: { __DEV__: false },
   roots: ['<rootDir>/__tests__'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'json'],
   transform: {
@@ -19,5 +20,8 @@ module.exports = {
     '^@supabase/supabase-js$': '<rootDir>/__mocks__/supabase-js.ts',
     '^expo-device$': '<rootDir>/__mocks__/expo-device.ts',
     '^expo-constants$': '<rootDir>/__mocks__/expo-constants.ts',
+    '^expo-secure-store$': '<rootDir>/__mocks__/expo-secure-store.ts',
+    '^expo-crypto$': '<rootDir>/__mocks__/expo-crypto.ts',
+    '^react-native$': '<rootDir>/__mocks__/react-native.ts',
   },
 };
