@@ -65,7 +65,11 @@ export default function SolutionsScreen() {
       if (cached) { setSolutions(cached); setInitialLoad(false); }
     }
     try {
-      const { data } = await supabase.from('solutions').select('*').eq('user_id', userId).order('opened_at', { ascending: false });
+      const { data, error } = await supabase.from('solutions').select('*').eq('user_id', userId).order('opened_at', { ascending: false });
+      // supabase-js resolves network failures as { data: null, error } without
+      // throwing — without this check an offline blip rendered an empty tracker
+      // AND poisoned the cache with [].
+      if (error) throw error;
       const result = data ?? [];
       setSolutions(result);
       setCache(`solutions_${userId}`, result);

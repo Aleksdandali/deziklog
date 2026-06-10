@@ -63,6 +63,10 @@ export default function HomeScreen() {
           .eq('id', userId).maybeSingle(),
       ]);
 
+      // supabase-js resolves network failures as { data: null, error } without
+      // throwing — without these checks an offline blip rendered empty stats
+      // AND poisoned the cache with [].
+      if (sessRes.error) throw sessRes.error;
       const newSessions = sessRes.data ?? [];
       setSessions(newSessions);
       setCache(`home_sessions_${userId}`, newSessions);
@@ -77,6 +81,7 @@ export default function HomeScreen() {
         .from('solutions').select('*')
         .eq('user_id', userId)
         .order('expires_at', { ascending: true }).limit(5);
+      if (solDetailRes.error) throw solDetailRes.error;
       const newSolutions = solDetailRes.data ?? [];
       setSolutions(newSolutions);
       setCache(`home_solutions_${userId}`, newSolutions);

@@ -87,12 +87,16 @@ export default function JournalScreen() {
     }
 
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('sterilization_sessions')
         .select('*')
         .eq('user_id', userId)
         .in('status', ['completed', 'failed'])
         .order('created_at', { ascending: false });
+      // supabase-js resolves network failures as { data: null, error } without
+      // throwing — without this check an offline blip rendered an empty journal
+      // AND poisoned the cache with [].
+      if (error) throw error;
       const result = data ?? [];
       setSessions(result);
       setCache(`journal_${userId}`, result);
