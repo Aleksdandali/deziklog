@@ -4,6 +4,7 @@ import { syncOrderToKeyCRM } from "../_shared/sync-logic.ts";
 import { timingSafeEqual } from "../_shared/timing-safe.ts";
 import { sendExpoPush, buildPushMessage } from "../_shared/expo-push.ts";
 import { redact } from "../_shared/redact.ts";
+import { safeError } from "../_shared/safe-error.ts";
 
 const MAX_ATTEMPTS = 5;
 
@@ -120,7 +121,7 @@ Deno.serve(async (req) => {
     return jsonRes({ success: true, total: orders.length, retried, failed, results });
   } catch (err) {
     console.error("Retry cron error:", err);
-    return jsonRes({ error: (err as Error).message }, 500);
+    return jsonRes(safeError("retry-failed-syncs", err), 500);
   }
 });
 

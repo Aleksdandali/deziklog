@@ -14,6 +14,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { timingSafeEqual } from "../_shared/timing-safe.ts";
 import { reconcileKeycrmIds } from "../_shared/keycrm-products-lookup.ts";
+import { safeError } from "../_shared/safe-error.ts";
 import { fetchAllKeycrmProducts, type KeycrmProduct } from "../_shared/keycrm-stock.ts";
 
 const BUCKET = "product-images";
@@ -102,7 +103,7 @@ Deno.serve(async (req) => {
   try {
     keycrmMap = await fetchAllKeycrmProducts(keycrmKey);
   } catch (e) {
-    return new Response(JSON.stringify({ error: "KeyCRM fetch failed", details: (e as Error).message }), {
+    return new Response(JSON.stringify(safeError("restore-product-images", e, "KeyCRM fetch failed")), {
       status: 502,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -9,6 +9,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { fetchAllKeycrmProducts, syncStockToDb } from "../_shared/keycrm-stock.ts";
+import { safeError } from "../_shared/safe-error.ts";
 
 const COOLDOWN_MS = 30_000;
 
@@ -63,7 +64,7 @@ Deno.serve(async (req) => {
     lastSyncAt = Date.now();
     return jsonRes({ done: true, ...(result as object) });
   } catch (e) {
-    return jsonRes({ error: "Sync failed", details: (e as Error).message }, 502);
+    return jsonRes(safeError("refresh-stock", e, "Sync failed"), 502);
   } finally {
     inflight = null;
   }

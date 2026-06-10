@@ -10,6 +10,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 import { fetchWithRetry } from "../_shared/fetch-retry.ts";
 import { sendExpoPush, buildPushMessage } from "../_shared/expo-push.ts";
 import { timingSafeEqual } from "../_shared/timing-safe.ts";
+import { safeError } from "../_shared/safe-error.ts";
 import { mapKeyCRMStatus, STATUS_LABELS } from "../_shared/keycrm-status.ts";
 
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
@@ -157,7 +158,7 @@ Deno.serve(async (req) => {
     return jsonRes({ success: true, checked: orders.length, updated, results });
   } catch (err) {
     console.error("Poll error:", err);
-    return jsonRes({ error: (err as Error).message }, 500);
+    return jsonRes(safeError("poll-keycrm-statuses", err), 500);
   }
 });
 

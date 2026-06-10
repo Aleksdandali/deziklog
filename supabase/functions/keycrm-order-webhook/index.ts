@@ -17,6 +17,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 import { sendExpoPush, buildPushMessage } from "../_shared/expo-push.ts";
 import { timingSafeEqual } from "../_shared/timing-safe.ts";
 import { mapKeyCRMStatus, STATUS_LABELS } from "../_shared/keycrm-status.ts";
+import { safeError } from "../_shared/safe-error.ts";
 
 const WEBHOOK_SECRET = Deno.env.get("KEYCRM_WEBHOOK_SECRET");
 
@@ -147,7 +148,7 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     return new Response(
-      JSON.stringify({ error: (err as Error).message }),
+      JSON.stringify(safeError("keycrm-webhook", err)),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }

@@ -83,11 +83,11 @@ Deno.serve(async (req) => {
 
     // SMSFly responds with { success: 1, ... } or { success: 0, error: {...} }
     if (!resp.ok || respJson?.success !== 1) {
+      // GoTrue surfaces this hook's error message to the end client — keep it
+      // generic; the provider's internal description stays in the logs above.
       console.error("send-sms-hook: SMSFly failure", resp.status, JSON.stringify(respJson).slice(0, 500));
       return new Response(
-        JSON.stringify({
-          error: { message: respJson?.error?.description || `SMSFly HTTP ${resp.status}` },
-        }),
+        JSON.stringify({ error: { message: "SMS send failed" } }),
         { status: 502, headers: { "Content-Type": "application/json" } },
       );
     }
@@ -99,7 +99,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("send-sms-hook: fetch error", (err as Error).message);
     return new Response(
-      JSON.stringify({ error: { message: (err as Error).message } }),
+      JSON.stringify({ error: { message: "SMS send failed" } }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }

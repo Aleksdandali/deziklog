@@ -14,6 +14,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { sendExpoPush, buildPushMessage } from "../_shared/expo-push.ts";
 import { timingSafeEqual } from "../_shared/timing-safe.ts";
+import { safeError } from "../_shared/safe-error.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -141,7 +142,7 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     return new Response(
-      JSON.stringify({ error: (err as Error).message }),
+      JSON.stringify(safeError("notify-cycle-idle", err)),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }

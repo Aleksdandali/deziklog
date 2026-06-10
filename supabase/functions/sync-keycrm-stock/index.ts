@@ -14,6 +14,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { timingSafeEqual } from "../_shared/timing-safe.ts";
+import { safeError } from "../_shared/safe-error.ts";
 import { fetchAllKeycrmProducts, syncStockToDb } from "../_shared/keycrm-stock.ts";
 import { reconcileKeycrmIds } from "../_shared/keycrm-products-lookup.ts";
 
@@ -45,7 +46,7 @@ Deno.serve(async (req) => {
     const result = await syncStockToDb(admin, keycrmMap, undefined, dryRun);
     return jsonRes({ done: true, dry_run: dryRun, reconcile, ...result });
   } catch (e) {
-    return jsonRes({ error: "Sync failed", details: (e as Error).message }, 502);
+    return jsonRes(safeError("sync-keycrm-stock", e, "Sync failed"), 502);
   }
 });
 
