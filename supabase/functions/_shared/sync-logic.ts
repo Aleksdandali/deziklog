@@ -13,7 +13,7 @@ import { FREE_SHIPPING_THRESHOLD } from "./shipping-policy.ts";
 const KEYCRM_API_URL = "https://openapi.keycrm.app/v1";
 const NP_API_URL = "https://api.novaposhta.ua/v2.0/json/";
 
-// FREE_SHIPPING_THRESHOLD is defined in ./shipping-policy.ts (shared with create-np-ttn).
+// FREE_SHIPPING_THRESHOLD is defined in ./shipping-policy.ts.
 export { FREE_SHIPPING_THRESHOLD };
 
 /** Search KeyCRM buyer by phone, trying multiple historical formats. */
@@ -69,7 +69,7 @@ export async function syncOrderToKeyCRM(
   const NP_API_KEY = Deno.env.get("NOVA_POSHTA_API_KEY") || "";
 
   if (!KEYCRM_API_KEY) {
-    await markFailed(adminClient, orderId, "KEYCRM_API_KEY not set");
+    await markFailed(adminClient, orderId, userId, "KEYCRM_API_KEY not set");
     return { success: false, error: "KEYCRM_API_KEY not set in secrets" };
   }
 
@@ -87,7 +87,7 @@ export async function syncOrderToKeyCRM(
     .rpc("claim_order_for_keycrm_sync", { p_order_id: orderId, p_user_id: userId });
 
   if (claimErr) {
-    await markFailed(adminClient, orderId, `Claim failed: ${claimErr.message}`);
+    await markFailed(adminClient, orderId, userId, `Claim failed: ${claimErr.message}`);
     return { success: false, error: `Claim failed: ${claimErr.message}` };
   }
 
@@ -103,7 +103,7 @@ export async function syncOrderToKeyCRM(
       .maybeSingle();
 
     if (!existing) {
-      await markFailed(adminClient, orderId, "Order not found");
+      await markFailed(adminClient, orderId, userId, "Order not found");
       return { success: false, error: "Order not found" };
     }
 
@@ -243,7 +243,7 @@ export async function syncOrderToKeyCRM(
   if (!keycrmRes.ok) {
     const errMsg = `KeyCRM ${keycrmRes.status}: ${redact(keycrmData).slice(0, 500)}`;
     console.error(errMsg);
-    await markFailed(adminClient, orderId, errMsg);
+    await markFailed(adminClient, orderId, userId, errMsg);
     return { success: false, error: errMsg };
   }
 
@@ -366,9 +366,12 @@ export async function syncOrderToKeyCRM(
   return { success: true, keycrm_order_id: keycrmOrderId, np_ttn: ttn };
 }
 
-async function markFailed(client: SupabaseClient, orderId: string, error: string) {
+async function markFailed(client: SupabaseClient, orderId: string, userId: string, error: string) {
+  // Scoped by user_id: this runs under service_role, and orderId arrives from
+  // the request body — without the owner filter a caller could flip another
+  // user's order to "failed" by passing a foreign order id.
   await client.from("orders").update({
     keycrm_sync_status: "failed",
     keycrm_sync_error: error.slice(0, 1000),
-  }).eq("id", orderId);
+  }).eq("id", orderId).eq("user_id", userId);
 }
