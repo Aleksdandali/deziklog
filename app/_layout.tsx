@@ -1,5 +1,5 @@
-import { useEffect, useRef, type ComponentType } from 'react';
-import { Stack, useRouter, usePathname } from 'expo-router';
+import { useEffect, useRef, useState, type ComponentType } from 'react';
+import { Stack, useRouter, usePathname, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -37,7 +37,12 @@ function RootNavigator() {
   const { session, status, profileComplete, setProfileComplete } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const notifResponseListener = useRef<ReturnType<typeof Notifications.addNotificationResponseReceivedListener>>();
+  const notifResponseListener = useRef<ReturnType<typeof Notifications.addNotificationResponseReceivedListener> | undefined>(undefined);
+  // expo-router queues (or silently drops) navigation issued before the root
+  // navigator mounts — during the splash, onboarding, and the auth-branch
+  // swap there IS no navigator. Every effect below that calls router.* must
+  // gate on this and re-run when the navigator appears.
+  const navReady = !!useRootNavigationState()?.key;
 
   const [fontsLoaded, fontError] = useFonts({
     Inter_200ExtraLight,
@@ -60,17 +65,26 @@ function RootNavigator() {
     }
   }, [status, fontsReady]);
 
-  // Force navigation to /auth on logout. The guest and authed branches render
-  // structurally identical trees, so React alone would keep the Stack (and its
-  // navigation history with the previous user's screens) mounted across
-  // logout — the `key` on each <Stack> below forces a remount that wipes that
-  // state, and this replace then lands the fresh single-route history on the
-  // phone-input form.
+  // Force navigation to /auth ONLY on logout (authed → guest). A cold start
+  // as guest deliberately does NOT redirect: the catalog is the landing
+  // surface (App Review 5.1.1 — the reviewer must not face a login wall),
+  // '/' resolves to the home tab which immediately redirects guests to
+  // /(tabs)/catalog. On logout the `key` on each <Stack> below remounts the
+  // navigator (wiping the previous user's history) and this replace lands
+  // the fresh single-route history on the phone-input form.
+  const prevStatusRef = useRef<typeof status | null>(null);
+  const pendingLogoutNav = useRef(false);
   useEffect(() => {
-    if (status === 'guest') {
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = status;
+    if (status === 'guest' && prev === 'authed') {
+      pendingLogoutNav.current = true;
+    }
+    if (pendingLogoutNav.current && navReady) {
+      pendingLogoutNav.current = false;
       router.replace('/auth' as any);
     }
-  }, [status]);
+  }, [status, navReady]);
 
   // Guests can still be routed into account screens the guest Stack doesn't
   // declare (warm deep links, stale notification taps) — expo-router keeps
@@ -78,7 +92,7 @@ function RootNavigator() {
   // access control. Bounce anything outside the guest surface to /auth.
   // '/' is allowed: the home tab redirects guests to the catalog itself.
   useEffect(() => {
-    if (status !== 'guest') return;
+    if (status !== 'guest' || !navReady) return;
     const allowed =
       pathname === '/' ||
       pathname === '/auth' ||
@@ -87,13 +101,13 @@ function RootNavigator() {
       pathname.startsWith('/product/') ||
       pathname.startsWith('/legal');
     if (!allowed) router.replace('/auth' as any);
-  }, [status, pathname]);
+  }, [status, pathname, navReady]);
 
   // Resume the flow that demanded the sign-in: if a guest screen stashed a
   // destination (cart checkout), open it once the authed tree — including
   // first-time onboarding — is fully ready.
   useEffect(() => {
-    if (status !== 'authed' || profileComplete !== true) return;
+    if (status !== 'authed' || profileComplete !== true || !navReady) return;
     AsyncStorage.getItem(POST_AUTH_ROUTE_KEY)
       .then((route) => {
         if (!route) return;
@@ -101,29 +115,33 @@ function RootNavigator() {
         router.push(route as any);
       })
       .catch(() => {});
-  }, [status, profileComplete]);
+  }, [status, profileComplete, navReady]);
 
-  // Handle notification taps — navigate to relevant screen
+  // Handle notification taps. The target is stashed and flushed by the effect
+  // below once the navigator exists — on a cold start (app LAUNCHED by the
+  // tap, the common path after a 60-min cycle) this effect runs while the
+  // splash is still up and a direct router.push would be dropped.
+  const pendingNotifRoute = useRef<string | null>(null);
+  const [notifTick, setNotifTick] = useState(0);
   useEffect(() => {
     const route = (data?: Record<string, string>) => {
       if (!data?.screen) return;
-      try {
-        if (data.screen === 'complete-cycle' && data.sessionId) {
-          // Cycle-done alert → straight to the after-photo flow for that session.
-          router.push(`/complete-cycle?sessionId=${data.sessionId}` as any);
-        } else if (data.screen === 'order' && data.orderId) {
-          router.push(`/order/${data.orderId}` as any);
-        } else if (data.screen === 'journal') {
-          router.push('/(tabs)/journal' as any);
-        }
-      } catch (err) {
-        console.warn('Notification navigation failed:', err);
+      let target: string | null = null;
+      if (data.screen === 'complete-cycle' && data.sessionId) {
+        // Cycle-done alert → straight to the after-photo flow for that session.
+        target = `/complete-cycle?sessionId=${data.sessionId}`;
+      } else if (data.screen === 'order' && data.orderId) {
+        target = `/order/${data.orderId}`;
+      } else if (data.screen === 'journal') {
+        target = '/(tabs)/journal';
       }
+      if (!target) return;
+      pendingNotifRoute.current = target;
+      setNotifTick((t) => t + 1);
     };
 
-    // Cold start: the app was LAUNCHED by tapping a notification. The live
-    // listener does NOT fire for that launching tap — and a 60-min cycle almost
-    // always ends with the app killed, so this is the common path.
+    // The live listener does NOT fire for the launching tap — only
+    // getLastNotificationResponseAsync sees it.
     Notifications.getLastNotificationResponseAsync()
       .then((response) => route(response?.notification.request.content.data as Record<string, string> | undefined))
       .catch(() => {});
@@ -137,6 +155,17 @@ function RootNavigator() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!navReady || !pendingNotifRoute.current) return;
+    const target = pendingNotifRoute.current;
+    pendingNotifRoute.current = null;
+    try {
+      router.push(target as any);
+    } catch (err) {
+      console.warn('Notification navigation failed:', err);
+    }
+  }, [navReady, notifTick]);
+
   if (status === 'loading' || !fontsReady) {
     return <AnimatedSplash />;
   }
@@ -144,9 +173,10 @@ function RootNavigator() {
   if (status === 'guest' || !session) {
     // App Review 5.1.1(v): the shop must be browsable WITHOUT registration.
     // Guests get the catalog, product pages and a local-only cart; checkout
-    // and all journal/account features still require sign-in. The auth screen
-    // stays the landing route (the status==='guest' effect above replaces to
-    // /auth), with a "browse without registration" affordance on it.
+    // and all journal/account features still require sign-in. The CATALOG is
+    // the landing surface on a cold start ('/' → home tab → guest redirect to
+    // /(tabs)/catalog); the auth screen appears only after an explicit logout
+    // or when an account feature demands sign-in.
     return (
       <CartProvider>
         <StatusBar style="dark" />
