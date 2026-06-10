@@ -86,7 +86,8 @@ export default function OnboardingScreen({ onComplete }: Props) {
 
   const handleSave = async () => {
     if (!name.trim()) { Alert.alert("Введіть ваше ім'я"); return; }
-    if (!salonName.trim()) { Alert.alert('Введіть назву салону'); return; }
+    // Salon name is optional: shop-only customers sign up just to check out
+    // (App Review 5.1.1(v)); journal users can fill it in the profile later.
     if (!userId) {
       Alert.alert('Помилка авторизації', 'Спробуйте вийти і зайти знову.', [
         { text: 'Вийти', style: 'destructive', onPress: () => supabase.auth.signOut().catch(() => {}) },
@@ -100,9 +101,9 @@ export default function OnboardingScreen({ onComplete }: Props) {
       const profileData: Record<string, any> = {
         id: userId,
         name: name.trim(),
-        salon_name: salonName.trim(),
         updated_at: new Date().toISOString(),
       };
+      if (salonName.trim()) profileData.salon_name = salonName.trim();
       if (lastName.trim()) profileData.last_name = lastName.trim();
       if (email.trim()) profileData.email = email.trim();
       if (city.trim()) profileData.city = city.trim();
@@ -199,7 +200,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
             <View style={styles.inputGroup}>
               <View style={styles.labelRow}>
                 <Ionicons name="business-outline" size={14} color={COLORS.textSecondary} />
-                <Text style={styles.inputLabel}>Назва салону *</Text>
+                <Text style={styles.inputLabel}>Назва салону (необов'язково)</Text>
               </View>
               <TextInput
                 style={styles.input}

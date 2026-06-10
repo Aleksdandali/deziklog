@@ -6,8 +6,10 @@ import {
 import { AppText as Text, AppTextInput as TextInput } from '../components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
-import { COLORS } from '../lib/constants';
+import { COLORS, POST_AUTH_ROUTE_KEY } from '../lib/constants';
 
 type Step = 'phone' | 'otp';
 
@@ -40,6 +42,7 @@ function localizeError(msg: string): string {
 }
 
 export default function AuthScreen() {
+  const router = useRouter();
   const [step, setStep] = useState<Step>('phone');
   const [phoneDigits, setPhoneDigits] = useState(''); // 9 raw digits after +380
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -80,6 +83,21 @@ export default function AuthScreen() {
       Alert.alert('Помилка', localizeError(e instanceof Error ? e.message : 'Щось пішло не так'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  // App Review 5.1.1(v): browsing the shop must not require registration.
+  // If the user arrived here from the guest catalog ("Увійти" button), going
+  // back preserves their place; on a cold start there is no history, so we
+  // land them straight in the catalog tab.
+  const browseAsGuest = () => {
+    // The user declined to sign in — drop any stashed post-auth destination
+    // so a later organic sign-in doesn't teleport them into an old flow.
+    AsyncStorage.removeItem(POST_AUTH_ROUTE_KEY).catch(() => {});
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/catalog' as any);
     }
   };
 
@@ -287,6 +305,11 @@ export default function AuthScreen() {
               Натискаючи «Отримати код», ви погоджуєтеся з обробкою персональних даних.
             </Text>
           </View>
+
+          <TouchableOpacity style={styles.guestLink} onPress={browseAsGuest} activeOpacity={0.7} hitSlop={8}>
+            <Feather name="shopping-bag" size={15} color={COLORS.brand} />
+            <Text style={styles.guestLinkText}>Переглянути каталог без реєстрації</Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -364,4 +387,10 @@ const styles = StyleSheet.create({
   submitText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
 
   legalHint: { fontSize: 12, color: '#6B7280', textAlign: 'center', marginTop: 14, lineHeight: 17 },
+
+  guestLink: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginTop: 20, paddingVertical: 10,
+  },
+  guestLinkText: { fontSize: 15, fontWeight: '600', color: COLORS.brand },
 });

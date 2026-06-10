@@ -8,6 +8,7 @@ import { AppText as Text, AppTextInput as TextInput } from '../components/AppTex
 import { useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -17,7 +18,7 @@ import { useCart, CartItem } from '../lib/cart-context';
 import { useAuth, useSessionGuard } from '../lib/auth-context';
 import { createOrder, searchNPCities, getNPWarehouses, resolveNPCityByName, getProfile, getProductsStockStatus } from '../lib/api';
 import { supabase } from '../lib/supabase';
-import { COLORS, FONT, RADIUS, FREE_SHIPPING_THRESHOLD } from '../lib/constants';
+import { COLORS, FONT, RADIUS, FREE_SHIPPING_THRESHOLD, POST_AUTH_ROUTE_KEY } from '../lib/constants';
 import type { NPCity, NPWarehouse, DeliveryType, Profile } from '../lib/types';
 import { formatPrice } from '../lib/formatters';
 
@@ -189,6 +190,33 @@ export default function CartScreen() {
   const filteredWarehouses = warehouseQuery && !selectedWarehouse
     ? warehouses.filter((w) => w.description.toLowerCase().includes(warehouseQuery.toLowerCase()))
     : warehouses;
+
+  // App Review 5.1.1(v): guests may browse and fill a local cart, but
+  // checkout is an account-based feature — it needs a profile, Nova Poshta
+  // lookups and an order row, all auth-gated server-side. The cart lives in
+  // AsyncStorage, so nothing is lost across the sign-in.
+  const startCheckout = () => {
+    if (!session) {
+      Alert.alert(
+        'Потрібен вхід',
+        'Щоб оформити замовлення, увійдіть за номером телефону. Товари в кошику збережуться.',
+        [
+          { text: 'Скасувати', style: 'cancel' },
+          {
+            text: 'Увійти',
+            onPress: () => {
+              // Bring the user back to checkout right after the sign-in
+              // (read-and-cleared by the post-auth effect in app/_layout.tsx).
+              AsyncStorage.setItem(POST_AUTH_ROUTE_KEY, '/cart').catch(() => {});
+              router.push('/auth' as any);
+            },
+          },
+        ],
+      );
+      return;
+    }
+    setShowCheckout(true);
+  };
 
   const handleOrder = async () => {
     if (items.length === 0) { Alert.alert('Кошик порожній'); return; }
@@ -693,7 +721,7 @@ export default function CartScreen() {
           <Text style={s.sumLabel}>Сума</Text>
           <Text style={s.sumValue}>{formatPrice(total)}</Text>
         </View>
-        <TouchableOpacity style={s.checkoutBtn} onPress={() => setShowCheckout(true)} activeOpacity={0.9}>
+        <TouchableOpacity style={s.checkoutBtn} onPress={startCheckout} activeOpacity={0.9}>
           <Text style={s.checkoutBtnText}>Оформити замовлення</Text>
         </TouchableOpacity>
       </View>

@@ -4,7 +4,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { AppText as Text } from '../../components/AppText';
-import { useRouter } from 'expo-router';
+import { useRouter, Redirect } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -89,6 +89,14 @@ export default function HomeScreen() {
   }, [userId, initialLoad]);
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+
+  // Guests must never see the (account-based) home screen. The home tab is
+  // hidden from the bar for guests, but it is still the tab navigator's first
+  // route, so Android hardware-back from the catalog can focus it — bounce
+  // straight back to the shop instead of stranding the guest on empty stats.
+  if (!userId) {
+    return <Redirect href={'/(tabs)/catalog' as any} />;
+  }
 
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);

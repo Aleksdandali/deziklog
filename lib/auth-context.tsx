@@ -149,13 +149,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         authLog('profile result', { data, error: error?.message });
 
+        // Only the name is mandatory. Salon name stays optional: a shopper
+        // who registered just to check out must not be walled behind
+        // business-profile questions (App Review 5.1.1(v) — registration may
+        // only collect data relevant to the feature that required it).
         if (error) {
           setProfileComplete(false);
-        } else if (
-          !data ||
-          !data.name || !data.name.trim() ||
-          !data.salon_name || !data.salon_name.trim()
-        ) {
+        } else if (!data || !data.name || !data.name.trim()) {
           setProfileComplete(false);
         } else {
           setProfileComplete(true);

@@ -10,6 +10,7 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../lib/auth-context';
 import { useCart } from '../../lib/cart-context';
 import { COLORS, FONT, RADIUS, SHADOW } from '../../lib/constants';
 import { SkeletonProductCard } from '../../components/Skeleton';
@@ -33,6 +34,7 @@ const FOCUS_REFRESH_COOLDOWN_MS = 60_000;
 
 export default function CatalogScreen() {
   const router = useRouter();
+  const { session } = useAuth();
   const { addItem, itemCount } = useCart();
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -130,14 +132,22 @@ export default function CatalogScreen() {
           <Text style={s.title}>Магазин</Text>
           <Text style={s.subtitle}>Продукція DEZIK · {filtered.length} товарів</Text>
         </View>
-        <TouchableOpacity style={s.cartBtn} onPress={() => router.push('/cart')} activeOpacity={0.7}>
-          <Ionicons name="cart-outline" size={22} color={COLORS.text} />
-          {itemCount > 0 && (
-            <View style={s.badge}>
-              <Text style={s.badgeText}>{itemCount > 99 ? '99+' : itemCount}</Text>
-            </View>
+        <View style={s.headerActions}>
+          {!session && (
+            <TouchableOpacity style={s.loginBtn} onPress={() => router.push('/auth' as any)} activeOpacity={0.8}>
+              <Feather name="log-in" size={15} color="#FFFFFF" />
+              <Text style={s.loginBtnText}>Увійти</Text>
+            </TouchableOpacity>
           )}
-        </TouchableOpacity>
+          <TouchableOpacity style={s.cartBtn} onPress={() => router.push('/cart')} activeOpacity={0.7}>
+            <Ionicons name="cart-outline" size={22} color={COLORS.text} />
+            {itemCount > 0 && (
+              <View style={s.badge}>
+                <Text style={s.badgeText}>{itemCount > 99 ? '99+' : itemCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Category pills */}
@@ -251,6 +261,13 @@ const s = StyleSheet.create({
   },
   title: { fontSize: 28, fontFamily: FONT.bold, color: COLORS.text, letterSpacing: -0.5 },
   subtitle: { fontSize: 14, fontFamily: FONT.regular, color: COLORS.textSecondary, marginTop: 2 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  loginBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    height: 44, paddingHorizontal: 14, borderRadius: RADIUS.md,
+    backgroundColor: COLORS.brand,
+  },
+  loginBtnText: { fontSize: 14, fontFamily: FONT.semibold, color: '#FFFFFF' },
   cartBtn: {
     width: 44, height: 44, borderRadius: RADIUS.md,
     backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,

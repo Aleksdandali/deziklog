@@ -100,3 +100,10 @@ export const MS_PER_DAY = 86_400_000;
  * supabase/functions/_shared/shipping-policy.ts; keep the two values in sync).
  */
 export const FREE_SHIPPING_THRESHOLD = 2000;
+
+/**
+ * AsyncStorage key: where to send the user right after a sign-in that a guest
+ * screen asked for (e.g. cart checkout). Written by the guest screen before
+ * pushing /auth, read-and-cleared by the post-auth effect in app/_layout.tsx.
+ */
+export const POST_AUTH_ROUTE_KEY = 'dezik_post_auth_route';
