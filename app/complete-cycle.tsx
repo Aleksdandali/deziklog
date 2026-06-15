@@ -14,7 +14,7 @@ import ViewShot from 'react-native-view-shot';
 import { updateSession, uploadSessionPhoto, getSessionById, SessionConflictError } from '../lib/api';
 import { useAuth, useSessionGuard } from '../lib/auth-context';
 import { supabase } from '../lib/supabase';
-import { notifyCycleDone, cancelCycleNotifications } from '../lib/notifications';
+import { cancelCycleNotifications } from '../lib/notifications';
 import { COLORS } from '../lib/constants';
 import { RADII } from '../lib/theme';
 import { getDurationStatus } from '../lib/steri-config';
@@ -22,6 +22,7 @@ import { shareToInstagramStory } from '../lib/share-instagram';
 import CameraCapture from '../components/CameraCapture';
 import RotatedImage from '../components/RotatedImage';
 import StoryCard from '../components/StoryCard';
+import InstagramIcon from '../components/InstagramIcon';
 
 const ACTIVE_TIMER_KEY = 'active_timer';
 
@@ -213,10 +214,11 @@ export default function CompleteCycleScreen() {
       await AsyncStorage.removeItem(ACTIVE_TIMER_KEY);
       if (finalActualMinutes !== null) setActualMinutes(finalActualMinutes);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Local push notification (checks user preference, fire-and-forget)
-      if (timerData?.instruments) {
-        notifyCycleDone(uid, timerData.instruments).catch(() => {});
-      }
+      // No "cycle done" push here: completion is always a manual in-app action,
+      // so the master is already on this success screen — a banner would be a
+      // redundant duplicate (and outright wrong on a FAILED result). The
+      // "go finish it" reminders were the pre-scheduled timer-done/nudge alerts,
+      // which we just cancelled above.
       setDone(true);
     } catch (err: unknown) {
       Alert.alert('Помилка', err instanceof Error ? err.message : 'Не вдалось зберегти');
@@ -252,17 +254,11 @@ export default function CompleteCycleScreen() {
             {selectedResult === 'success' ? 'Цикл пройшов успішно!' : 'Стерилізація не пройшла'}
           </Text>
 
-          {/* Show actual duration */}
-          {actualMinutes !== null && (
+          {/* Selected protocol duration (not wall-clock — the app records the
+              chosen режим, not how long the master held the phone). */}
+          {recommendedMinutes > 0 && (
             <View style={s.doneDurationRow}>
-              <Text style={s.doneDuration}>{actualMinutes} хв</Text>
-              {recommendedMinutes > 0 && (
-                <View style={[s.doneDurationBadge, { backgroundColor: isSufficient ? COLORS.success + '20' : COLORS.warning + '20' }]}>
-                  <Text style={[s.doneDurationBadgeText, { color: isSufficient ? COLORS.success : COLORS.warning }]}>
-                    {isSufficient ? 'достатньо' : `рекомендовано ${recommendedMinutes} хв`}
-                  </Text>
-                </View>
-              )}
+              <Text style={s.doneDuration}>{recommendedMinutes} хв</Text>
             </View>
           )}
 
@@ -292,9 +288,7 @@ export default function CompleteCycleScreen() {
               style={[s.igBtnWrap, { opacity: sharing ? 0.6 : 1 }]}
             >
               <View style={s.igBtnInner}>
-                <View style={s.igIconWrap}>
-                  <Feather name="instagram" size={20} color="#FFFFFF" />
-                </View>
+                <InstagramIcon size={36} iconSize={20} />
                 <View style={{ flex: 1 }}>
                   <Text style={s.igBtnText}>{sharing ? 'Підготовка...' : 'Поділитись в Stories'}</Text>
                   <Text style={s.igBtnHint}>Покажіть клієнтам вашу відповідальність</Text>
@@ -323,7 +317,7 @@ export default function CompleteCycleScreen() {
             <StoryCard
               instruments={timerData?.instruments || ''}
               sterilizer={timerData?.sterilizerName || ''}
-              duration={actualMinutes != null ? `${Math.floor(actualMinutes / 60).toString().padStart(2, '0')}:${(actualMinutes % 60).toString().padStart(2, '0')}` : '--'}
+              duration={recommendedMinutes > 0 ? `${Math.floor(recommendedMinutes / 60).toString().padStart(2, '0')}:${(recommendedMinutes % 60).toString().padStart(2, '0')}` : '--'}
               packType=""
               photoBefore={photoBeforeUri}
               photoAfter={photoAfter}
@@ -587,14 +581,11 @@ const s = StyleSheet.create({
   doneTitle: { fontSize: 24, fontWeight: '800', color: COLORS.text, marginTop: 8, textAlign: 'center' },
   doneDurationRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   doneDuration: { fontSize: 20, fontWeight: '800', color: COLORS.text },
-  doneDurationBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADII.pill },
-  doneDurationBadgeText: { fontSize: 12, fontWeight: '700' },
   doneSub: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
   gradientInner: { flexDirection: 'row', height: 54, borderRadius: RADII.lg, alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 32 },
   gradientText: { fontSize: 16, fontWeight: '700', color: '#fff' },
   igBtnWrap: { marginBottom: 12, borderRadius: RADII.lg + 2 },
   igBtnInner: { flexDirection: 'row', minHeight: 60, borderRadius: RADII.lg + 2, alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 14, backgroundColor: COLORS.brandLight, borderWidth: 1, borderColor: 'rgba(75,86,158,0.14)' },
-  igIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center' },
   igBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.text },
   igBtnHint: { fontSize: 11, color: COLORS.textSecondary, marginTop: 1 },
   secondaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14, marginTop: 8 },

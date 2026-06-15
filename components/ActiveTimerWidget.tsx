@@ -12,9 +12,6 @@ import { cancelCycleNotifications } from '../lib/notifications';
 import { useSessionGuard } from '../lib/auth-context';
 
 const ACTIVE_TIMER_KEY = 'active_timer';
-// Mirror the timer screen's hard overheat cap (timer.tsx): past 60 min the
-// cycle must be finalized, so the widget freezes its count there too.
-const MAX_CYCLE_SECONDS = 60 * 60;
 
 interface TimerData {
   sessionId: string;
@@ -68,15 +65,16 @@ export default function ActiveTimerWidget() {
       if (stored) {
         const data: TimerData = JSON.parse(stored);
         setTimerData(data);
-        // Count UP elapsed time, clamped at the overheat cap — mirrors the
-        // timer screen exactly so Home and the timer never disagree.
-        const tick = () => Math.min(MAX_CYCLE_SECONDS, Math.floor((Date.now() - data.startedAt) / 1000));
+        // Count UP elapsed time, frozen at the selected protocol duration —
+        // mirrors the timer screen exactly so Home and the timer never disagree.
+        const cap = data.duration > 0 ? data.duration * 60 : Infinity;
+        const tick = () => Math.min(cap, Math.floor((Date.now() - data.startedAt) / 1000));
         setElapsed(tick());
 
         interval = setInterval(() => {
           const el = tick();
           setElapsed(el);
-          if (el >= MAX_CYCLE_SECONDS && interval) { clearInterval(interval); interval = null; }
+          if (el >= cap && interval) { clearInterval(interval); interval = null; }
         }, 1000);
       } else {
         setTimerData(null);

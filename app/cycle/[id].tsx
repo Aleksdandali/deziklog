@@ -13,11 +13,11 @@ import { useAuth } from '../../lib/auth-context';
 import { supabase } from '../../lib/supabase';
 import { COLORS } from '../../lib/constants';
 import { RADII } from '../../lib/theme';
-import { calcActualMinutes, getDurationStatus } from '../../lib/steri-config';
 import { shareToInstagramStory } from '../../lib/share-instagram';
-import { generateCyclePDF } from '../../lib/pdf-export';
+import { generateCyclePDF, loadCyclePhotos } from '../../lib/pdf-export';
 import StoryCard from '../../components/StoryCard';
 import RotatedImage from '../../components/RotatedImage';
+import InstagramIcon from '../../components/InstagramIcon';
 
 function fmt(iso: string | null, mode: 'time' | 'date' | 'datetime'): string {
   if (!iso) return '--';
@@ -74,16 +74,17 @@ export default function CycleDetailScreen() {
       .then(({ data }) => { if (data) setProfileData(data); });
   }, [userId]);
 
-  const actualMin = sess ? calcActualMinutes(sess.started_at, sess.ended_at) : null;
+  // Display the SELECTED protocol duration (not wall-clock) — the app is a
+  // photo-fixation journal, not a validated controller.
   const recommended = sess?.duration_minutes ?? null;
-  const status = actualMin !== null && recommended !== null
-    ? getDurationStatus(actualMin, recommended) : null;
   const passed = sess?.result === 'success';
 
   const handleExport = async () => {
     if (!sess) return;
     try {
-      const uri = await generateCyclePDF(sess, profileData.salon_name ?? undefined);
+      // Inline the before/after photos as base64 so the PDF is self-contained.
+      const photoMap = await loadCyclePhotos([sess], getPhotoUrl);
+      const uri = await generateCyclePDF(sess, profileData.salon_name ?? undefined, photoMap.get(sess.id));
       const canShare = await Sharing.isAvailableAsync();
       if (!canShare) {
         Alert.alert('Помилка', 'Шерінг недоступний на цьому пристрої');
@@ -210,21 +211,8 @@ export default function CycleDetailScreen() {
           <View style={st.timeDivider} />
           <View style={st.timeRow}>
             <Text style={st.timeLabel}>Тривалість</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              {status && (
-                <View style={[st.durationDot, {
-                  backgroundColor: status === 'sufficient' ? COLORS.success : COLORS.danger,
-                }]} />
-              )}
-              <Text style={[st.timeValue, st.timeValueBold]}>{fmtDuration(actualMin)}</Text>
-            </View>
+            <Text style={[st.timeValue, st.timeValueBold]}>{fmtDuration(recommended)}</Text>
           </View>
-          {status === 'insufficient' && (
-            <View style={st.timeWarning}>
-              <Feather name="alert-triangle" size={13} color={COLORS.warning} />
-              <Text style={st.timeWarningText}>Менше рекомендованого ({recommended} хв)</Text>
-            </View>
-          )}
         </View>
 
         {/* Photos */}
@@ -284,9 +272,7 @@ export default function CycleDetailScreen() {
             style={[st.igBtnWrap, { opacity: sharing ? 0.6 : 1 }]}
           >
             <View style={st.igBtnInner}>
-              <View style={st.igIconWrap}>
-                <Feather name="instagram" size={18} color="#FFFFFF" />
-              </View>
+              <InstagramIcon size={34} iconSize={18} />
               <View style={{ flex: 1 }}>
                 <Text style={st.igBtnText}>{sharing ? 'Підготовка...' : 'Поділитись в Stories'}</Text>
                 <Text style={st.igBtnHint}>Покажіть клієнтам вашу відповідальність</Text>
@@ -310,7 +296,7 @@ export default function CycleDetailScreen() {
             <StoryCard
               instruments={sess.instrument_names}
               sterilizer={sess.sterilizer_name}
-              duration={fmtDuration(actualMin ?? recommended)}
+              duration={fmtDuration(recommended)}
               packType={sess.pouch_size && sess.pouch_size !== 'none' ? sess.pouch_size : ''}
               photoBefore={photoBeforeUrl}
               photoAfter={photoAfterUrl}
@@ -377,9 +363,6 @@ const st = StyleSheet.create({
   timeValue: { fontSize: 14, fontWeight: '600', color: COLORS.text },
   timeValueBold: { fontSize: 16, fontWeight: '800' },
   timeDivider: { height: 1, backgroundColor: COLORS.border, marginVertical: 4 },
-  timeWarning: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: COLORS.border },
-  timeWarningText: { fontSize: 12, color: COLORS.warning, fontWeight: '500' },
-  durationDot: { width: 8, height: 8, borderRadius: 4 },
 
   // Photos
   photosRow: { flexDirection: 'row', gap: 12 },
@@ -391,7 +374,6 @@ const st = StyleSheet.create({
   // Instagram
   igBtnWrap: { marginTop: 28, borderRadius: 16 },
   igBtnInner: { flexDirection: 'row', minHeight: 56, borderRadius: 16, alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 12, backgroundColor: COLORS.brandLight, borderWidth: 1, borderColor: 'rgba(75,86,158,0.14)' },
-  igIconWrap: { width: 34, height: 34, borderRadius: 10, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center' },
   igBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.text, letterSpacing: 0.2 },
   igBtnHint: { fontSize: 11, color: COLORS.textSecondary, marginTop: 2, letterSpacing: 0.1 },
 

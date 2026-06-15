@@ -711,6 +711,14 @@ export default function ProfileScreen() {
             onPress={handleExportPDF}
           />
           <MenuItemFeather
+            icon="help-circle"
+            iconColor={COLORS.brand}
+            iconBg={COLORS.brandLight}
+            label="Як користуватися"
+            subtitle="Коротка інструкція по застосунку"
+            onPress={() => router.push('/legal/how-to' as any)}
+          />
+          <MenuItemFeather
             icon="shield"
             iconColor="#2E7D32"
             iconBg="#E8F5E9"

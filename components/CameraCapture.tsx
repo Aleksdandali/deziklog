@@ -2,7 +2,6 @@ import React, { useRef } from 'react';
 import { View, TouchableOpacity, StyleSheet, SafeAreaView, Linking } from 'react-native';
 import { AppText as Text } from './AppText';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
 import { COLORS } from '../lib/constants';
@@ -35,15 +34,6 @@ export default function CameraCapture({ label, onCapture, onClose }: CameraCaptu
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const photo = await cameraRef.current.takePictureAsync({ quality: 0.7, base64: false });
     if (photo?.uri) onCapture(photo.uri);
-  };
-
-  const pickFromGallery = async () => {
-    onClose();
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-    });
-    if (!res.canceled) onCapture(res.assets[0].uri);
   };
 
   if (!permission) return null;
@@ -86,9 +76,9 @@ export default function CameraCapture({ label, onCapture, onClose }: CameraCaptu
               <Feather name="x" size={22} color="#fff" />
             </TouchableOpacity>
             <Text style={styles.cameraLabel}>{label}</Text>
-            <TouchableOpacity style={styles.cameraGallery} onPress={pickFromGallery}>
-              <Feather name="image" size={22} color="#fff" />
-            </TouchableOpacity>
+            {/* Spacer keeps the label centered — gallery import is intentionally
+                removed: the journal must be live-captured photos only. */}
+            <View style={styles.cameraTopSpacer} />
           </View>
           <View style={styles.cameraBottom}>
             <TouchableOpacity style={styles.shutter} onPress={takePicture} activeOpacity={0.7}>
@@ -109,7 +99,7 @@ const styles = StyleSheet.create({
   cameraTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8 },
   cameraClose: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
   cameraLabel: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  cameraGallery: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
+  cameraTopSpacer: { width: 40, height: 40 },
   cameraBottom: { alignItems: 'center', paddingBottom: 32 },
   shutter: { width: 76, height: 76, borderRadius: 38, borderWidth: 4, borderColor: '#fff', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.2)' },
   shutterInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#fff' },

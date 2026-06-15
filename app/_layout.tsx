@@ -186,6 +186,7 @@ function RootNavigator() {
           <Stack.Screen name="product/[id]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="cart" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="legal/privacy" />
+          <Stack.Screen name="legal/how-to" />
         </Stack>
       </CartProvider>
     );
@@ -224,6 +225,7 @@ function RootNavigator() {
         <Stack.Screen name="orders" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="ai-chat" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="legal/privacy" />
+        <Stack.Screen name="legal/how-to" />
       </Stack>
     </CartProvider>
   );

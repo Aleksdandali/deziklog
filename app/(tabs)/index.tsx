@@ -1,11 +1,12 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, ScrollView, TouchableOpacity, StyleSheet, SafeAreaView,
-  RefreshControl,
+  RefreshControl, Alert,
 } from 'react-native';
 import { AppText as Text } from '../../components/AppText';
 import { useRouter, Redirect } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '../../lib/supabase';
@@ -18,6 +19,8 @@ import type { Solution } from '../../lib/types';
 import { SkeletonEntryCard } from '../../components/Skeleton';
 import Skeleton from '../../components/Skeleton';
 import ActiveTimerWidget from '../../components/ActiveTimerWidget';
+
+const ACTIVE_TIMER_KEY = 'active_timer';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -141,7 +144,28 @@ export default function HomeScreen() {
         <View style={s.section}>
           <TouchableOpacity
             activeOpacity={0.92}
-            onPress={() => {
+            onPress={async () => {
+              // Block a second cycle while one is running (mirrors the guard in
+              // app/new-cycle.tsx — this is the nicer-UX path before navigating).
+              const stored = await AsyncStorage.getItem(ACTIVE_TIMER_KEY);
+              if (stored) {
+                let active: { sessionId?: string; duration?: number } = {};
+                try { active = JSON.parse(stored); } catch {}
+                Alert.alert(
+                  'Активний цикл триває',
+                  'Зараз триває активний цикл. Завершіть поточний цикл, перш ніж розпочинати новий.',
+                  [
+                    { text: 'Закрити', style: 'cancel' },
+                    {
+                      text: 'Перейти до циклу',
+                      onPress: () => {
+                        if (active.sessionId) router.push(`/timer?sessionId=${active.sessionId}&duration=${active.duration}`);
+                      },
+                    },
+                  ],
+                );
+                return;
+              }
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               router.push('/new-cycle');
             }}

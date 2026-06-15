@@ -158,12 +158,12 @@ export function getRecommendedMinutes(durationMinutes: number | null): number {
 }
 
 /**
- * Upper bound for the on-screen timer, in seconds: recommended time + 30 min
- * grace. The sterilizer switches itself off, so this is NOT overheat
- * protection — it's the "цикл не зафіксовано" reminder threshold: past it the
- * timer freezes and the alert nags the master to take the after-photo and
- * save the journal record. Relative to the mode — a fixed 60-min cap used to
- * freeze the 160°C/150 хв preset mid-cycle.
+ * Escalation-reminder threshold, in seconds: selected duration + 30 min grace.
+ * The on-screen timer now FREEZES at the selected duration (see app/timer.tsx);
+ * this is purely the background "цикл не зафіксовано" nudge — the sterilizer
+ * switches itself off, so nothing is at physical risk, but without the
+ * after-photo the cycle never lands in the journal. Used only by
+ * lib/notifications (scheduleCycleNotifications), relative to the mode.
  */
 export function getCapSeconds(recommendedMinutes: number | null): number {
   const rec = recommendedMinutes && recommendedMinutes > 0 ? recommendedMinutes : 60;

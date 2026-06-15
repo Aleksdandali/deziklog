@@ -19,7 +19,6 @@ import { getCached, setCache } from '../../lib/cache';
 import { generateJournalPDF, loadCyclePhotos } from '../../lib/pdf-export';
 import { getProfile, getPhotoUrl, type SterilizationSession } from '../../lib/api';
 import { SkeletonEntryCard } from '../../components/Skeleton';
-import { calcActualMinutes, getDurationStatus } from '../../lib/steri-config';
 import { shareToInstagramStory } from '../../lib/share-instagram';
 import StoryCard from '../../components/StoryCard';
 import { formatDuration, formatTime } from '../../lib/formatters';
@@ -309,7 +308,7 @@ export default function JournalScreen() {
             <StoryCard
               instruments={sharingCycle.instrument_names}
               sterilizer={sharingCycle.sterilizer_name}
-              duration={formatDuration(calcActualMinutes(sharingCycle.started_at, sharingCycle.ended_at) ?? sharingCycle.duration_minutes)}
+              duration={formatDuration(sharingCycle.duration_minutes)}
               packType={sharingCycle.pouch_size && sharingCycle.pouch_size !== 'none' ? sharingCycle.pouch_size : ''}
               photoBefore={sharingPhotoBefore}
               photoAfter={sharingPhotoAfter}
@@ -370,12 +369,8 @@ function FilterChip({ label, count, active, onPress, color }: {
 
 function SessionCard({ sess, onPress, onShare }: { sess: SterilizationSession; onPress: () => void; onShare?: () => void }) {
   const passed = sess.result === 'success';
-  const actual = calcActualMinutes(sess.started_at, sess.ended_at);
-  const recommended = sess.duration_minutes;
-  const displayMin = actual ?? recommended;
-  const dStatus = actual !== null && recommended
-    ? getDurationStatus(actual, recommended)
-    : null;
+  // Show the selected protocol duration, not wall-clock (photo-fixation journal).
+  const displayMin = sess.duration_minutes;
 
   const pouchLabel = sess.pouch_size && sess.pouch_size !== 'none' ? sess.pouch_size : null;
 
@@ -433,12 +428,7 @@ function SessionCard({ sess, onPress, onShare }: { sess: SterilizationSession; o
             <Text style={s.cardTime}>{formatTime(sess.created_at)}</Text>
           </View>
           <View style={s.durationWrap}>
-            {dStatus && (
-              <View style={[s.durationDot, {
-                backgroundColor: dStatus === 'sufficient' ? COLORS.success : COLORS.danger,
-              }]} />
-            )}
-            <Text style={[s.cardDuration, dStatus === 'insufficient' && { color: COLORS.danger }]}>
+            <Text style={s.cardDuration}>
               {formatDuration(displayMin)}
             </Text>
           </View>
@@ -550,7 +540,6 @@ const s = StyleSheet.create({
   timeWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   cardTime: { fontSize: 12, color: COLORS.textTertiary, fontVariant: ['tabular-nums'] },
   durationWrap: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  durationDot: { width: 7, height: 7, borderRadius: 4 },
   cardDuration: { fontSize: 14, fontWeight: '700', color: COLORS.text, fontVariant: ['tabular-nums'] },
 
   // Empty

@@ -189,7 +189,8 @@ export async function cancelSolutionNotifications(solutionId: string): Promise<v
  *
  * Idempotent: fixed identifiers mean re-calling REPLACES the schedule (used by
  * the timer-screen foreground self-heal). Gated on notification_cycle_done for
- * the "done"+nudges; the 60-min overheat cap always fires (safety).
+ * the "done"+nudges; the final +30-min "цикл не зафіксовано" reminder always
+ * fires (the journal record matters regardless of the comfort pref).
  */
 export async function scheduleCycleNotifications(
   userId: string,
@@ -215,7 +216,10 @@ export async function scheduleCycleNotifications(
   // Cap is relative to the mode (rec + 30 min) — a fixed 60-min cap used to
   // contradict the 160°C/150 хв preset.
   const capSeconds = getCapSeconds(recommendedMinutes);
-  const ESCALATION_OFFSETS_SEC = [120, 300]; // gentle nudges at +2 / +5 min
+  // Gentle nudges at +5 / +15 min. Spaced out on purpose: a master is usually
+  // mid-procedure with a client when the cycle finishes, so +2/+5 pinging felt
+  // like spam. Progression is now done → +5 → +15 → cap (+30).
+  const ESCALATION_OFFSETS_SEC = [300, 900];
   const elapsed = Math.floor((Date.now() - startedAtMs) / 1000);
   const recSec = recommendedMinutes * 60;
   const navData = { screen: 'complete-cycle', sessionId };
@@ -231,7 +235,7 @@ export async function scheduleCycleNotifications(
         identifier: `timer-done-${sessionId}`,
         content: {
           title: 'Час стерилізації досягнуто',
-          body: 'Мінімальний час пройшов. Зробіть фото індикатора ПІСЛЯ і завершіть цикл.',
+          body: 'Час стерилізації пройшов. Зробіть фото індикатора ПІСЛЯ і завершіть цикл.',
           sound: 'default',
           interruptionLevel: 'timeSensitive',
           categoryIdentifier: 'cycle-done',
@@ -294,37 +298,6 @@ export async function cancelCycleNotifications(sessionId: string): Promise<void>
     await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
     await Notifications.dismissNotificationAsync(id).catch(() => {});
   }
-}
-
-// ── Cycle notifications (local) ─────────────────────────
-
-/** Show local notification when cycle completes. Checks notification_cycle_done flag. */
-export async function notifyCycleDone(userId: string, instruments: string): Promise<void> {
-  try {
-    const { data } = await supabase
-      .from('profiles')
-      .select('notification_cycle_done')
-      .eq('id', userId)
-      .maybeSingle();
-    if (data?.notification_cycle_done === false) return;
-  } catch (err) {
-    console.warn('Notifications: failed to check cycle_done pref:', err);
-  }
-
-  await Notifications.scheduleNotificationAsync({
-    identifier: `cycle-done-${Date.now()}`,
-    content: {
-      title: 'Цикл завершено',
-      body: `Стерилізація завершена: ${instruments}.`,
-      // 'default' (not `true`) is the canonical form: it maps to the system
-      // default sound on iOS and tells expo-notifications to use the channel
-      // sound on Android. Plain `true` is silently dropped on some devices.
-      sound: 'default',
-      // iOS: breaks through Focus / DND for safety-critical events.
-      interruptionLevel: 'timeSensitive',
-    },
-    trigger: null,
-  });
 }
 
 // ── Order status notification (local fallback) ──────────

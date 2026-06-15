@@ -13,7 +13,7 @@ import { cancelCycleNotifications, scheduleCycleNotifications } from '../lib/not
 import { useSessionGuard } from '../lib/auth-context';
 import { COLORS, FONT } from '../lib/constants';
 import { RADII } from '../lib/theme';
-import { formatElapsed, getCapSeconds } from '../lib/steri-config';
+import { formatElapsed } from '../lib/steri-config';
 
 const RING_SIZE = 260;
 const RING_CX = RING_SIZE / 2;
@@ -92,9 +92,10 @@ export default function TimerScreen() {
       }
 
       setTimerData(data);
-      // Clamp at mount too — covers the case where the user minimized the
-      // app well past the cap and came back later.
-      setElapsed(Math.min(getCapSeconds(data.duration), Math.floor((Date.now() - data.startedAt) / 1000)));
+      // Clamp at mount too — covers the case where the user minimized the app
+      // well past the selected duration and came back later. The timer freezes
+      // at the chosen protocol time (the sterilizer finishes on its own).
+      setElapsed(Math.min(data.duration * 60, Math.floor((Date.now() - data.startedAt) / 1000)));
       // Self-heal: re-arm the pre-scheduled alerts (idempotent — fixed ids
       // replace). Backfills cycles started before this build, Android reboots
       // that drop alarms, and clock drift. If already past the minimum, the
@@ -104,16 +105,11 @@ export default function TimerScreen() {
   }, []);
 
   const recommendedSeconds = (timerData?.duration ?? 0) * 60;
-  const capSeconds = getCapSeconds(timerData?.duration ?? null);
   const progress = recommendedSeconds > 0 ? Math.min(1, elapsed / recommendedSeconds) : 0;
   const isReached = elapsed >= recommendedSeconds && recommendedSeconds > 0;
   const almostDone = !isReached && recommendedSeconds > 0 && (recommendedSeconds - elapsed) <= 60;
-  const isCapped = elapsed >= capSeconds;
 
   const { minutes: elapsedMin, seconds: elapsedSec } = formatElapsed(elapsed);
-
-  const recommendedSecondsRef = useRef(recommendedSeconds);
-  recommendedSecondsRef.current = recommendedSeconds;
 
   useEffect(() => {
     if (!timerData) return;
@@ -121,30 +117,25 @@ export default function TimerScreen() {
     // Clear any previous interval to prevent duplicates
     if (timerRef.current) clearInterval(timerRef.current);
 
-    const capSec = getCapSeconds(timerData.duration);
+    const recSec = timerData.duration * 60;
     timerRef.current = setInterval(() => {
       const rawElapsed = Math.floor((Date.now() - timerData.startedAt) / 1000);
-      // Clamp at the hard upper bound — past this we stop counting AND stop
-      // the interval (overheat protection).
-      const capped = rawElapsed >= capSec;
-      const newElapsed = capped ? capSec : rawElapsed;
+      // Freeze the on-screen timer at the selected protocol duration — past it
+      // the sterilizer is already done and the count must not keep climbing.
+      const reached = recSec > 0 && rawElapsed >= recSec;
+      const newElapsed = reached ? recSec : rawElapsed;
       setElapsed(newElapsed);
-      const recSec = recommendedSecondsRef.current;
       // Haptic every minute
       if (newElapsed > 0 && newElapsed % 60 === 0) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
-      // Foreground-only haptic when reached. The actual ALERT (sound/banner) is
-      // scheduled AHEAD of time at cycle start (lib/notifications
-      // scheduleCycleNotifications), so it fires even when backgrounded/locked —
-      // this interval only runs on-screen and must NOT be the notification source.
-      if (newElapsed === recSec && recSec > 0) {
+      // Reached the selected duration: success haptic + freeze (stop interval).
+      // The completion ALERT (sound/banner) is pre-scheduled at cycle start
+      // (lib/notifications scheduleCycleNotifications) so it fires even when
+      // backgrounded/locked — this interval is on-screen only and must NOT be
+      // the notification source.
+      if (reached) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-      // Hard cap: stop the interval entirely (overheat protection). The cap
-      // banner is the pre-scheduled timer-cap notification.
-      if (capped) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         if (timerRef.current) {
           clearInterval(timerRef.current);
           timerRef.current = null;
@@ -218,7 +209,7 @@ export default function TimerScreen() {
   const dotX = RING_CX + RING_R * Math.cos(progressAngle);
   const dotY = RING_CY + RING_R * Math.sin(progressAngle);
 
-  const ringColor = isCapped ? COLORS.danger : isReached ? COLORS.success : almostDone ? COLORS.warning : COLORS.brand;
+  const ringColor = isReached ? COLORS.success : almostDone ? COLORS.warning : COLORS.brand;
 
   if (!timerData) {
     return (
@@ -263,10 +254,10 @@ export default function TimerScreen() {
 
       <View style={s.content}>
         {/* Status label */}
-        <View style={[s.statusPill, { backgroundColor: isCapped ? COLORS.danger + '18' : isReached ? COLORS.success + '18' : almostDone ? COLORS.warning + '18' : COLORS.brand + '12' }]}>
+        <View style={[s.statusPill, { backgroundColor: isReached ? COLORS.success + '18' : almostDone ? COLORS.warning + '18' : COLORS.brand + '12' }]}>
           <View style={[s.statusDot, { backgroundColor: ringColor }]} />
           <Text style={[s.statusText, { color: ringColor }]}>
-            {isCapped ? 'Зафіксуйте цикл у журналі' : isReached ? 'Готово — зробіть фото ПІСЛЯ' : almostDone ? 'Майже готово' : 'Йде стерилізація'}
+            {isReached ? 'Готово — зробіть фото ПІСЛЯ' : almostDone ? 'Майже готово' : 'Йде стерилізація'}
           </Text>
         </View>
 
@@ -330,11 +321,9 @@ export default function TimerScreen() {
         )}
 
         <Text style={s.nextHint}>
-          {isCapped
-            ? 'Стерилізатор вже завершив роботу. Зробіть фото індикатора ПІСЛЯ, щоб зберегти цикл у журналі.'
-            : isReached
+          {isReached
             ? 'Час достатній. Зробіть фото індикатора ПІСЛЯ для завершення.'
-            : 'Після досягнення мінімального часу зробите фото для порівняння'}
+            : 'Після досягнення вибраного часу зробіть фото для порівняння'}
         </Text>
 
         <TouchableOpacity

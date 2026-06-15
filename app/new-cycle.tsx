@@ -118,6 +118,33 @@ export default function NewCycleScreen() {
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   const [employeeName, setEmployeeName] = useState('');
 
+  // ── Guard: only one active cycle at a time ────────────
+  // The running cycle lives in ACTIVE_TIMER_KEY. Guarding here (not just on the
+  // home CTA) covers every entry point into this screen. Stale keys self-heal
+  // in app/timer.tsx (DB re-validation), so presence is enough to gate on.
+  useEffect(() => {
+    (async () => {
+      const stored = await AsyncStorage.getItem(ACTIVE_TIMER_KEY);
+      if (!stored) return;
+      let active: { sessionId?: string; duration?: number } = {};
+      try { active = JSON.parse(stored); } catch { return; }
+      Alert.alert(
+        'Активний цикл триває',
+        'Зараз триває активний цикл. Завершіть поточний цикл, перш ніж розпочинати новий.',
+        [{
+          text: 'Перейти до циклу',
+          onPress: () => {
+            if (active.sessionId) {
+              router.replace(`/timer?sessionId=${active.sessionId}&duration=${active.duration}`);
+            } else {
+              router.back();
+            }
+          },
+        }],
+      );
+    })();
+  }, []);
+
   // ── Load sterilizers ──────────────────────────────────
 
   useEffect(() => {

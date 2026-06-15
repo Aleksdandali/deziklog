@@ -222,6 +222,7 @@ export async function generateJournalPDF(
 export async function generateCyclePDF(
   sess: SterilizationSession,
   salonName?: string,
+  photos?: CyclePhotos,
 ): Promise<string> {
   const dateSource = sess.started_at || sess.created_at;
   const date = new Date(dateSource).toLocaleDateString('uk-UA', {
@@ -234,13 +235,11 @@ export async function generateCyclePDF(
     ? new Date(sess.ended_at).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
     : '--';
 
-  let actualMinutes: number | null = null;
-  if (sess.started_at && sess.ended_at) {
-    const diff = new Date(sess.ended_at).getTime() - new Date(sess.started_at).getTime();
-    actualMinutes = Math.round(diff / 60000);
-  }
-  const actualLabel = actualMinutes != null ? `${actualMinutes} хв` : '--';
-  const recommendedLabel = sess.duration_minutes ? `${sess.duration_minutes} хв` : '--';
+  // Record the SELECTED protocol exposure time — not wall-clock. The app is a
+  // photo-fixation journal, not a validated controller; the protocol duration
+  // is the professionally meaningful value (exposure at temperature), while the
+  // honest start/end timestamps stay in their own rows below.
+  const durationLabel = sess.duration_minutes ? `${sess.duration_minutes} хв` : '--';
   const tempLabel = sess.temperature != null ? `${sess.temperature}°C` : '--';
 
   const passed = sess.result === 'success';
@@ -255,7 +254,7 @@ export async function generateCyclePDF(
     ['Дата', date],
     ['Початок', startTime],
     ['Кінець', endTime],
-    ['Тривалість', `${actualLabel} (рекомендовано ${recommendedLabel})`],
+    ['Тривалість', durationLabel],
     ['Стерилізатор', sess.sterilizer_name || '--'],
     ['Інструменти', sess.instrument_names || '--'],
     ['Температура', tempLabel],
@@ -267,6 +266,24 @@ export async function generateCyclePDF(
   const rowsHtml = rows
     .map(([k, v]) => `<tr><td class="k">${escapeHtml(k)}</td><td class="v">${escapeHtml(v)}</td></tr>`)
     .join('');
+
+  // Before/after indicator thumbnails, inlined as base64 (self-contained PDF).
+  const beforeImg = photos?.before
+    ? `<img src="${photos.before}" class="cphoto" alt="до"/>`
+    : `<div class="cphoto empty">—</div>`;
+  const afterImg = photos?.after
+    ? `<img src="${photos.after}" class="cphoto" alt="після"/>`
+    : `<div class="cphoto empty">—</div>`;
+  const photosBlock = (photos?.before || photos?.after)
+    ? `
+      <div class="photos">
+        <div class="photos-title">Фото індикатора</div>
+        <div class="photos-row">
+          <div class="photos-col"><div class="photos-label">До</div>${beforeImg}</div>
+          <div class="photos-col"><div class="photos-label">Після</div>${afterImg}</div>
+        </div>
+      </div>`
+    : '';
 
   const html = `
     <!DOCTYPE html>
@@ -286,6 +303,13 @@ export async function generateCyclePDF(
         td { padding: 10px 12px; border-bottom: 1px solid #e2e4ed; font-size: 12px; vertical-align: top; }
         td.k { color: #6B7280; font-weight: 600; width: 38%; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; }
         td.v { color: #1B1B1B; font-weight: 500; }
+        .photos { margin-top: 22px; }
+        .photos-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #6B7280; font-weight: 600; margin-bottom: 10px; }
+        .photos-row { display: flex; gap: 16px; }
+        .photos-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+        .photos-label { font-size: 10px; color: #6B7280; text-transform: uppercase; letter-spacing: 0.3px; }
+        .cphoto { width: 100%; max-width: 220px; height: 170px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e4ed; display: block; }
+        .cphoto.empty { display: flex; align-items: center; justify-content: center; color: #9CA3AF; font-size: 16px; background: #f3f4f6; }
         .footer { margin-top: 28px; font-size: 9px; color: #6B7280; text-align: center; border-top: 1px solid #e2e4ed; padding-top: 10px; }
       </style>
     </head>
@@ -302,6 +326,7 @@ export async function generateCyclePDF(
       <table>
         <tbody>${rowsHtml}</tbody>
       </table>
+      ${photosBlock}
       <div class="footer">
         Згенеровано в Dezik SteriLog · dezik.com.ua · ${today}
       </div>
