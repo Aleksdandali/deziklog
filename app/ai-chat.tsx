@@ -353,7 +353,7 @@ export default function AIChatScreen() {
 
   // ── Consent gate ──────────────────────────────────────
   // One-time disclosure before the user's first prompt leaves the device.
-  // Required for transparency: messages are sent to Anthropic for processing.
+  // Required for transparency: messages are sent to a third-party AI provider.
 
   const renderConsentGate = () => (
     <View style={styles.consentContainer}>
